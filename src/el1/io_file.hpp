@@ -136,6 +136,7 @@ namespace el1::io::file
 			// converts this path reference into a string usable by the operating system
 			operator TString() const EL_GETTER;
 			operator const char*() const EL_GETTER;
+			TString ToString() const EL_GETTER { return this->operator TString(); }
 
 			// returns the type of the file-system object
 			// the result of this function is of volatile nature; another process could

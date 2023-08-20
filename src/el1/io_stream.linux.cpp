@@ -135,7 +135,7 @@ namespace el1::io::stream
 		EL_SYSERR(fcntl(this->handle, F_SETFL, flags | O_NONBLOCK));
 	}
 
-	TKernelStream::TKernelStream(const file::TPath& path) : handle(EL_SYSERR(open(path, O_RDWR|O_CLOEXEC|O_NOCTTY|O_NONBLOCK)), true), w_input({.read = true, .write = false, .other = false}, this->handle), w_output({.read = false, .write = true, .other = false}, this->handle)
+	TKernelStream::TKernelStream(const file::TPath& path) : handle(EL_ANNOTATE_ERROR(EL_SYSERR(open(path, O_RDWR|O_CLOEXEC|O_NOCTTY|O_NONBLOCK)), TException, TString::Format("while opening file %q", path.ToString())), true), w_input({.read = true, .write = false, .other = false}, this->handle), w_output({.read = false, .write = true, .other = false}, this->handle)
 	{
 	}
 }

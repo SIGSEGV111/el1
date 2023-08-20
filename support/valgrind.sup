@@ -4,3 +4,10 @@
 	...
 	fun:PQflush
 }
+
+{
+   inet_pton6-1
+   Memcheck:Overlap
+   fun:__memcpy_chk
+   fun:inet_pton6
+}
