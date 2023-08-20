@@ -1,4 +1,4 @@
-: ${MAKE_OPTIONS:=-O0 -g -flto=4}
+: ${MAKE_OPTIONS:=-O0 -g -flto}
 : ${CXX:=$(which g++)}
 : ${CC:=$(which gcc)}
 
@@ -42,6 +42,7 @@ if [[ "$C_COMPILER" != "$CXX_COMPILER" ]]; then
 fi
 
 COMPILE_OPTIONS=(
+	$MAKE_OPTIONS
 	-DEL1_WITH_POSTGRES
 	-DEL1_WITH_VALGRIND
 	-ftemplate-depth=50
@@ -61,6 +62,19 @@ COMPILE_OPTIONS=(
 LIB_OPTIONS=("${COMPILE_OPTIONS[@]}" "${LINKER_OPTIONS[@]}" -shared)
 EXE_OPTIONS=("${COMPILE_OPTIONS[@]}" "${LINKER_OPTIONS[@]}" -pthread)
 
+VALGRIND_OPTIONS=(
+	--quiet
+	--leak-check=full
+	--show-reachable=no
+	--track-origins=yes
+	--num-callers=30
+	--trace-children=no
+	--track-fds=yes
+	--error-exitcode=1
+	--suppressions=valgrind.supp
+	--gen-suppressions=all
+)
+
 readarray -t CPP_FILES < <(find src/el1 -maxdepth 1 -type f -iname "*.cpp" | grep -v "/el1\.cpp$" | sort)
 readarray -t HPP_FILES < <(find src/el1 -maxdepth 1 -type f -iname "*.hpp" | grep -v "/el1\.hpp$" | sort)
 
@@ -70,7 +84,7 @@ for cpp_file in "${CPP_FILES[@]}"; do
 	base="$(basename "$bare")"
 	OBJ_FILES+=("gen/std/$base.o")
 done
-readonly COMPILE_OPTIONS LINKER_OPTIONS LIB_OPTIONS EXE_OPTIONS CPP_FILES HPP_FILES OBJ_FILES
+readonly COMPILE_OPTIONS LINKER_OPTIONS LIB_OPTIONS EXE_OPTIONS CPP_FILES HPP_FILES OBJ_FILES VALGRIND_OPTIONS
 
 function printCppFiles()
 {

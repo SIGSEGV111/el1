@@ -6,5 +6,5 @@ gen/std/error.posix.o: src/el1/error.posix.cpp src/el1/def.hpp src/el1/error.hpp
  src/el1/io_text_encoding.hpp src/el1/io_text_encoding_utf8.hpp \
  src/el1/io_text.hpp src/el1/io_collection_map.hpp
 	mkdir -p gen/std
-	'/bin/g++' src/el1/error.posix.cpp -o gen/std/error.posix.o -c '-DEL1_WITH_POSTGRES' '-DEL1_WITH_VALGRIND' '-ftemplate-depth=50' '-fPIC' '-fdiagnostics-color=always' '-Wall' '-Wextra' '-Werror' '-Wno-unused-parameter' '-Wno-error=unused-function' '-I' 'submodules/googletest/googletest/include' '-std=gnu++20' '-Wno-unused-const-variable' '-I/usr/include/pgsql' '-DOPENSSL_LOAD_CONF' -I src
+	'/bin/clang++' src/el1/error.posix.cpp -o gen/std/error.posix.o -c '-O0' '-g' '-flto' '-DEL1_WITH_POSTGRES' '-DEL1_WITH_VALGRIND' '-ftemplate-depth=50' '-fPIC' '-fdiagnostics-color=always' '-Wall' '-Wextra' '-Werror' '-Wno-unused-parameter' '-Wno-error=unused-function' '-I' 'submodules/googletest/googletest/include' '-std=gnu++20' '-Wno-unused-const-variable' '-I/usr/include/pgsql' '-DOPENSSL_LOAD_CONF' -I src
 	./support/generate-cpp-makefile.sh src/el1/error.posix.cpp

@@ -602,6 +602,7 @@ namespace el1::system::task
 
 			if(wait_pid == 0)
 			{
+				Resume();
 				on_terminate.WaitFor();
 			}
 			else

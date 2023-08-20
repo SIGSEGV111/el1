@@ -13,9 +13,7 @@ release: gen/amalgam/libel1.so gen/amalgam/libel1.a gen/srclib/include/el1/el1.c
 
 libs: gen/std/libel1.so gen/std/libel1.a gen/amalgam/libel1.so gen/amalgam/libel1.a gen/srclib/include/el1/el1.cpp
 
-dev: gen/std/link-test-so gen/std/gtests
-	LD_LIBRARY_PATH=gen/std ./gen/std/link-test-so
-	LD_LIBRARY_PATH=gen/std ./gen/std/gtests
+dev: gen/srclib/link-test
 
 gen/std/libel1.so: ${OBJ_FILES[@]} gen/std/include
 	mkdir -p gen/std
@@ -51,8 +49,8 @@ gen/amalgam/link-test-a: gen/amalgam/libel1.a
 gen/srclib/include/el1/el1.cpp: ${CPP_FILES[@]} ${HPP_FILES[@]} support/generate-srclib.sh
 	./support/generate-srclib.sh
 
-gen/srclib/link-test: gen/include gen/srclib/include/el1/el1.cpp
-	${CXX@Q} support/link-test.cpp -o gen/srclib/link-test ${EXE_OPTIONS[@]@Q} -I gen/srclib/include
+gen/srclib/link-test: gen/srclib/include/el1/el1.cpp
+	${CXX@Q} support/link-test.cpp gen/srclib/include/el1/el1.cpp -o gen/srclib/link-test ${EXE_OPTIONS[@]@Q} -I gen/srclib/include
 
 gen/std/include: src/el1 support/generate-include-dir.sh ${HPP_FILES[@]}
 	./support/generate-include-dir.sh gen/std/include
@@ -82,9 +80,9 @@ link-tests: gen/std/link-test-a gen/amalgam/link-test-a gen/std/link-test-so gen
 	LD_LIBRARY_PATH=gen/amalgam ./gen/amalgam/link-test-so
 
 unit-tests: gen/std/gtests gen/amalgam/gtests gen/srclib/gtests
-	./gen/std/gtests
-	./gen/amalgam/gtests
-	./gen/srclib/gtests
+	LD_LIBRARY_PATH=gen/std ./gen/std/gtests
+	LD_LIBRARY_PATH=gen/amalgam ./gen/amalgam/gtests
+	valgrind ${VALGRIND_OPTIONS[@]@Q} --log-file=gen/srclib/valgrind.log ./gen/srclib/gtests
 
 verify: link-tests unit-tests
 

@@ -9,5 +9,5 @@ gen/std/db_postgres.o: src/el1/db_postgres.cpp src/el1/db_postgres.hpp \
  src/el1/util_function.hpp /usr/include/pgsql/libpq-fe.h \
  /usr/include/pgsql/postgres_ext.h /usr/include/pgsql/pg_config_ext.h
 	mkdir -p gen/std
-	'/bin/g++' src/el1/db_postgres.cpp -o gen/std/db_postgres.o -c '-DEL1_WITH_POSTGRES' '-DEL1_WITH_VALGRIND' '-ftemplate-depth=50' '-fPIC' '-fdiagnostics-color=always' '-Wall' '-Wextra' '-Werror' '-Wno-unused-parameter' '-Wno-error=unused-function' '-I' 'submodules/googletest/googletest/include' '-std=gnu++20' '-Wno-unused-const-variable' '-I/usr/include/pgsql' '-DOPENSSL_LOAD_CONF' -I src
+	'/bin/clang++' src/el1/db_postgres.cpp -o gen/std/db_postgres.o -c '-O0' '-g' '-flto' '-DEL1_WITH_POSTGRES' '-DEL1_WITH_VALGRIND' '-ftemplate-depth=50' '-fPIC' '-fdiagnostics-color=always' '-Wall' '-Wextra' '-Werror' '-Wno-unused-parameter' '-Wno-error=unused-function' '-I' 'submodules/googletest/googletest/include' '-std=gnu++20' '-Wno-unused-const-variable' '-I/usr/include/pgsql' '-DOPENSSL_LOAD_CONF' -I src
 	./support/generate-cpp-makefile.sh src/el1/db_postgres.cpp
