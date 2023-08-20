@@ -96,6 +96,7 @@ namespace el1::dev::w1
 		virtual void Speed(const ESpeed) EL_SETTER = 0;
 		virtual void Read(const u8_t cmd, void* const buffer, const u8_t n_bytes) = 0;
 		virtual void Write(const u8_t cmd, const void* const buffer, const u8_t n_bytes) = 0;
+		virtual ~IW1Device() {}
 	};
 
 	struct IW1Bus

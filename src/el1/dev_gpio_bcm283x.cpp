@@ -222,22 +222,32 @@ namespace el1::dev::gpio::bcm283x
 		controller->claimed_pins &= ~(1<<index);
 	}
 
-	static const model_config_t* DetectModel()
+	const model_config_t* DetectModel()
 	{
 		const char buffer[64] = {};
-		TFile model_file("/sys/firmware/devicetree/base/model");
+		TPath p = "/sys/firmware/devicetree/base/model";
+		if(!p.IsFile())
+			return nullptr;
+		TFile model_file(p);
 		model_file.Read((byte_t*)buffer, sizeof(buffer) - 1);
 
 		for(unsigned i = 0; i < sizeof(MODEL_CONFIG)/sizeof(MODEL_CONFIG[0]); i++)
 			if(strcmp(MODEL_CONFIG[i].name, buffer) == 0)
 				return MODEL_CONFIG + i;
 
-		EL_THROW(TException, TString::Format("unknown Raspberry Pi Model: %q; please update MODEL_CONFIG array", buffer));
+		return nullptr;
+	}
+
+	static const model_config_t* DetectModelThrow()
+	{
+		const model_config_t* m = DetectModel();
+		EL_ERROR(m == nullptr, TException, "Unknown Raspberry Pi Model. Please update MODEL_CONFIG array.");
+		return m;
 	}
 
 	TBCM283X::TBCM283X() :
 		claimed_pins(0),
-		model(DetectModel()),
+		model(DetectModelThrow()),
 		file("/dev/mem", TAccess::RW),
 		map(&file, model->addr, GPIO_SIZE)
 	{

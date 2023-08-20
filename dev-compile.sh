@@ -1,7 +1,7 @@
 #!/bin/bash -eu
 
 exec </dev/null
-renice 10 $$ >/dev/null
+renice 10 $$ >/dev/null 2>&1 || true
 ionice -c idle -p $$
 declare -r MY_PATH="$(dirname "$(readlink -f "$0")")"
 cd "$MY_PATH"

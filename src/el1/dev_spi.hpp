@@ -38,7 +38,7 @@ namespace el1::dev::spi
 		// "tx_buffer" and "rx_buffer" can point to the same memory location without causing a conflict
 		// data is sent before the buffer is overwritten by recveived data
 		// this function blocks if the bus is locked by another device
-		virtual void ExchangeBuffers(const void* const tx_buffer, void* const rx_buffer, const usys_t n_bytes) = 0;
+		virtual void ExchangeBuffers(const void* const tx_buffer, void* const rx_buffer, const usys_t n_bytes, const bool clean_signal = false) = 0;
 	};
 
 	struct ISpiBus

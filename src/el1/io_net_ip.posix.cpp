@@ -269,7 +269,13 @@ namespace el1::io::net::ip
 		{
 			return r;
 		}
-		else
+		else if(r == 0)
+		{
+			// EOF
+			CloseInput();
+			return 0;
+		}
+		else // <0 (-1)
 		{
 			EL_ERROR(errno != EAGAIN && errno != EWOULDBLOCK, TSyscallException, errno);
 			return 0;
@@ -285,6 +291,11 @@ namespace el1::io::net::ip
 		if(r > 0)
 		{
 			return r;
+		}
+		else if(r == 0)
+		{
+			CloseOutput();
+			return 0;
 		}
 		else
 		{

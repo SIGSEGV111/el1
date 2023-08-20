@@ -64,15 +64,33 @@ namespace el1::io::text::string
 
 	/******************************************/
 
+	static const TList< TUTF32> OCTAL_SYMBOLS = { '0', '1', '2', '3', '4', '5', '6', '7' };
 	static const TList< TUTF32> DECIMAL_SYMBOLS = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
 	static const TList< TUTF32> HEXADECIMAL_SYMBOLS_UC = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 	static const TList< TUTF32> HEXADECIMAL_SYMBOLS_LC = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
 	static const TList< TUTF32> BINARY_SYMBOLS = { '0', '1' };
 
+	const TNumberFormatter* TNumberFormatter::DEFAULT_OCTAL = &TNumberFormatter::PLAIN_OCTAL;
 	const TNumberFormatter* TNumberFormatter::DEFAULT_DECIMAL = &TNumberFormatter::PLAIN_DECIMAL_US_EN;
 	const TNumberFormatter* TNumberFormatter::DEFAULT_HEXADECIMAL = &TNumberFormatter::PLAIN_HEXADECIMAL_LOWER_US_EN;
 	const TNumberFormatter* TNumberFormatter::DEFAULT_BINARY = &TNumberFormatter::PLAIN_BINARY_US_EN;
 	const TNumberFormatter* TNumberFormatter::DEFAULT_ADDRESS = &TNumberFormatter::PLAIN_HEXADECIMAL_UPPER_US_EN;
+
+		const TNumberFormatter  TNumberFormatter::PLAIN_OCTAL({
+		.symbols = &OCTAL_SYMBOLS,
+		.prefix = "",
+		.suffix = "",
+		.sign_placement = EPlacement::START,
+		.force_sign = false,
+		.decimal_point_sign = '.',
+		.grouping_sign = TUTF32::TERMINATOR,
+		.integer_pad_sign = ' ',
+		.decimal_pad_sign = '0',
+		.negative_sign = '-',
+		.n_digits_per_group = 0,
+		.n_decimal_places = -1U,
+		.n_min_integer_places = -1U,
+	});
 
 	const TNumberFormatter  TNumberFormatter::PLAIN_DECIMAL_US_EN({
 		.symbols = &DECIMAL_SYMBOLS,
@@ -1117,12 +1135,6 @@ namespace el1::io::text::string
 		chars.Pipe().Transform(TCharEncoder()).ReadAll((byte_t*)p.get(), n_bytes);
 		p.get()[n_bytes] = 0;
 		return p;
-	}
-
-	ITextWriter& operator<<(ITextWriter& w, const TString& v)
-	{
-		w<<array_t<const TUTF32>(v.chars);
-		return w;
 	}
 
 	void TString::_Format(TString& out, const TString& format, usys_t& pos)

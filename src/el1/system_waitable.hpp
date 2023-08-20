@@ -26,7 +26,7 @@ namespace el1::system::waitable
 	struct IWaitable
 	{
 		void WaitFor() const;
-		bool WaitFor(const time::TTime timeout) const EL_WARN_UNUSED_RESULT;
+		bool WaitFor(const time::TTime timeout, const bool absolute_time = false) const EL_WARN_UNUSED_RESULT;
 		virtual bool IsReady() const = 0;
 		virtual void Reset() const {}
 		virtual const THandleWaitable* HandleWaitable() const { return nullptr; }

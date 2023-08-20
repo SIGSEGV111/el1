@@ -23,11 +23,7 @@ namespace el1::system::time
 				break;
 
 			case EClock::MONOTONIC:
-				#ifdef EL_OS_LINUX
-					id = CLOCK_MONOTONIC_RAW;
-				#else
-					id = CLOCK_MONOTONIC;
-				#endif
+				id = CLOCK_MONOTONIC;
 				break;
 
 			case EClock::PROCESS:
@@ -58,6 +54,18 @@ namespace el1::system::time
 		EL_SYSERR(clock_gettime(id, &ts));
 
 		return TTime((s64_t)ts.tv_sec, (s64_t)ts.tv_nsec * (s64_t)1000000000);
+	}
+
+	TTime::operator timespec() const noexcept
+	{
+		timespec t = { (time_t)(sec), (long)(asec / 1000000000LL) };
+		return t;
+	}
+
+	TTime::operator timeval() const noexcept
+	{
+		timeval t = { (time_t)(sec), (long)(asec / 1000000000000LL) };
+		return t;
 	}
 }
 

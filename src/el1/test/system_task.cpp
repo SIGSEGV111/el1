@@ -19,7 +19,7 @@ namespace
 	{
 		TInit()
 		{
-			TFiber::DEBUG = true;
+			// TFiber::DEBUG = true;
 			TFiber::FIBER_DEFAULT_STACK_SIZE_BYTES = 16 * 1024;
 			TProcess::WARN_NONZERO_EXIT_IN_DESTRUCTOR = false;
 		}
@@ -254,7 +254,7 @@ namespace
 		TFiber a([&](){
 // 			std::cerr<<"Fiber A: alive!\n";
 			Checkpoint(counter, 6);
-			TTimer timer(EClock::MONOTONIC, 0.2, ETimerMode::RELATIVE);
+			TTimer timer(EClock::MONOTONIC, 0.2);
 // 			std::cerr<<"Fiber A: waiting for tick...\n";
 			Checkpoint(counter, 7);
 			timer.OnTick().WaitFor();
@@ -267,7 +267,7 @@ namespace
 		TFiber b([&](){
 // 			std::cerr<<"Fiber B: alive!\n";
 			Checkpoint(counter, 4);
-			TTimer timer(EClock::MONOTONIC, 0.1, ETimerMode::RELATIVE);
+			TTimer timer(EClock::MONOTONIC, 0.1);
 // 			std::cerr<<"Fiber B: waiting for tick...\n";
 			Checkpoint(counter, 5);
 			timer.OnTick().WaitFor();
@@ -422,6 +422,29 @@ namespace
 		{
 			const TString stdout = TProcess::Execute("/bin/echo", { "hello world" });
 			EXPECT_EQ(stdout, "hello world\n");
+		}
+	}
+
+	TEST(system_task, TFiber_Sleep)
+	{
+		{
+			const TTime t_sleep = TTime(0,100000000000000000ULL);
+			const TTime ts_start = TTime::Now(EClock::MONOTONIC);
+			TFiber::Sleep(t_sleep);
+			const TTime ts_end = TTime::Now(EClock::MONOTONIC);
+			const TTime delta_time = ts_end - ts_start;
+			EXPECT_GE(delta_time, t_sleep);
+			EXPECT_LE(delta_time, t_sleep * 2LL);
+		}
+
+		{
+			const TTime t_sleep = TTime(0,500000000000000000ULL);
+			const TTime ts_start = TTime::Now(EClock::MONOTONIC);
+			TFiber::Sleep(t_sleep);
+			const TTime ts_end = TTime::Now(EClock::MONOTONIC);
+			const TTime delta_time = ts_end - ts_start;
+			EXPECT_GE(delta_time, t_sleep);
+			EXPECT_LE(delta_time, t_sleep * 2LL);
 		}
 	}
 }

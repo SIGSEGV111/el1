@@ -113,8 +113,6 @@ namespace el1::io::text::string
 			TString& operator=(TString&&) = default;
 	};
 
-	ITextWriter& operator<<(ITextWriter& w, const TString& v);
-
 	class TLineReader
 	{
 		public:
@@ -280,11 +278,13 @@ namespace el1::io::text::string
 		TString MakeIntegerPart(u64_t value, const bool is_negative) const;
 		TString MakeDecimalPart(double& value) const;
 
+		static const TNumberFormatter* DEFAULT_OCTAL;
 		static const TNumberFormatter* DEFAULT_DECIMAL;
 		static const TNumberFormatter* DEFAULT_HEXADECIMAL;
 		static const TNumberFormatter* DEFAULT_BINARY;
 		static const TNumberFormatter* DEFAULT_ADDRESS;
 
+		static const TNumberFormatter PLAIN_OCTAL;
 		static const TNumberFormatter PLAIN_DECIMAL_US_EN;
 		static const TNumberFormatter PLAIN_HEXADECIMAL_UPPER_US_EN;
 		static const TNumberFormatter PLAIN_HEXADECIMAL_LOWER_US_EN;

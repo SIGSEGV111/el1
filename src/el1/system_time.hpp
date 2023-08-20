@@ -8,6 +8,7 @@
 #endif
 
 #ifdef EL_OS_CLASS_POSIX
+	#include <time.h>
 	#include <sys/time.h>
 #endif
 
@@ -92,7 +93,13 @@ namespace el1::system::time
 			inline TTime() noexcept : sec(0), asec(0) {}
 			constexpr TTime(const int seconds) noexcept : sec(seconds), asec(0) {}
 			constexpr TTime(const unsigned seconds) noexcept : sec(seconds), asec(0) {}
-			TTime(const double seconds) noexcept;
+			constexpr TTime(double seconds) noexcept
+			{
+				this->sec = (s64_t)seconds;
+				seconds -= this->sec;
+				this->asec = (s64_t)(seconds * 1000000000000000000.0);
+			}
+
 			TTime(const s64_t seconds, const s64_t attoseconds) noexcept;
 
 			#ifdef EL_OS_CLASS_POSIX

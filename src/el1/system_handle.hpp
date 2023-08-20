@@ -35,6 +35,9 @@ namespace el1::system::handle
 			THandle& operator=(THandle&& rhs);
 			THandle& operator=(const THandle& rhs);
 
+			void BlockingIO(bool);
+			bool BlockingIO() const;
+
 			void Close();
 			handle_t Claim();
 			operator handle_t() const;

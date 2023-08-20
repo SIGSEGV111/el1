@@ -52,6 +52,25 @@ namespace el1::system::handle
 		return handle_tmp;
 	}
 
+	void THandle::BlockingIO(bool block)
+	{
+		const int old_flags = EL_SYSERR(fcntl(handle, F_GETFL));
+		int new_flags = old_flags;
+
+		if(block)
+			new_flags &= (~O_NONBLOCK);
+		else
+			new_flags |= O_NONBLOCK;
+
+		if(new_flags != old_flags)
+			EL_SYSERR(fcntl(handle, F_SETFL, new_flags));
+	}
+
+	bool THandle::BlockingIO() const
+	{
+		return (EL_SYSERR(fcntl(handle, F_GETFL)) & O_NONBLOCK) == 0;
+	}
+
 	THandle::~THandle()
 	{
 		if(this->handle != -1)

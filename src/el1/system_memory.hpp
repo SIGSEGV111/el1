@@ -22,20 +22,4 @@ namespace el1::system::memory
 	void VirtualAllocAt(void* const p_mem, const usys_t sz_bytes, const bool readable, const bool writeable, const bool executable, const bool shared, const bool overwrite);
 	void* VirtualRealloc(void* const p_mem, const usys_t sz_bytes_old, const usys_t sz_bytes_new, const bool readable, const bool writeable, const bool executable, const bool shared, const bool allow_move);
 	void VirtualFree(void* p_mem, const usys_t sz_bytes);
-
-	struct segment_t
-	{
-		const void* start;
-		const void* end;
-	};
-
-	struct progmap_t
-	{
-		segment_t text;
-		segment_t data;
-		segment_t bss;
-	};
-
-	progmap_t ProgramMap() EL_GETTER;
-	segment_t HeapMapping(); // "slow" (requires syscall every time), very volatile
 }

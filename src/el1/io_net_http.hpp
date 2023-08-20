@@ -89,6 +89,8 @@ namespace el1::io::net::http
 	class THttpServer
 	{
 		public:
+			static bool DEBUG;
+
 			struct request_t : request_meta_t
 			{
 				stream::ISource<byte_t>* body;

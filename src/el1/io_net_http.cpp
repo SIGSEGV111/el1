@@ -2,6 +2,8 @@
 #include "io_text.hpp"
 #include "io_text_encoding_utf8.hpp"
 
+#define IF_DEBUG_PRINTF(...) if(EL_UNLIKELY(DEBUG)) fprintf(stderr, __VA_ARGS__)
+
 namespace el1::io::net::http
 {
 	using namespace stream;
@@ -20,6 +22,7 @@ namespace el1::io::net::http
 	// => 8192 characters (UTF32) seems to be reasonable limit
 	// this limit is applied PER LINE *AND* FOR THE WHOLE HEADER
 	static const usys_t HEADER_CHAR_LIMIT = 8192U;
+	bool THttpServer::DEBUG = false;
 
 	TString THttpProcessingException::Message() const
 	{
@@ -137,6 +140,7 @@ namespace el1::io::net::http
 
 	EStatus THttpServer::HandleSingleRequest(ISource<byte_t>& source, ISink<byte_t>& sink, request_handler_t handler)
 	{
+		IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): @1\n");
 		bool response_in_progress = false;
 		try
 		{
@@ -156,7 +160,10 @@ namespace el1::io::net::http
 			// read request line
 			const TString* request_line = lr.NextItem();
 			if(request_line == nullptr)
+			{
+				IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): EOF\n");
 				return EStatus::EOF;
+			}
 
 			EL_ERROR(request_line->Length() < 14U, THttpProcessingException, EStatus::BAD_REQUEST, "request too short");
 			sz_header += request_line->Length();
@@ -194,7 +201,10 @@ namespace el1::io::net::http
 			response_t response;
 			response.status = EStatus::INTERNAL_SERVER_ERROR;
 			response.version = request.version;
+
+			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): calling handler\n");
 			handler(request, response);
+			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): returned from handler\n");
 
 			if(request.method == EMethod::HEAD)
 				response.body.reset(nullptr);
@@ -207,18 +217,22 @@ namespace el1::io::net::http
 			response_in_progress = true;
 			SendResponse(sink, response);
 
+			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): return response.status\n");
 			return response.status;
 		}
 		catch(const IException& e1)
 		{
+			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): caught exception\n");
 			if(response_in_progress)
 			{
+				IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): response already in progress => closing streams\n");
 				// just terminate the connection (in the next loop iteration EStatus::EOF will be returned immediately)
 				source.Close();
 				sink.Close();
 			}
 			else
 			{
+				IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): generating proper error response\n");
 				const THttpProcessingException* const http_error = dynamic_cast<const THttpProcessingException*>(&e1);
 
 				try
@@ -250,15 +264,20 @@ namespace el1::io::net::http
 				}
 
 				if(http_error != nullptr)
+				{
+					IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): return http_error->status\n");
 					return http_error->status;
+				}
 			}
 
+			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): return INTERNAL_SERVER_ERROR\n");
 			return EStatus::INTERNAL_SERVER_ERROR;
 		}
 	}
 
 	void THttpServer::FiberMain()
 	{
+		IF_DEBUG_PRINTF("THttpServer::FiberMain(): enter\n");
 		TList<std::unique_ptr<TFiber>> handlers;
 		u8_t cleanup_handlers = 0;
 		TMemoryWaitable<u8_t> wait_cleanup(&cleanup_handlers, nullptr, 0xff);
@@ -266,9 +285,11 @@ namespace el1::io::net::http
 		for(;;)
 		{
 			// accept new client
+			IF_DEBUG_PRINTF("calling AcceptClient()\n");
 			std::unique_ptr<TTcpClient> tcp_client = this->tcp_server->AcceptClient();
 			if(tcp_client == nullptr)
 			{
+				IF_DEBUG_PRINTF("no new client waiting, just cleaning up\n");
 				// cleanup
 				for(ssys_t i = handlers.Count() - 1; i >= 0; i--)
 					if(!handlers[i]->IsAlive())
@@ -287,6 +308,7 @@ namespace el1::io::net::http
 			}
 			else
 			{
+				IF_DEBUG_PRINTF("accpted new client, spawning handler\n");
 				// start handler and handoff client
 				handlers.MoveAppend(std::unique_ptr<TFiber>(new TFiber([this, tcp_client = std::move(tcp_client), &cleanup_handlers](){
 					// TODO: add some kind of output buffer to prevent excessive amounts of small write()-syscalls
@@ -306,5 +328,8 @@ namespace el1::io::net::http
 		handler(handler),
 		fiber(TFunction(this, &THttpServer::FiberMain), true)
 	{
+		IF_DEBUG_PRINTF("THttpServer constructor\n");
 	}
 }
+
+#undef IF_DEBUG_PRINTF

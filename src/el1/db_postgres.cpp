@@ -130,7 +130,7 @@ namespace el1::db::postgres
 			PQ_ERROR(PQsendQueryParams((PGconn*)this->pg_connection, sql.MakeCStr().get(), args.Count(), nullptr, nullptr, nullptr, nullptr, 1), "failed to send async query");
 		}
 
-		EL_ERROR(PQsetSingleRowMode((PGconn*)this->pg_connection) != 1, TLogicException);
+		PQsetSingleRowMode((PGconn*)this->pg_connection); // may return 0 if the statement failed
 		PQ_ERROR(PQsendFlushRequest((PGconn*)this->pg_connection), "failed to request buffer flush");
 
 		const int r = PQflush((PGconn*)this->pg_connection);
@@ -285,36 +285,38 @@ namespace el1::db::postgres
 
 	void TConnection::DiscardResults()
 	{
-		if(this->pg_result != nullptr)
-		{
-			PQclear((PGresult*)this->pg_result);
-			this->pg_result = nullptr;
-		}
+		while(FetchNextRow());
 
-		for(;;)
-		{
-			// this code block is required to ensure el1 can handle blocking of this fiber and consequently call the scheduler
-			PQ_ERROR(PQconsumeInput((PGconn*)this->pg_connection), "failed consume input data");
-			while(PQisBusy((PGconn*)this->pg_connection) == 1)
-			{
-				on_rx_ready.WaitFor();
-				PQ_ERROR(PQconsumeInput((PGconn*)this->pg_connection), "failed consume input data");
-			}
-
-			// two times nullptr is required to truely ensure all resultsets have been discarded
-			PGresult* result = PQgetResult((PGconn*)this->pg_connection);
-			if(result == nullptr)
-			{
-				result = PQgetResult((PGconn*)this->pg_connection);
-				if(result == nullptr)
-					break;
-			}
-
-			PQclear(result);
-		}
-
-		n_rows_cached = 0;
-		idx_row = -1;
+		// if(this->pg_result != nullptr)
+		// {
+		// 	PQclear((PGresult*)this->pg_result);
+		// 	this->pg_result = nullptr;
+		// }
+  //
+		// for(;;)
+		// {
+		// 	// this code block is required to ensure el1 can handle blocking of this fiber and consequently call the scheduler
+		// 	PQ_ERROR(PQconsumeInput((PGconn*)this->pg_connection), "failed consume input data");
+		// 	while(PQisBusy((PGconn*)this->pg_connection) == 1)
+		// 	{
+		// 		on_rx_ready.WaitFor();
+		// 		PQ_ERROR(PQconsumeInput((PGconn*)this->pg_connection), "failed consume input data");
+		// 	}
+  //
+		// 	// two times nullptr is required to truely ensure all resultsets have been discarded
+		// 	PGresult* result = PQgetResult((PGconn*)this->pg_connection);
+		// 	if(result == nullptr)
+		// 	{
+		// 		result = PQgetResult((PGconn*)this->pg_connection);
+		// 		if(result == nullptr)
+		// 			break;
+		// 	}
+  //
+		// 	PQclear(result);
+		// }
+  //
+		// n_rows_cached = 0;
+		// idx_row = -1;
 	}
 }
 #endif

@@ -183,18 +183,10 @@ namespace el1::dev::i2c::pca9555
 		this->controller->claimed &= (~MakeMask(1, this->index));
 	}
 
-	u16_t TPCA9555::ReadRegister(const u8_t id)
-	{
-		u16_t value;
-		EL_ERROR(this->device->Write(&id, 1) != 1, TLogicException);
-		EL_ERROR(this->device->Read((byte_t*)&value, 2) != 2, TLogicException);
-		return value;
-	}
-
 	void TPCA9555::WriteRegister(const write_reg_t wr)
 	{
 		EL_ERROR(sizeof(wr) != 3, TLogicException);
-		EL_ERROR(this->device->Write((const byte_t*)&wr, 3) != 3, TLogicException);
+		this->device->WriteAll((const byte_t*)&wr, 3);
 	}
 
 	void TPCA9555::IrqMain()
@@ -230,10 +222,10 @@ namespace el1::dev::i2c::pca9555
 		WriteRegister({REG_POLARITY, 0x0000});
 		WriteRegister({REG_OUTPUT,   0xffff});
 
-		this->reg_ref.input    = ReadRegister(REG_INPUT);
-		this->reg_ref.output   = ReadRegister(REG_OUTPUT);
-		this->reg_ref.polarity = ReadRegister(REG_POLARITY);
-		this->reg_ref.config   = ReadRegister(REG_CONFIG);
+		this->reg_ref.input    = this->device->ReadWordRegister(REG_INPUT);
+		this->reg_ref.output   = this->device->ReadWordRegister(REG_OUTPUT);
+		this->reg_ref.polarity = this->device->ReadWordRegister(REG_POLARITY);
+		this->reg_ref.config   = this->device->ReadWordRegister(REG_CONFIG);
 		this->reg_new = this->reg_ref;
 
 		EL_ERROR(this->reg_ref.output   != 0xffff, TException, TString("unable to init PCA9555 at address %x", this->device->Address()));
@@ -277,7 +269,7 @@ namespace el1::dev::i2c::pca9555
 
 	void TPCA9555::Poll()
 	{
-		this->reg_ref.input = ReadRegister(REG_INPUT);
+		this->reg_ref.input = this->device->ReadWordRegister(REG_INPUT);
 		EL_ERROR((this->reg_ref.input & ~this->reg_ref.config) != (this->reg_ref.output & ~this->reg_ref.config), TLogicException);
 	}
 }

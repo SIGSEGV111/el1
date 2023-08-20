@@ -142,20 +142,34 @@ namespace el1::dev::gpio::native
 
 	void TNativeGpioController::ExportPin(const unsigned id)
 	{
-		TFile _export(TString(SYSFS_GPIO_BASE) + "/export", TAccess::WO);
+		try
+		{
+			TFile _export(TString(SYSFS_GPIO_BASE) + "/export", TAccess::WO);
 
-		char buffer[16] = {};
-		const int len = snprintf(buffer, sizeof(buffer), "%d", base + id);
-		_export.Write((const byte_t*)buffer, len);
+			char buffer[16] = {};
+			const int len = snprintf(buffer, sizeof(buffer), "%d", base + id);
+			_export.Write((const byte_t*)buffer, len);
+		}
+		catch(const IException& e)
+		{
+			EL_FORWARD(e, TException, TString::Format("while exporting/claiming GPIO #%d", id));
+		}
 	}
 
 	void TNativeGpioController::UnexportPin(const unsigned id)
 	{
-		TFile _unexport(TString(SYSFS_GPIO_BASE) + "/unexport", TAccess::WO);
+		try
+		{
+			TFile _unexport(TString(SYSFS_GPIO_BASE) + "/unexport", TAccess::WO);
 
-		char buffer[16] = {};
-		const int len = snprintf(buffer, sizeof(buffer), "%d", base + id);
-		_unexport.Write((const byte_t*)buffer, len);
+			char buffer[16] = {};
+			const int len = snprintf(buffer, sizeof(buffer), "%d", base + id);
+			_unexport.Write((const byte_t*)buffer, len);
+		}
+		catch(const IException& e)
+		{
+			EL_FORWARD(e, TException, TString::Format("while unexporting/releasing GPIO #%d", id));
+		}
 	}
 
 	std::unique_ptr<IPin> TNativeGpioController::ClaimPin(const usys_t id)

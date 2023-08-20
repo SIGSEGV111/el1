@@ -107,7 +107,7 @@ namespace el1::db::postgres
 			void _ReadCellData(array_t<data_t> raw_cells, const unsigned index, TColumn*& typed_cell);
 
 		public:
-			TConnection(TConnection&&) = default;
+			TConnection(TConnection&&) = delete;
 			TConnection(const TConnection&) = delete;
 			TConnection(const TSortedMap<TString, const TString>& properties);
 			~TConnection();

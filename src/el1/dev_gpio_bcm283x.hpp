@@ -53,6 +53,8 @@ namespace el1::dev::gpio::bcm283x
 		ECPU cpu;
 	};
 
+	const model_config_t* DetectModel();
+
 	static const u8_t NUM_GPIO = 54;
 
 	class TPin : public IPin
@@ -111,6 +113,8 @@ namespace el1::dev::gpio::bcm283x
 			void _PullResistor(const unsigned index, const EPull pull);
 
 			static TBCM283X* Instance();
+
+			virtual ~TBCM283X() {}
 	};
 }
 

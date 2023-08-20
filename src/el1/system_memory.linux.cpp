@@ -8,12 +8,6 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-extern char __executable_start; // start of text
-extern char etext;				// end of text, start of data?
-extern char edata;				// end of data, start of bss?
-extern char __bss_start;		// start of bss
-extern char end;				// end of bss?
-
 namespace el1::system::memory
 {
 	usys_t UseableSize(void* const p_mem)
@@ -39,20 +33,6 @@ namespace el1::system::memory
 	void VirtualFree(void* const p_mem, const usys_t sz_bytes)
 	{
 		EL_SYSERR(munmap(p_mem, sz_bytes));
-	}
-
-	progmap_t ProgramMap()
-	{
-		return {
-			.text = { &__executable_start, &etext },
-			.data = { &etext, &edata },
-			.bss = { &__bss_start, &end }
-		};
-	}
-
-	segment_t HeapMapping()
-	{
-		return { .start = &end, .end = sbrk(0) };
 	}
 }
 

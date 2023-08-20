@@ -7,7 +7,9 @@
 #include "system_task.hpp"
 
 #include <sys/sendfile.h>
-// #include <fcntl.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/socket.h>
 
 namespace el1::io::stream
 {
@@ -56,8 +58,85 @@ namespace el1::io::stream
 		}
 		else
 		{
-			return _Pump<byte_t>(source, sink, n_items_max);
+			return _Pump<byte_t>(source, sink, n_items_max, blocking);
 		}
+	}
+
+	/*********************************************/
+
+	usys_t TKernelStream::Read(byte_t* const arr_items, const usys_t n_items_max)
+	{
+		const ssize_t r = ::read(this->handle, arr_items, n_items_max);
+		if(r == -1)
+		{
+			if(errno == EAGAIN || errno == EWOULDBLOCK)
+				return 0;
+			EL_THROW(TSyscallException, errno);
+		}
+
+		if(r == 0 && n_items_max > 0)
+			// EOF
+			this->CloseInput();
+
+		return r;
+	}
+
+	const system::waitable::THandleWaitable* TKernelStream::OnInputReady() const
+	{
+		return this->w_input.Handle() >= 0 ? &this->w_input : nullptr;
+	}
+
+	bool TKernelStream::CloseInput()
+	{
+		if(this->w_input.Handle() != -1)
+		{
+			this->w_input.Handle(-1);
+		}
+
+		return true;
+	}
+
+	usys_t TKernelStream::Write(const byte_t* const arr_items, const usys_t n_items_max)
+	{
+		const ssize_t r = ::write(this->handle, arr_items, n_items_max);
+		if(r == -1)
+		{
+			if(errno == EAGAIN || errno == EWOULDBLOCK)
+				return 0;
+			EL_THROW(TSyscallException, errno);
+		}
+
+		return r;
+	}
+
+	const system::waitable::THandleWaitable* TKernelStream::OnOutputReady() const
+	{
+		return this->w_output.Handle() >= 0 ? &this->w_output : nullptr;
+	}
+
+	bool TKernelStream::CloseOutput()
+	{
+		if(this->w_output.Handle() != -1)
+		{
+			this->w_output.Handle(-1);
+		}
+
+		return true;
+	}
+
+	void TKernelStream::Flush()
+	{
+		EL_SYSERR(fdatasync(this->handle));
+	}
+
+	TKernelStream::TKernelStream(THandle handle) : handle(std::move(handle)), w_input({.read = true, .write = false, .other = false}, this->handle), w_output({.read = false, .write = true, .other = false}, this->handle)
+	{
+		const int flags = EL_SYSERR(fcntl(this->handle, F_GETFL));
+		EL_SYSERR(fcntl(this->handle, F_SETFL, flags | O_NONBLOCK));
+	}
+
+	TKernelStream::TKernelStream(const file::TPath& path) : handle(EL_SYSERR(open(path, O_RDWR|O_CLOEXEC|O_NOCTTY|O_NONBLOCK)), true), w_input({.read = true, .write = false, .other = false}, this->handle), w_output({.read = false, .write = true, .other = false}, this->handle)
+	{
 	}
 }
 

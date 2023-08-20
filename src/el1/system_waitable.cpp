@@ -17,13 +17,11 @@ namespace el1::system::waitable
 		EL_ERROR(!WaitFor(-1), error::TLogicException);
 	}
 
-	bool IWaitable::WaitFor(const TTime timeout) const
+	bool IWaitable::WaitFor(const TTime timeout, const bool absolute_time) const
 	{
-		EL_ERROR(this == nullptr, TLogicException);
-
 		if(timeout >= 0)
 		{
-			TTimeWaitable time_waitable(EClock::MONOTONIC, TTime::Now(EClock::MONOTONIC) + timeout);
+			TTimeWaitable time_waitable(EClock::MONOTONIC, (absolute_time ? 0 : TTime::Now(EClock::MONOTONIC)) + timeout);
 
 			const IWaitable* array[2] = { this, &time_waitable };
 			TFiber::WaitForMany(array_t<const IWaitable*>(array, 2));

@@ -4,7 +4,7 @@
 #include "dev_gpio.hpp"
 #include "io_types.hpp"
 
-namespace el1::dev::opt3001
+namespace el1::dev::i2c::opt3001
 {
 	using namespace io::types;
 

@@ -18,6 +18,8 @@
 #include <sanitizer/common_interface_defs.h>
 #endif
 
+#define IF_DEBUG_PRINTF(...) if(EL_UNLIKELY(DEBUG)) fprintf(stderr, __VA_ARGS__)
+
 namespace el1::system::task
 {
 	using namespace io::stream;
@@ -59,7 +61,9 @@ namespace el1::system::task
 
 	bool TFiberMutex::Accquire(const TTime timeout)
 	{
-		if(owner != nullptr)
+		TFiber* self = TFiber::Self();
+
+		if(owner != nullptr && owner != self)
 		{
 			if(timeout == 0)
 				return false;
@@ -83,16 +87,24 @@ namespace el1::system::task
 		}
 
 		owner = TFiber::Self();
+		n_accquire++;
 		return true;
 	}
 
 	void TFiberMutex::Release()
 	{
 		EL_ERROR(owner != TFiber::Self(), TException, "tried to release a TFiberMutex that was not owned by the calling fiber");
-		owner = nullptr;
+		n_accquire--;
+		if(n_accquire == 0)
+			owner = nullptr;
 	}
 
-	TFiberMutex::TFiberMutex() : owner(nullptr)
+	bool TFiberMutex::IsAcquired() const
+	{
+		return TFiber::Self() == owner;
+	}
+
+	TFiberMutex::TFiberMutex() : owner(nullptr), n_accquire(0)
 	{
 	}
 
@@ -249,10 +261,12 @@ namespace el1::system::task
 
 	TFiber::~TFiber()
 	{
+		IF_DEBUG_PRINTF("TFiber::~TFiber(): self=%p, this=%p ENTER\n", TFiber::Self(), this);
 		if(this != &this->thread->main_fiber)
 		{
 			if(this->state != EFiberState::CONSTRUCTED)
 			{
+				// TODO: print warning
 				try
 				{
 					this->Shutdown();
@@ -270,6 +284,7 @@ namespace el1::system::task
 
 			FreeStack();
 		}
+		IF_DEBUG_PRINTF("TFiber::~TFiber(): self=%p, this=%p END\n", TFiber::Self(), this);
 	}
 
 	void TFiber::Boot()
@@ -278,6 +293,8 @@ namespace el1::system::task
 		#ifdef __SANITIZE_ADDRESS__
 			__sanitizer_finish_switch_fiber(nullptr, (const void**)&self->thread->previous_fiber->p_stack, (size_t*)&self->thread->previous_fiber->sz_stack);
 		#endif
+
+		IF_DEBUG_PRINTF("TFiber::Boot(): self=%p\n", self);
 
 		try
 		{
@@ -306,12 +323,14 @@ namespace el1::system::task
 
 		self->shutdown = false;
 		self->thread->fibers.RemoveItem(self, NEG1);
+		IF_DEBUG_PRINTF("TFiber::Boot(): calling scheduler self=%p\n", self);
 		TFiber::Schedule();
 	}
 
 	void TFiber::Schedule()
 	{
 		TThread* const thread = TThread::Self();
+		EL_ERROR(thread->active_fiber == nullptr, TLogicException);
 		TFiber* const self = thread->active_fiber;
 		auto& fibers = thread->fibers;
 		TFiber* next_fiber = nullptr;
@@ -327,6 +346,8 @@ namespace el1::system::task
 		{
 			for(TFiber* fiber : fibers)
 			{
+				EL_ERROR(thread != fiber->thread, TLogicException);
+
 				if(fiber == self)
 					continue;
 
@@ -394,7 +415,7 @@ namespace el1::system::task
 				}
 			}
 
-			// this can only happen if KernelWaitForMany() has a bug
+			// this can only happen if KernelWaitForMany() has a waitable has a bug
 			EL_ERROR(next_fiber == nullptr, TLogicException);
 		}
 
@@ -402,6 +423,7 @@ namespace el1::system::task
 			next_fiber->SwitchTo();
 
 		self->state = EFiberState::ACTIVE;
+		thread->active_fiber = self;
 
 		if(self->shutdown)
 		{
@@ -426,6 +448,8 @@ namespace el1::system::task
 		EL_ERROR(!this->IsAlive(), TLogicException);	// TODO better exception
 
 		TFiber* const self = TThread::Self()->active_fiber;
+		IF_DEBUG_PRINTF("SwitchTo(): switching from=%p to=%p\n", self, this);
+		EL_ERROR(self->thread != this->thread, TLogicException);
 
 		this->thread->active_fiber = this;
 		this->thread->previous_fiber = self;
@@ -437,9 +461,6 @@ namespace el1::system::task
 
 		if(self->state == EFiberState::ACTIVE)
 			self->state = EFiberState::READY;
-
-		self->eh_state = *__cxxabiv1::__cxa_get_globals();
-		*__cxxabiv1::__cxa_get_globals() = this->eh_state;
 
 		#ifdef __SANITIZE_ADDRESS__
 			void* fake_stack_save = nullptr;
@@ -453,6 +474,9 @@ namespace el1::system::task
 		// abrakadabra...
 		SwapRegisters(&self->registers, &this->registers);
 
+		// NOTE: "this" and "previous_fiber" might not exist any more (shutdown and destructed)
+		// thus no access to members of this and previous_fiber must happen past SwapRegisters()
+
 		#ifdef EL1_WITH_VALGRIND
 			VALGRIND_STACK_DEREGISTER(stack_id);
 		#endif
@@ -461,16 +485,13 @@ namespace el1::system::task
 			__sanitizer_finish_switch_fiber(fake_stack_save, nullptr, nullptr);
 		#endif
 
-		this->eh_state = *__cxxabiv1::__cxa_get_globals();
-		*__cxxabiv1::__cxa_get_globals() = self->eh_state;
+		IF_DEBUG_PRINTF("SwitchTo(): returned from=%p to=%p (my last switch was to %p)\n", self->thread->previous_fiber, self, this);
 
 		if(self->shutdown)
 		{
 			self->shutdown = false;
 			throw shutdown_t();
 		}
-
-		EL_ERROR(self->state != EFiberState::ACTIVE || this->thread->active_fiber != self, TLogicException);
 	}
 
 	void TFiber::Start()
@@ -631,7 +652,9 @@ namespace el1::system::task
 
 	void TFiber::Sleep(const TTime time, const EClock clock)
 	{
-		TTimeWaitable waitable(clock, TTime::Now(clock) + time);
+		const TTime ts_now = TTime::Now(clock);
+		const TTime ts_wait_until = ts_now + time;
+		TTimeWaitable waitable(clock, ts_wait_until);
 		waitable.WaitFor();
 	}
 
@@ -656,12 +679,17 @@ namespace el1::system::task
 		return streams.Get(fd);
 	}
 
-	TProcess::TProcess(const TPath& exe, const TList<TString>& args, const TSortedMap<fd_t, const EFDIO>& streams, const TSortedMap<TString, const TString>& env) : pid(-1)
+	TProcess::TProcess(
+			const TPath& exe,
+			const TList<TString>& args,
+			const TSortedMap<fd_t, const EFDIO>& streams,
+			const TSortedMap<TString, const TString>& env
+		) : pid(-1), on_terminate({.read = true, .write = false, .other = false})
 	{
 		Start(exe, args, streams, env);
 	}
 
-	TProcess::TProcess() : pid(-1)
+	TProcess::TProcess() : pid(-1), on_terminate({.read = true, .write = false, .other = false})
 	{
 	}
 
@@ -690,6 +718,11 @@ namespace el1::system::task
 		map.Add(1, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
 		map.Add(2, TProcess::EFDIO::INHERIT);
 
+		EL_ERROR(map.Items().Count() != 3, TLogicException);
+		EL_ERROR(map.Items()[0].key < 0, TLogicException);
+		EL_ERROR(map.Items()[1].key < 0, TLogicException);
+		EL_ERROR(map.Items()[2].key < 0, TLogicException);
+
 		TProcess proc(exe, args, map);
 		TString str = proc.ReceiveStream(1)->Pipe().Transform(io::text::encoding::TCharDecoder()).Collect();
 		int status;
@@ -699,3 +732,5 @@ namespace el1::system::task
 
 	bool TProcess::WARN_NONZERO_EXIT_IN_DESTRUCTOR = true;
 }
+
+#undef IF_DEBUG_PRINTF

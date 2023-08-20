@@ -17,7 +17,7 @@ namespace el1::system::random
 		return file.Read(arr_items, n_items_max);
 	}
 
-	usys_t TSystemRandom::BlockingRead(byte_t* const arr_items, const usys_t n_items_max)
+	usys_t TSystemRandom::BlockingRead(byte_t* const arr_items, const usys_t n_items_max, system::time::TTime, const bool)
 	{
 		return file.BlockingRead(arr_items, n_items_max);
 	}
@@ -35,7 +35,7 @@ namespace el1::system::random
 		return n_items_max;
 	}
 
-	usys_t TCMWC::BlockingRead(byte_t* const arr_items, const usys_t n_items_max)
+	usys_t TCMWC::BlockingRead(byte_t* const arr_items, const usys_t n_items_max, system::time::TTime, const bool)
 	{
 		this->ReadAll(arr_items, n_items_max);
 		return n_items_max;
@@ -108,7 +108,7 @@ namespace el1::system::random
 		return n_items_max;
 	}
 
-	usys_t TXorShift::BlockingRead(byte_t* const arr_items, const usys_t n_items_max)
+	usys_t TXorShift::BlockingRead(byte_t* const arr_items, const usys_t n_items_max, system::time::TTime, const bool)
 	{
 		this->ReadAll(arr_items, n_items_max);
 		return n_items_max;

@@ -1,10 +1,28 @@
 #include "util.hpp"
+#include <math.h>
 
 namespace el1::io::text::string
 {
 	void PrintTo(const TString& str, std::ostream* os)
 	{
 		(*os) << str.MakeCStr().get();
+	}
+}
+
+namespace el1::system::time
+{
+	std::ostream& operator<<(std::ostream& os, const TTime t)
+	{
+		auto x = os.precision();
+		os.precision(3);
+		os<<std::fixed<<t.ConvertToF(EUnit::SECONDS)<<"s {sec: "<<t.Seconds()<<"; asec: "<<t.Attoseconds()<<"}";
+		os.precision(x);
+		return os;
+	}
+
+	void PrintTo(const TTime t, std::ostream* os)
+	{
+		*os<<t;
 	}
 }
 

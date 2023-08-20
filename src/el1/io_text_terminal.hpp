@@ -3,6 +3,7 @@
 #include "def.hpp"
 #include "io_types.hpp"
 #include "io_text_string.hpp"
+#include "io_stream.hpp"
 
 namespace el1::io::text::terminal
 {
@@ -51,7 +52,7 @@ namespace el1::io::text::terminal
 	// and not connect stdin at all - all input operations always return EOF
 	extern ITerminal& term;
 
-	extern stream::ISource<byte_t>& stdin;
-	extern stream::ISink<byte_t>& stdout;
-	extern stream::ISink<byte_t>& stderr;
+	extern stream::TKernelStream stdin;
+	extern stream::TKernelStream stdout;
+	extern stream::TKernelStream stderr;
 }

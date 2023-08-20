@@ -91,6 +91,9 @@ namespace el1::io::collection::list
 	};
 
 	template<typename T>
+	struct TListSink;
+
+	template<typename T>
 	class TArrayPipe;
 
 	// const array_t => everything is const, but you can just create a copy of the array_t and then everything is writeable
@@ -178,6 +181,8 @@ namespace el1::io::collection::list
 	template<typename T>
 	struct TList_Insert_Impl<T, true> : TList_Insert_Impl<T, false>
 	{
+		void SetCount(const usys_t new_count);
+
 		T* Insert(const ssys_t index, const array_t<T> array);
 		T* Insert(const ssys_t index, const T* arr_items_insert, const usys_t n_items_insert);
 		T& Insert(const ssys_t index, const T& item);
@@ -197,6 +202,7 @@ namespace el1::io::collection::list
 	class TList : public TList_Insert_Impl<T, std::is_copy_constructible<T>::value>, public array_t<T>
 	{
 		friend struct TList_Insert_Impl<T, std::is_copy_constructible<T>::value>;
+		friend struct TListSink<T>;
 		protected:
 			void Prealloc(const usys_t n_items_need);
 			void Shrink(const usys_t n_items_shrink);
@@ -205,6 +211,7 @@ namespace el1::io::collection::list
 			void DestructItems(const usys_t index, const usys_t n_items_destruct);
 
 		public:
+			void Truncate() noexcept;
 			void Clear() noexcept;
 			void Clear(const usys_t n_prealloc); // n_prealloc == NEG1 => keep existing buffer
 			usys_t CountPreallocated() const EL_GETTER;
@@ -267,6 +274,7 @@ namespace el1::io::collection::list
 	struct TListSink : stream::ISink<T>
 	{
 		TList<T>* list;
+		usys_t n_items_prealloc;
 
 		usys_t Write(const T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
 		{
@@ -274,7 +282,38 @@ namespace el1::io::collection::list
 			return n_items_max;
 		}
 
-		constexpr TListSink(TList<T>* list) : list(list) {}
+		iosize_t ReadIn(stream::ISource<T>& source, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true) final override
+		{
+			const usys_t n_prealloc_req = util::Min<iosize_t>(n_items_max, n_items_prealloc);
+			usys_t n_preallocated = list->CountPreallocated();
+			T* p_append = list->arr_items + list->n_items;
+
+			usys_t n_read = 0;
+			while(n_read < n_items_max)
+			{
+				const usys_t n_remaining = n_items_max == (iosize_t)-1 ? NEG1 : (usys_t)n_items_max - n_read;
+
+				if(n_preallocated == 0)
+				{
+					list->Prealloc(n_prealloc_req);
+					n_preallocated = list->CountPreallocated();
+					p_append = list->arr_items + list->n_items;
+				}
+
+				usys_t r = util::Min(n_remaining, n_preallocated);
+				r = source.Read(p_append, r);
+				if(r == 0)
+					break;
+
+				p_append += r;
+				n_read += r;
+				n_preallocated -= r;
+				list->n_items += r;
+			}
+			return n_read;
+		}
+
+		constexpr TListSink(TList<T>* list, const usys_t n_items_prealloc = util::Max<iosize_t>(1, 4096U / sizeof(T))) : list(list), n_items_prealloc(n_items_prealloc) {}
 	};
 
 	/*****************************************************************************/
@@ -496,6 +535,31 @@ namespace el1::io::collection::list
 	/*****************************************************************************/
 
 	template<typename T>
+	void TList_Insert_Impl<T, true>::SetCount(const usys_t new_count)
+	{
+		TList<T>* list = static_cast<TList<T>*>(this);
+		if(new_count < list->n_items)
+		{
+			list->Cut(0, list->n_items - new_count);
+		}
+		else
+		{
+			const usys_t n_add = new_count - list->n_items;
+			list->Prealloc(new_count);
+			for(usys_t i = 0; i < n_add; i++)
+				try { new (list->arr_items + list->n_items + i) T(); }
+				catch(...)
+				{
+					list->n_items += i;
+					throw;
+				}
+
+			list->n_items = new_count;
+		}
+	}
+
+
+	template<typename T>
 	T* TList_Insert_Impl<T, true>::Insert(const ssys_t index, const array_t<T> array)
 	{
 		if(array.Count() > 0)
@@ -668,14 +732,19 @@ namespace el1::io::collection::list
 	}
 
 	template<typename T>
-	void TList<T>::Clear() noexcept
+	void TList<T>::Truncate() noexcept
 	{
 		for(usys_t i = 0; i < this->n_items; i++)
 			this->arr_items[i].~T();
+		this->n_items = 0;
+	}
 
+	template<typename T>
+	void TList<T>::Clear() noexcept
+	{
+		this->Truncate();
 		free(this->arr_items);
 		this->arr_items = nullptr;
-		this->n_items = 0;
 	}
 
 	template<typename T>

@@ -47,6 +47,11 @@ namespace el1::debug
 		}
 	}
 
+	void Hexdump(const char* const context, const void* const data, const usys_t n_bytes, const usys_t line_length)
+	{
+		Hexdump(data, n_bytes, line_length, context);
+	}
+
 	void Hexdump(const void* const data, const usys_t n_bytes, const usys_t line_length, const char* const context)
 	{
 		Hexdump(data, n_bytes, line_length, context, [](const char* const line) {

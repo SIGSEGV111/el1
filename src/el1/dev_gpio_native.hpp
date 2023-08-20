@@ -21,7 +21,9 @@ namespace el1::dev::gpio::native
 			const unsigned id;
 			EMode mode;
 			ETrigger trigger;
-			mutable TFile state;
+			#ifdef EL_OS_LINUX
+				mutable TFile state;
+			#endif
 			THandleWaitable on_input_trigger;
 
 			TPath Directory();
@@ -66,5 +68,7 @@ namespace el1::dev::gpio::native
 			std::unique_ptr<IPin> ClaimPin(const usys_t index) final override;
 
 			static TNativeGpioController* Instance();
+
+			virtual ~TNativeGpioController() {}
 	};
 }

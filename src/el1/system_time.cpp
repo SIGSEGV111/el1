@@ -276,25 +276,6 @@ namespace el1::system::time
 		return TTime(value / tps);
 	}
 
-	TTime::operator timespec() const noexcept
-	{
-		timespec t = { (time_t)(sec), (long)(asec / 1000000000LL) };
-		return t;
-	}
-
-	TTime::operator timeval() const noexcept
-	{
-		timeval t = { (time_t)(sec), (long)(asec / 1000000000000LL) };
-		return t;
-	}
-
-	TTime::TTime(double Seconds) noexcept
-	{
-		sec = (s64_t)Seconds;
-		Seconds -= sec;
-		asec = (s64_t)(Seconds * 1000000000000000000.0);
-	}
-
 	TTime::TTime(s64_t seconds, s64_t attoseconds) noexcept : sec(seconds), asec(attoseconds)
 	{
 		Normalize();

@@ -171,10 +171,12 @@ namespace el1::system::task
 	{
 		protected:
 			TFiber* owner;
+			unsigned n_accquire;
 
 		public:
-			bool Accquire(const TTime timeout);
-			void Release();
+			bool Accquire(const TTime timeout) final override;
+			void Release() final override;
+			bool IsAcquired() const final override;
 
 			TFiberMutex();
 			~TFiberMutex();
@@ -377,7 +379,7 @@ namespace el1::system::task
 			TFiber(TFiber&&) = delete;
 			TFiber& operator=(const TFiber&) = delete;
 			TFiber& operator=(TFiber&&) = delete;
-			~TFiber();
+			virtual ~TFiber();
 
 			TFiber(); // won't start fiber
 			TFiber(TFunction<void> main_func, const bool autostart = true, const usys_t sz_stack = FIBER_DEFAULT_STACK_SIZE_BYTES, void* const p_stack = nullptr);
@@ -549,6 +551,8 @@ namespace el1::system::task
 	{
 		protected:
 			process_id_t pid;
+			THandle h_proc;
+			mutable THandleWaitable on_terminate;
 			io::collection::map::TSortedMap<fd_t, TPipe> streams;
 
 		public:
@@ -565,6 +569,7 @@ namespace el1::system::task
 				PIPE_CHILD_TO_PARENT	// pipe output from child to parent ISource<byte_t>
 			};
 
+			THandleWaitable& OnTerminate() const { return on_terminate; }
 			void Start(const io::file::TPath& exe, const io::collection::list::TList<TString>& args = io::collection::list::TList<TString>(), const io::collection::map::TSortedMap<fd_t, const EFDIO>& streams = StdioStreams(), const io::collection::map::TSortedMap<TString, const TString>& env = EnvironmentVariables());
 			void Stop() final override;
 			void Resume() final override;
@@ -582,7 +587,12 @@ namespace el1::system::task
 
 			static io::collection::map::TSortedMap<fd_t, EFDIO> StdioStreams();
 
-			TProcess(const io::file::TPath& exe, const io::collection::list::TList<TString>& args = io::collection::list::TList<TString>(), const io::collection::map::TSortedMap<fd_t, const EFDIO>& streams = StdioStreams(), const io::collection::map::TSortedMap<TString, const TString>& env = EnvironmentVariables());
+			TProcess(
+				const io::file::TPath& exe,
+				const io::collection::list::TList<TString>& args = io::collection::list::TList<TString>(),
+				const io::collection::map::TSortedMap<fd_t, const EFDIO>& streams = StdioStreams(),
+				const io::collection::map::TSortedMap<TString, const TString>& env = EnvironmentVariables()
+			);
 
 			TProcess();
 			~TProcess();

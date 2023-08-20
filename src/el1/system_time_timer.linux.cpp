@@ -9,10 +9,12 @@
 
 namespace el1::system::time::timer
 {
-	using namespace system::task;
+	using namespace system::waitable;
+	using namespace system::handle;
 
 	usys_t TTimer::ReadMissedTicksCount()
 	{
+		waitable.Reset();
 		u64_t count = 0;
 		const ssize_t r = read(waitable.Handle(), &count, 8);
 		if(r == 8)
@@ -24,51 +26,33 @@ namespace el1::system::time::timer
 			if(errno == EAGAIN)
 				return 0;
 			else
-				EL_THROW(TSyscallException, errno);
+				EL_THROW(TSyscallException, errno); // This might tigger on a discontinuous negative change to the clock (r will be 0)
 		}
 	}
 
-	void TTimer::Start(const TTime interval, const ETimerMode mode)
+	void TTimer::Start(const TTime interval)
 	{
-		int flags = TFD_TIMER_CANCEL_ON_SET;
-
 		::itimerspec its = {};
 		its.it_interval = interval;
 		its.it_value = interval;
-
-		switch(mode)
-		{
-			case ETimerMode::RELATIVE:
-				break;
-
-			case ETimerMode::ABSOLUTE:
-				flags |= TFD_TIMER_ABSTIME;
-				break;
-		}
-
-
-		while(ReadMissedTicksCount() > 0);
-		EL_SYSERR(timerfd_settime(waitable.Handle(), flags, &its, nullptr));
+		EL_SYSERR(timerfd_settime(waitable.Handle(), 0, &its, nullptr));
+		waitable.Reset();
 	}
 
 	void TTimer::Start(const TTime ts_expire, const TTime interval)
 	{
-		int flags = TFD_TIMER_CANCEL_ON_SET;
-
 		::itimerspec its = {};
 		its.it_interval = interval;
 		its.it_value = ts_expire;
-
-		flags |= TFD_TIMER_ABSTIME;
-
-		while(ReadMissedTicksCount() > 0);
-		EL_SYSERR(timerfd_settime(waitable.Handle(), flags, &its, nullptr));
+		EL_SYSERR(timerfd_settime(waitable.Handle(), TFD_TIMER_ABSTIME, &its, nullptr));
+		waitable.Reset();
 	}
 
 	void TTimer::Stop()
 	{
 		::itimerspec its = {};
 		EL_SYSERR(timerfd_settime(waitable.Handle(), 0, &its, nullptr));
+		waitable.Reset();
 	}
 
 	TTimer::~TTimer()
@@ -108,10 +92,10 @@ namespace el1::system::time::timer
 		Start(ts_expire, interval);
 	}
 
-	TTimer::TTimer(const EClock clock, const TTime interval, const ETimerMode mode) : waitable({.read = true, .write = false, .other = false})
+	TTimer::TTimer(const EClock clock, const TTime interval) : waitable({.read = true, .write = false, .other = false})
 	{
 		Init(clock);
-		Start(interval, mode);
+		Start(interval);
 	}
 }
 

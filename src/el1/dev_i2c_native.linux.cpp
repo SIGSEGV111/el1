@@ -8,26 +8,57 @@
 #include <errno.h>
 #include <linux/i2c-dev.h>
 #include <sys/ioctl.h>
+#include "io_file.hpp"
+#include <endian.h>
 
 namespace el1::dev::i2c::native
 {
 	using namespace io::file;
+	using namespace io::stream;
 
 	usys_t TDevice::Read(byte_t* const arr_items, const usys_t n_items_max)
 	{
-		EL_ERROR(read(this->handle, arr_items, n_items_max) != (ssize_t)n_items_max, TSyscallException, errno);
-		return n_items_max;
+		return stream.Read(arr_items, n_items_max);
+	}
+
+	const system::waitable::IWaitable* TDevice::OnInputReady() const
+	{
+		return stream.OnInputReady();
+	}
+
+	iosize_t TDevice::WriteOut(ISink<byte_t>& sink, const iosize_t n_items_max, const bool allow_recursion)
+	{
+		return stream.WriteOut(sink, n_items_max, allow_recursion);
+	}
+
+	usys_t TDevice::BlockingRead(byte_t* const arr_items, const usys_t n_items_max, system::time::TTime timeout, const bool absolute_time)
+	{
+		return stream.BlockingRead(arr_items, n_items_max, timeout, absolute_time);
+	}
+
+	void TDevice::ReadAll(byte_t* const arr_items, const usys_t n_items)
+	{
+		stream.ReadAll(arr_items, n_items);
 	}
 
 	usys_t TDevice::Write(const byte_t* const arr_items, const usys_t n_items_max)
 	{
-		EL_ERROR(write(this->handle, arr_items, n_items_max) != (ssize_t)n_items_max, TSyscallException, errno);
-		return n_items_max;
+		return stream.Write(arr_items, n_items_max);
+	}
+
+	const system::waitable::IWaitable* TDevice::OnOutputReady() const
+	{
+		return stream.OnOutputReady();
+	}
+
+	iosize_t TDevice::ReadIn(ISource<byte_t>& source, const iosize_t n_items_max, const bool allow_recursion)
+	{
+		return stream.ReadIn(source, n_items_max, allow_recursion);
 	}
 
 	void TDevice::Flush()
 	{
-		EL_SYSERR(fsync(this->handle));
+		stream.Flush();
 	}
 
 	II2CBus* TDevice::Bus() const
@@ -42,14 +73,13 @@ namespace el1::dev::i2c::native
 
 	ESpeedClass TDevice::SpeedClass() const
 	{
-		// FIXME: use info from /sys/bus/i2c/devices/i2c-1/of_node/clock-frequency
 		return sc;
 	}
 
-	TDevice::TDevice(TBus* const bus, const u8_t address, const ESpeedClass sc) : handle(EL_SYSERR(open(bus->device, O_RDWR|O_CLOEXEC|O_NOCTTY/*|O_SYNC*/)), true), bus(bus), address(address), sc(sc)
+	TDevice::TDevice(TBus* const bus, const u8_t address, const ESpeedClass sc) : stream(bus->device), bus(bus), address(address), sc(sc)
 	{
 		this->bus->claimed_addresses.Add(this->address, this);
-		EL_SYSERR(ioctl(this->handle, I2C_SLAVE, this->address));
+		EL_SYSERR(ioctl(stream.Handle(), I2C_SLAVE, this->address));
 	}
 
 	TDevice::~TDevice()
@@ -59,7 +89,14 @@ namespace el1::dev::i2c::native
 
 	ESpeedClass TBus::MaxSupportedSpeed() const
 	{
-		return ESpeedClass::STD;
+		TPath path = TString("/sys/bus/i2c/devices/") + device.FullName() + "/of_node/clock-frequency";
+		TFile file(path);
+
+		u32_t clock;
+		file.ReadAll((byte_t*)&clock, sizeof(clock));
+		clock = be32toh(clock);
+
+		return (ESpeedClass)clock;
 	}
 
 	std::unique_ptr<II2CDevice> TBus::ClaimDevice(const u8_t address, const ESpeedClass sc_max)

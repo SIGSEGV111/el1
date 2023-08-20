@@ -2,7 +2,7 @@
 
 namespace el1::system::time::timer
 {
-	using namespace system::task;
+	using namespace system::waitable;
 
 	const THandleWaitable* TTimeWaitable::HandleWaitable() const
 	{
@@ -16,12 +16,9 @@ namespace el1::system::time::timer
 
 	bool TTimeWaitable::IsReady() const
 	{
-		if(TTime::Now(clock) > ts_wait_until)
-			return true;
-
-		if(timer != nullptr)
+		if(timer == nullptr)
+			return TTime::Now(clock) >= ts_wait_until;
+		else
 			return timer->OnTick().IsReady();
-
-		return false;
 	}
 }

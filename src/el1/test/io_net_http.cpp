@@ -83,7 +83,7 @@ namespace
 		TTcpServer tcp_server;
 		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto file = std::unique_ptr<TFile>(new TFile(L"../../../testdata/test1.json"));
+			auto file = std::unique_ptr<TFile>(new TFile(L"gen/testdata/test1.json"));
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
@@ -91,22 +91,24 @@ namespace
 		const TString url = TString::Format(L"http://localhost:%d/", tcp_server.LocalAddress().port);
 		TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", url, url, url });
 		str_curl.Cut(0, str_curl.Length() / 3 * 2);
-		const TString str_ref = TFile(L"../../../testdata/test1.json").Pipe().Transform(TUTF8Decoder()).Collect();
+		const TString str_ref = TFile(L"gen/testdata/test1.json").Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
 	}
 
 	TEST(io_net_http, THttpServer_curl_error)
 	{
+		bool fail = false;
 		TTcpServer tcp_server;
-		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
+		THttpServer http_server(&tcp_server, [&fail](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto file = std::unique_ptr<TFile>(new TFile(L"non-existent file"));
+			auto file = std::unique_ptr<TFile>(new TFile(L"non-existent file")); // this should throw
+			fail = true; // this should never be reached
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
 
 		const TString url = TString::Format(L"http://localhost:%d/", tcp_server.LocalAddress().port);
 		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", url }), TException);
-
+		EXPECT_FALSE(fail);
 	}
 }

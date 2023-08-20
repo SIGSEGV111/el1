@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <el1/system_time.hpp>
+#include "util.hpp"
 
 using namespace ::testing;
 
@@ -7,17 +8,29 @@ namespace
 {
 	using namespace el1::system::time;
 
+	static const u64_t ATTOS_PS  = 1000000000000000000;
+	static const u64_t NANOS_PS  = 1000000000;
+	static const u64_t MICROS_PS = 1000000;
+
 	TEST(system_time, TTime_Construct)
 	{
 		TTime t1;
 		TTime t2(0);
 		TTime t3(0U);
 		TTime t4(0LL,0LL);
+		TTime t5(0.2176);
+		TTime t6(0.6528);
+		TTime t7(0.5000);
+		TTime t8(2.048000000000000040);
 
 		EXPECT_EQ(t1, 0);
 		EXPECT_EQ(t2, 0);
 		EXPECT_EQ(t3, 0);
 		EXPECT_EQ(t4, 0);
+		EXPECT_EQ(t5, TTime(0,217600000000000000ULL));
+		EXPECT_EQ(t6, TTime(0,652800000000000000ULL));
+		EXPECT_EQ(t7, TTime(0,500000000000000000ULL));
+		EXPECT_EQ(t8, TTime(2, 48000000000000040ULL));
 	}
 
 	TEST(system_time, TTime_Compare)
@@ -47,10 +60,6 @@ namespace
 
 		EXPECT_FALSE(TTime(2, 10) != TTime(2, 10));
 	}
-
-	static const u64_t ATTOS_PS  = 1000000000000000000;
-	static const u64_t NANOS_PS  = 1000000000;
-	static const u64_t MICROS_PS = 1000000;
 
 	TEST(system_time, TTime_Math)
 	{

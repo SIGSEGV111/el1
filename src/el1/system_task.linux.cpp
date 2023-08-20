@@ -146,51 +146,54 @@ namespace el1::system::task
 			.revents = 0
 		});
 
-		for(;;)
+		bool loop = true;
+		while(loop)
 		{
-			const int r = EL_SYSERR(poll(&pfds[0], pfds.Count(), -1));
-			if(r > 0)
-				break;
-			usleep(1000);
-		}
-
-		for(unsigned i = 0; i < handle_waitables.Count(); i++)
-		{
-			handle_waitables[i]->is_ready = pfds[i].revents != 0;
-		}
-
-		if(pfds[-1].revents)
-		{
-			signalfd_siginfo buffer[4];
-
 			for(;;)
 			{
-				const ssize_t r = read(fd_signal, buffer, sizeof(buffer));
-				if(r < 0)
-				{
-					if(errno == EAGAIN || errno == EWOULDBLOCK)
-						break;
-					else
-						EL_THROW(TSyscallException, errno);
-				}
-				else
-				{
-					// process signals
-					const unsigned n = r / sizeof(buffer[0]);
-					for(unsigned i = 0; i < n; i++)
-					{
-						switch(buffer[i].ssi_signo)
-						{
-							case SIGTERM:
-							case SIGINT:
-							case SIGQUIT:
-							case SIGHUP:
-								TThread::Self()->MainFiber().Shutdown();
-								break;
+				const int r = EL_SYSERR(poll(&pfds[0], pfds.Count(), -1));
+				if(r > 0)
+					break;
+				usleep(1000);
+			}
 
-							default:
-								// ignore (TODO: should we care?)
-								break;
+			for(unsigned i = 0; i < handle_waitables.Count(); i++)
+				if(pfds[i].revents != 0)
+				{
+					handle_waitables[i]->is_ready = true;
+					loop = false;
+				}
+
+			if(pfds[-1].revents)
+			{
+				signalfd_siginfo buffer[4];
+
+				for(;;)
+				{
+					const ssize_t r = read(fd_signal, buffer, sizeof(buffer));
+					if(r < 0)
+					{
+						if(errno == EAGAIN || errno == EWOULDBLOCK)
+							break;
+						else
+							EL_THROW(TSyscallException, errno);
+					}
+					else
+					{
+						// process signals
+						const unsigned n = r / sizeof(buffer[0]);
+						for(unsigned i = 0; i < n; i++)
+						{
+							switch(buffer[i].ssi_signo)
+							{
+								case SIGTERM:
+								case SIGINT:
+								case SIGQUIT:
+								case SIGHUP:
+									TThread::Self()->MainFiber().Shutdown();
+									loop = false;
+									break;
+							}
 						}
 					}
 				}
@@ -220,7 +223,7 @@ namespace el1::system::task
 		on_output_ready({.read = false, .write = true, .other = false})
 	{
 		fd_t fds[2] = {-1,-1};
-		EL_SYSERR(pipe2(fds, O_CLOEXEC|O_NONBLOCK));
+		EL_SYSERR(pipe2(fds, O_CLOEXEC));
 		rx = fds[0];
 		tx = fds[1];
 

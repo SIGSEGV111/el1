@@ -45,8 +45,10 @@ namespace el1::dev::spi::native
 		return this->hz_speed = device_max_hz;
 	}
 
-	void TNativeSpiDevice::ExchangeBuffers(const void* const tx_buffer, void* const rx_buffer, const usys_t n_bytes)
+	void TNativeSpiDevice::ExchangeBuffers(const void* const tx_buffer, void* const rx_buffer, const usys_t n_bytes, const bool clean_signal)
 	{
+		EL_ERROR(clean_signal, TNotImplementedException);
+
 		while(this->bus->IsBusy() && this->bus->active_device != this)
 			this->bus->OnBusIdle().WaitFor();
 

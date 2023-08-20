@@ -17,6 +17,8 @@
 #include <poll.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+#include <sys/syscall.h>
+#include <unistd.h>
 
 extern char** environ;
 
@@ -389,14 +391,24 @@ namespace el1::system::task
 
 	/////////////////////////////////////////////////////////////
 
+	static const unsigned PIDFD_NONBLOCK = O_NONBLOCK;
+
+	extern "C" int pidfd_open(pid_t pid, unsigned int flags)
+	{
+		return syscall(SYS_pidfd_open, pid, flags);
+	}
+
 	void TProcess::Start(const TPath& exe, const TList<TString>& args, const TSortedMap<fd_t, const EFDIO>& streams, const TSortedMap<TString, const TString>& env)
 	{
 		EL_ERROR(pid != -1, TException, "process already running");
 
 		TSortedMap<fd_t, THandle> child_handles;
+		this->streams.Clear();
 
 		for(const auto& kv : streams.Items())
 		{
+			EL_ERROR(kv.key < 0, TInvalidArgumentException, "streams", "file-descriptor cannot be negative");
+
 			switch(kv.value)
 			{
 				case EFDIO::INHERIT:
@@ -418,11 +430,13 @@ namespace el1::system::task
 
 			if(kv.value == EFDIO::PIPE_PARENT_TO_CHILD)
 			{
+				pipe.SendSide().BlockingIO(false);
 				child_handles.Add(kv.key, std::move(pipe.ReceiveSide()));
 				this->streams.Add(kv.key, std::move(pipe));
 			}
 			else
 			{
+				pipe.ReceiveSide().BlockingIO(false);
 				child_handles.Add(kv.key, std::move(pipe.SendSide()));
 				this->streams.Add(kv.key, std::move(pipe));
 			}
@@ -548,6 +562,8 @@ namespace el1::system::task
 		else
 		{
 			// parent
+			h_proc = EL_SYSERR(pidfd_open(pid, PIDFD_NONBLOCK));
+			on_terminate.Handle(h_proc);
 		}
 	}
 
@@ -582,25 +598,30 @@ namespace el1::system::task
 		for(;;)
 		{
 			int wstatus = 0;
-			EL_SYSERR(waitpid(pid, &wstatus, WUNTRACED|WCONTINUED));
+			const pid_t wait_pid = EL_SYSERR(waitpid(pid, &wstatus, WNOHANG));
 
-			if(WIFSIGNALED(wstatus))
+			if(wait_pid == 0)
 			{
-				pid = -1;
-				return -WTERMSIG(wstatus);
-			}
-			else if(WIFSTOPPED(wstatus))
-			{
-				Resume();
-			}
-			else if(WIFCONTINUED(wstatus))
-			{
-				// nothing to do
+				on_terminate.WaitFor();
 			}
 			else
 			{
 				pid = -1;
-				return WEXITSTATUS(wstatus);
+				h_proc.Close();
+				on_terminate.Handle(-1);
+
+				if(WIFEXITED(wstatus))
+				{
+					return WEXITSTATUS(wstatus);
+				}
+				else if(WIFSIGNALED(wstatus))
+				{
+					return -WTERMSIG(wstatus);
+				}
+				else
+				{
+					EL_THROW(TLogicException);
+				}
 			}
 		}
 	}

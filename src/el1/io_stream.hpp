@@ -6,6 +6,7 @@
 #include "util.hpp"
 #include "system_waitable.hpp"
 #include "system_handle.hpp"
+#include "system_time.hpp"
 #include <type_traits>
 
 namespace el1::system::task
@@ -25,6 +26,11 @@ namespace el1::io::collection::list
 
 	template<typename T>
 	class array_t;
+}
+
+namespace io::file
+{
+	class TPath;
 }
 
 namespace el1::io::stream
@@ -120,11 +126,12 @@ namespace el1::io::stream
 		virtual const system::waitable::IWaitable* OnInputReady() const { return nullptr; }
 
 		// instructs the source to directly write the data to a sink - potentially avoiding to copy the data into a temporary buffer
-		virtual iosize_t WriteOut(ISink<T>& sink, const iosize_t n_items_max = NEG1, const bool allow_recursion = true);
+		virtual iosize_t WriteOut(ISink<T>& sink, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true);
 
 		// similar to Read() but blocks until n_items_max have been read
-		// it will read less items if the source runs dry
-		virtual usys_t BlockingRead(T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT;
+		// it will read less items if the source runs dry or timeout expires
+		// you can use OnInputReady() to check if the source ran dry
+		virtual usys_t BlockingRead(T* const arr_items, const usys_t n_items_max, system::time::TTime timeout = -1, const bool absolute_time = false) EL_WARN_UNUSED_RESULT;
 
 		// similar to BlockingRead() but blocks until exactly n_items have been read
 		// throws an exception if the source fails to provide the requested amount of items
@@ -143,9 +150,9 @@ namespace el1::io::stream
 		// see the description of ISource above - the ISink works just the same
 		virtual usys_t Write(const T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT = 0;
 		virtual const system::waitable::IWaitable* OnOutputReady() const { return nullptr; }
-		virtual iosize_t ReadIn(ISource<T>& source, const iosize_t n_items_max = NEG1, const bool allow_recursion = true);
-		usys_t BlockingWrite(const T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT;
-		void WriteAll(const T* const arr_items, const usys_t n_items);
+		virtual iosize_t ReadIn(ISource<T>& source, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true);
+		usys_t BlockingWrite(const T* const arr_items, const usys_t n_items_max, system::time::TTime timeout = -1, const bool absolute_time = false) EL_WARN_UNUSED_RESULT;
+		virtual void WriteAll(const T* const arr_items, const usys_t n_items);
 		void WriteAll(io::collection::list::array_t<const T> arr_items) { this->WriteAll(arr_items.ItemPtr(0), arr_items.Count()); }
 
 		virtual bool CloseOutput() EL_WARN_UNUSED_RESULT { return false; }
@@ -194,6 +201,29 @@ namespace el1::io::stream
 		usys_t Read(TOut* const arr_items, const usys_t n_items_max) override EL_WARN_UNUSED_RESULT;
 	};
 
+	template<typename T>
+	class TCopyCatStream : public ISource<T>
+	{
+		protected:
+			ISource<T>* const source;
+			ISink<T>* const copy_dst;
+
+		public:
+			usys_t Read(T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
+			{
+				const usys_t r = source->Read(arr_items, n_items_max);
+				copy_dst->WriteAll(arr_items, n_items_max);
+				return r;
+			}
+
+			const system::waitable::IWaitable* OnInputReady() const final override
+			{
+				return source->OnInputReady();
+			}
+
+			TCopyCatStream(ISource<T>* const source, ISink<T>* const copy_dst) : source(source), copy_dst(copy_dst) {}
+	};
+
 	template<typename _TOut>
 	struct TReinterpretCastTransformer
 	{
@@ -204,6 +234,30 @@ namespace el1::io::stream
 		{
 			return reinterpret_cast<const TOut*>(source->NextItem());
 		}
+	};
+
+	class TKernelStream : public ISink<byte_t>, public ISource<byte_t>
+	{
+		protected:
+			system::handle::THandle handle;
+			system::waitable::THandleWaitable w_input;
+			system::waitable::THandleWaitable w_output;
+
+		public:
+			system::handle::handle_t Handle() final override { return this->handle; }
+
+			usys_t Read(byte_t* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT;
+			const system::waitable::THandleWaitable* OnInputReady() const final override;
+			bool CloseInput() final override;
+
+			usys_t Write(const byte_t* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT;
+			const system::waitable::THandleWaitable* OnOutputReady() const final override;
+			bool CloseOutput() final override;
+
+			void Flush() final override;
+
+			TKernelStream(system::handle::THandle handle);
+			TKernelStream(const file::TPath& path);
 	};
 
 	/**********************************************/
@@ -327,7 +381,14 @@ namespace el1::io::stream
 			const TOut* NextItem(std::index_sequence<Is...>)
 			{
 				const TOut* item = nullptr;
-				( ((item = std::get<Is>(streams)->NextItem()) != nullptr) || ...);
+				#ifdef EL_CC_CLANG
+					#pragma clang diagnostic push
+					#pragma clang diagnostic ignored "-Wunused-value"
+				#endif
+				( ((item = std::get<Is>(streams)->NextItem()) != nullptr) || ... );
+				#ifdef EL_CC_CLANG
+					#pragma clang diagnostic pop
+				#endif
 				return item;
 			}
 
@@ -402,8 +463,11 @@ namespace el1::io::stream
 	}
 
 	template<typename T>
-	usys_t ISource<T>::BlockingRead(T* const arr_items, const usys_t n_items_max)
+	usys_t ISource<T>::BlockingRead(T* const arr_items, const usys_t n_items_max, system::time::TTime timeout, const bool absolute_time)
 	{
+		if(!absolute_time && timeout > 0)
+			timeout += system::time::TTime::Now(system::time::EClock::MONOTONIC);
+
 		usys_t n_read = 0;
 		while(n_read < n_items_max)
 		{
@@ -412,9 +476,14 @@ namespace el1::io::stream
 			{
 				const system::waitable::IWaitable* const on_input_ready = this->OnInputReady();
 				if(on_input_ready == nullptr)
+				{
 					break;
+				}
 				else
-					on_input_ready->WaitFor();
+				{
+					if(!on_input_ready->WaitFor(timeout, true))
+						break;
+				}
 			}
 
 			n_read += r;
@@ -455,8 +524,11 @@ namespace el1::io::stream
 	}
 
 	template<typename T>
-	usys_t ISink<T>::BlockingWrite(const T* const arr_items, const usys_t n_items_max)
+	usys_t ISink<T>::BlockingWrite(const T* const arr_items, const usys_t n_items_max, system::time::TTime timeout, const bool absolute_time)
 	{
+		if(!absolute_time && timeout > 0)
+			timeout += system::time::TTime::Now(system::time::EClock::MONOTONIC);
+
 		usys_t n_written = 0;
 		while(n_written < n_items_max)
 		{
@@ -465,9 +537,14 @@ namespace el1::io::stream
 			{
 				const system::waitable::IWaitable* const on_output_ready = this->OnOutputReady();
 				if(on_output_ready == nullptr)
+				{
 					break;
+				}
 				else
-					on_output_ready->WaitFor();
+				{
+					if(!on_output_ready->WaitFor(timeout, true))
+						break;
+				}
 			}
 
 			n_written += r;
@@ -643,7 +720,6 @@ namespace el1::io::stream
 
 	/**********************************************/
 
-	// FIXME
 	template<typename T>
 	iosize_t _Pump(ISource<T>& source, ISink<T>& sink, const iosize_t n_items_max, const bool blocking)
 	{
@@ -664,7 +740,6 @@ namespace el1::io::stream
 		return n_pumped;
 	}
 
-	// Pump() should not be used directly, instead use WriteOut() or ReadIn()
 	template<typename T>
 	iosize_t Pump(ISource<T>& source, ISink<T>& sink, const iosize_t n_items_max, const bool blocking)
 	{

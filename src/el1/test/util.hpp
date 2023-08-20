@@ -9,6 +9,12 @@ namespace el1::io::text::string
 	void PrintTo(const TString& str, std::ostream* os);
 }
 
+namespace el1::system::time
+{
+	std::ostream& operator<<(std::ostream& os, const TTime t);
+	void PrintTo(const TTime t, std::ostream* os);
+}
+
 namespace el1::testing
 {
 	using namespace io::text::string;

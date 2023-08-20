@@ -1,0 +1,19 @@
+- build targets:
+	- dev:
+		- target audience: developers while writing code
+		- fast: only build modified files
+		- ALL warnings
+		- warnings == warning, not errors
+		- run tests
+
+	- verify:
+		- target audience: developer before merging branch into master, automated testing (e.g. jenkins)
+		- slow: build all types (amalgam, single files, dll)
+		- all warnings
+		- warnings == errors
+		- run tests
+
+	- release:
+		- target audience: library users / "end users"
+		- slow: build all types (amalgam, single files, dll)
+		- only mandatory warnings

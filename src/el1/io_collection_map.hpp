@@ -62,6 +62,8 @@ namespace el1::io::collection::map
 			sorter_function_t sorter;
 
 		public:
+			void Clear() { items.Clear(); }
+
 			const TList<kv_pair_t>& Items() const { return items; }
 			sorter_function_t Sorter() const { return sorter; }
 
@@ -82,6 +84,7 @@ namespace el1::io::collection::map
 			TSortedMap(const TSortedMap& other) = default;
 			TSortedMap(sorter_function_t sorter = &StdSorter<TKey>);
 			TSortedMap(const TList< kv_pair_t>& items, sorter_function_t sorter = &StdSorter<TKey>);
+			TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter = &StdSorter<TKey>);
 	};
 
 	template<typename TKey, typename TValue>
@@ -116,6 +119,7 @@ namespace el1::io::collection::map
 			TSortedMap(const TSortedMap<TKey, const TValue>& other);
 			TSortedMap(sorter_function_t sorter = &StdSorter<TKey>);
 			TSortedMap(const TList< kv_pair_t>& items, sorter_function_t sorter = &StdSorter<TKey>);
+			TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter = &StdSorter<TKey>);
 	};
 
 	/*****************************************************************************/
@@ -166,6 +170,11 @@ namespace el1::io::collection::map
 
 	template<typename TKey, typename TValue>
 	TSortedMap<TKey, const TValue>::TSortedMap(sorter_function_t sorter) : sorter(sorter)
+	{
+	}
+
+	template<typename TKey, typename TValue>
+	TSortedMap<TKey, const TValue>::TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter) : items(list), sorter(sorter)
 	{
 	}
 
@@ -256,6 +265,11 @@ namespace el1::io::collection::map
 
 	template<typename TKey, typename TValue>
 	TSortedMap<TKey, TValue>::TSortedMap(const TList< kv_pair_t>& items, sorter_function_t sorter) : TSortedMap<TKey, const TValue>(items, sorter)
+	{
+	}
+
+	template<typename TKey, typename TValue>
+	TSortedMap<TKey, TValue>::TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter) : TSortedMap<TKey, const TValue>(list, sorter)
 	{
 	}
 

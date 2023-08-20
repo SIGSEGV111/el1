@@ -1,10 +1,10 @@
-#include "dev_opt3001.hpp"
+#include "dev_i2c_opt3001.hpp"
 #include "io_text_string.hpp"
 #include <stdio.h>
 #include <math.h>
 #include <endian.h> // FIXME: Linux - other systems might not have it
 
-namespace el1::dev::opt3001
+namespace el1::dev::i2c::opt3001
 {
 	using namespace gpio;
 	using namespace io::text::string;
@@ -17,7 +17,7 @@ namespace el1::dev::opt3001
 		buffer[0] = index;
 		memcpy(buffer + 1, &tmp_value, 2);
 		this->regindex_cache = (u8_t)-1;
-		EL_ERROR(this->device->Write(buffer, 3) != 3, TException, TString::Format("unable to write value 0x%x to register 0x%x", value, index));
+		this->device->WriteAll(buffer, 3);
 		this->regindex_cache = index;
 	}
 
@@ -25,12 +25,12 @@ namespace el1::dev::opt3001
 	{
 		if(index != this->regindex_cache)
 		{
-			EL_ERROR(this->device->Write(&index, 1) != 1, TException, TString::Format("unable to set register address for reading to 0x%x", index));
+			this->device->WriteAll(&index, 1);
 			this->regindex_cache = index;
 		}
 
 		u16_t value;
-		EL_ERROR(this->device->Read((byte_t*)&value, 2) != 2, TException, TString::Format("unable to read register 0x%x", index));
+		this->device->ReadAll((byte_t*)&value, 2);
 		value = be16toh(value);
 
 		if(DEBUG) fprintf(stderr, "TOPT3001::ReadRegister(index = 0x%02hhx) => 0x%04hx)\n", index, value);
@@ -58,7 +58,7 @@ namespace el1::dev::opt3001
 	void TOPT3001::Reset()
 	{
 		const u8_t reset_code = 0x06;
-		EL_ERROR(this->device->Write(&reset_code, 1) != 1, TException, TString::Format("unable to send reset code to OPT3001 at address 0x%x", this->device->Address()));
+		this->device->WriteAll(&reset_code, 1);
 		this->regindex_cache = (u8_t)-1;
 		this->config_cache.reg = ReadRegister(0x01);
 

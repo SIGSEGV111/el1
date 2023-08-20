@@ -108,7 +108,6 @@ namespace el1::dev::i2c::pca9555
 			registers_t reg_new;
 			u16_t claimed;
 
-			u16_t ReadRegister(const u8_t id);
 			void WriteRegister(const write_reg_t wr);
 
 			void IrqMain();

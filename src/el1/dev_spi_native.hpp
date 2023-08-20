@@ -11,6 +11,16 @@ namespace el1::dev::spi::native
 	class TNativeSpiBus;
 	class TNativeSpiDevice;
 
+	/*
+	 * Raspberry Pi notes:
+	 * The idle state of the MOSI pin is LOW.
+	 * The linux kernel driver spi-bcm2835 only uses DMA when the transfer is sufficiently large (>=96 bytes) and
+	 * when `/sys/module/spi_bcm2835/parameters/polling_limit_us` has been set to 0 (or the computed transfer time is longer).
+	 * This is important since in polling- or IRQ-mode (without DMA) there is a gap between data words sent over the wire.
+	 * This gap breaks strict timings and also drives low the data line.
+	 * You must set `min_transfer_bytes` to 96 and `polling_limit_us` to 0 on the Raspberry Pi to enforce DMA.
+	 * For details search for "BCM2835_SPI_DMA_MIN_LENGTH" in the kernel source.
+	 */
 	class TNativeSpiBus : public ISpiBus
 	{
 		friend class TNativeSpiDevice;
@@ -41,7 +51,7 @@ namespace el1::dev::spi::native
 			TNativeSpiBus* Bus() const final override EL_GETTER;
 			void ForceChipEnable(const bool) final override;
 			u64_t Clock(const u64_t device_max_hz) final override;
-			void ExchangeBuffers(const void* const tx_buffer, void* const rx_buffer, const usys_t n_bytes) final override;
+			void ExchangeBuffers(const void* const tx_buffer, void* const rx_buffer, const usys_t n_bytes, const bool clean_signal = false) final override;
 
 			TNativeSpiDevice(const TNativeSpiDevice&) = delete;
 			TNativeSpiDevice(TNativeSpiDevice&&) = delete;
