@@ -1,9 +1,20 @@
 #include "system_random.hpp"
 #include <string.h>
+#include <math.h>
 
 namespace el1::system::random
 {
 	static std::unique_ptr<TSystemRandom> sysrnd;
+
+	double IRNG::Float(const bool allow_negative)
+	{
+		if(allow_negative)
+			return (double)Integer<s64_t>() / 9223372036854775807.0;
+		else
+			return (double)Integer<u64_t>() / 18446744073709551615.0;
+	}
+
+	/***************************************************/
 
 	TSystemRandom& TSystemRandom::Instance()
 	{
@@ -14,17 +25,17 @@ namespace el1::system::random
 
 	usys_t TSystemRandom::Read(byte_t* const arr_items, const usys_t n_items_max)
 	{
-		return file.Read(arr_items, n_items_max);
+		return stream.Read(arr_items, n_items_max);
 	}
 
 	usys_t TSystemRandom::BlockingRead(byte_t* const arr_items, const usys_t n_items_max, system::time::TTime, const bool)
 	{
-		return file.BlockingRead(arr_items, n_items_max);
+		return stream.BlockingRead(arr_items, n_items_max);
 	}
 
 	void TSystemRandom::ReadAll(byte_t* const arr_items, const usys_t n_items)
 	{
-		file.ReadAll(arr_items, n_items);
+		stream.ReadAll(arr_items, n_items);
 	}
 
 	/***************************************************/

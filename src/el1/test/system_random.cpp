@@ -111,4 +111,46 @@ namespace
 		}
 		*/
 	}
+
+	TEST(system_random, IRNG_Float)
+	{
+		TCMWC rng;
+
+		const unsigned n = 100;
+		double arr[n];
+
+		{
+			for(unsigned i = 0; i < n; i++)
+			{
+				arr[i] = rng.Float(false);
+				EXPECT_GE(arr[i], 0.0);
+				EXPECT_LE(arr[i], 1.0);
+
+				for(unsigned j = i; j > 0; j--)
+					EXPECT_NE(arr[i], arr[j-1]);
+			}
+		}
+
+		{
+			bool pos = false;
+			bool neg = false;
+			for(unsigned i = 0; i < n; i++)
+			{
+				arr[i] = rng.Float(true);
+				EXPECT_GE(arr[i], -1.0);
+				EXPECT_LE(arr[i],  1.0);
+
+				if(arr[i] > 0)
+					pos = true;
+
+				if(arr[i] < 0)
+					neg = true;
+
+				for(unsigned j = i; j > 0; j--)
+					EXPECT_NE(arr[i], arr[j-1]);
+			}
+			EXPECT_TRUE(pos);
+			EXPECT_TRUE(neg);
+		}
+	}
 }

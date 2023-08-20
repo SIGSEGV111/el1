@@ -2,7 +2,6 @@
 
 #include "io_types.hpp"
 #include "io_stream.hpp"
-#include "io_file.hpp"
 #include "system_handle.hpp"
 #include "util.hpp"
 
@@ -39,7 +38,7 @@ namespace el1::system::random
 	class TSystemRandom : public IRNG
 	{
 		protected:
-			io::file::TFile file;
+			io::stream::TKernelStream stream;
 			TSystemRandom();
 
 		public:
