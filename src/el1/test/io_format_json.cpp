@@ -122,6 +122,12 @@ namespace
 		}
 
 		{
+			const TJsonValue json = TJsonValue::Parse("\"\n\"", true);
+			EXPECT_EQ(json.Type(), EType::STRING);
+			EXPECT_EQ(json.String(), "\n");
+		}
+
+		{
 			EXPECT_THROW(TJsonValue::Parse("\"\n\""), TInvalidJsonException);
 			EXPECT_THROW(TJsonValue::Parse("\"\\I\""), TInvalidJsonException);
 			EXPECT_THROW(TJsonValue::Parse("-"), TInvalidJsonException);

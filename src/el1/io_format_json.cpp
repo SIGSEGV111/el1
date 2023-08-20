@@ -535,15 +535,15 @@ namespace el1::io::format::json
 
 	////////////////////////////////////////////////////////////////////
 
-	TJsonValue TJsonValue::Parse(const TString& str)
+	TJsonValue TJsonValue::Parse(const TString& str, const bool tolerant)
 	{
-		return str.chars.Pipe().Transform(TJsonParser()).First();
+		return str.chars.Pipe().Transform(TJsonParser(tolerant)).First();
 	}
 
-	TJsonValue TJsonValue::Parse(const TFile& file)
+	TJsonValue TJsonValue::Parse(const TFile& file, const bool tolerant)
 	{
 		TMapping map(const_cast<TFile*>(&file), TAccess::RO);
-		return map.Pipe().Transform(TUTF8Decoder()).Transform(TJsonParser()).First();
+		return map.Pipe().Transform(TUTF8Decoder()).Transform(TJsonParser(tolerant)).First();
 	}
 
 	const TJsonValue TJsonValue::NULLVALUE = TJsonValue();

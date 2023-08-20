@@ -158,8 +158,8 @@ namespace el1::io::format::json
 			static const TJsonValue EMPTY_ARRAY;
 			static const TJsonValue EMPTY_MAP;
 
-			static TJsonValue Parse(const TString& str);
-			static TJsonValue Parse(const file::TFile& file);
+			static TJsonValue Parse(const TString& str, const bool tolerant = false);
+			static TJsonValue Parse(const file::TFile& file, const bool tolerant = false);
 	};
 
 	class TJsonParser
@@ -169,6 +169,7 @@ namespace el1::io::format::json
 			iosize_t line;
 			const TUTF32* current_char;
 			TJsonValue value;
+			const bool tolerant;
 
 			static bool IsWhitespace(const TUTF32& chr)
 			{
@@ -338,7 +339,7 @@ namespace el1::io::format::json
 				{
 					const TUTF32* const chr = NextChar(source);
 					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-					EL_ERROR(chr->code < 32, TInvalidJsonException, pos, line, *chr, EReason::UNESCAPED_CTRL);
+					EL_ERROR(!tolerant && chr->code < 32, TInvalidJsonException, pos, line, *chr, EReason::UNESCAPED_CTRL);
 
 					if(chr->code == '\\')
 					{
@@ -393,7 +394,10 @@ namespace el1::io::format::json
 								}
 
 								default:
-									EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::INVALID_ESCAPE);
+								{
+									EL_ERROR(!tolerant, TInvalidJsonException, pos, line, *chr, EReason::INVALID_ESCAPE);
+									str += chr;
+								}
 							}
 							escape = false;
 						}
@@ -533,6 +537,6 @@ namespace el1::io::format::json
 				return &(value = ParseAny(source));
 			}
 
-			TJsonParser() : pos(0), line(1), current_char(nullptr), value() {}
+			TJsonParser(const bool tolerant = false) : pos(0), line(1), current_char(nullptr), value(), tolerant(tolerant) {}
 	};
 }
