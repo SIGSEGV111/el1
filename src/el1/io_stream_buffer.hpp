@@ -2,6 +2,7 @@
 
 #include "io_stream.hpp"
 #include "io_stream_fifo.hpp"
+#include "io_collection_list.hpp"
 #include "system_waitable.hpp"
 #include "system_task.hpp"
 #include "util.hpp"
@@ -57,5 +58,63 @@ namespace el1::io::stream::buffer
 				fifo = New<TFifo>(system::task::TFiber::Self(), &fib_flusher);
 				fib_flusher.Start(util::function::TFunction(this, &TWriteThroughBuffer<T>::FlusherMain));
 			}
+	};
+
+	template<typename T>
+	class TPullBuffer
+	{
+		protected:
+			ISource<T>* source;
+			usys_t offset;
+			io::collection::list::TList<T> buffer;
+
+			void Extend(usys_t index)
+			{
+				io::collection::list::TListSink sink(&buffer);
+				while(source && index >= buffer.Count())
+				{
+					for(;;)
+					{
+						if(sink.ReadIn(*source))
+							break;
+						auto w = source->OnInputReady();
+						if(!w)
+						{
+							// eof
+							source = nullptr;
+							break;
+						}
+						w->WaitFor();
+					}
+				}
+			}
+
+		public:
+			T* operator[](usys_t index)
+			{
+				EL_ERROR(index < offset, TLogicException);
+				index -= offset;
+
+				Extend(index);
+
+				if(index >= buffer.Count())
+					return nullptr;
+
+				return &buffer[index];
+			}
+
+			void Discard(const usys_t n_discard)
+			{
+				EL_ERROR(n_discard > buffer.Count(), TLogicException);
+				offset += n_discard;
+				buffer.Remove(0, n_discard);
+			}
+
+			void ResetOffset()
+			{
+				offset = 0;
+			}
+
+			constexpr TPullBuffer(ISource<T>* source) : source(source), offset(0), buffer() {}
 	};
 }

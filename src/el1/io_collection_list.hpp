@@ -693,7 +693,7 @@ namespace el1::io::collection::list
 	template<typename T>
 	usys_t TList<T>::CountPreallocated() const
 	{
-		return (system::memory::UseableSize(this->arr_items) / sizeof(T)) - this->n_items;
+		return (system::memory::UseableSize((void*)this->arr_items) / sizeof(T)) - this->n_items;
 	}
 
 	template<typename T>
@@ -734,7 +734,7 @@ namespace el1::io::collection::list
 
 			for(usys_t i = 0; i < n_items_source; i++)
 			{
-				new (this->arr_items + this->n_items) T(arr_items_source[i]);
+				new ((void*)(this->arr_items + this->n_items)) T(arr_items_source[i]);
 				this->n_items++;
 			}
 		}
@@ -808,7 +808,7 @@ namespace el1::io::collection::list
 	void TList<T>::Clear() noexcept
 	{
 		this->Truncate();
-		free(this->arr_items);
+		free((void*)this->arr_items);
 		this->arr_items = nullptr;
 	}
 

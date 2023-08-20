@@ -57,6 +57,8 @@ namespace el1::io::text::encoding
 		static usys_t StringLength(const TUTF32* const str, const usys_t maxlen = NEG1);
 	};
 
+	constexpr TUTF32 operator ""_U(const char chr) { return TUTF32(chr); }
+
 	#ifdef EL_WCHAR_IS_UTF32
 		using TWideCharDecoder = io::stream::TReinterpretCastTransformer<TUTF32>;
 		using TWideCharEncoder = io::stream::TReinterpretCastTransformer<wchar_t>;

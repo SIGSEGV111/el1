@@ -152,10 +152,13 @@ namespace el1::io::text::string
 			TString(const wchar_t* const str, const usys_t maxlen = NEG1);
 			TString(const TUTF32* const str, const usys_t maxlen = NEG1);
 			TString(TList<TUTF32> chars) : chars(chars) {}
+			TString(array_t<const TUTF32> chars) : chars(chars) {}
 
 			TString& operator=(const TString&) = default;
 			TString& operator=(TString&&) = default;
 	};
+
+	TString operator ""_U(const char* str, long unsigned int len);
 
 	class TLineReader
 	{

@@ -8,6 +8,8 @@ namespace el1::io::text::string
 {
 	extern const array_t<const TUTF32> WHITESPACE_CHARS;
 
+	TString operator ""_U(const char* str, long unsigned int len) { return TString(str, len); }
+
 	TString TUndefineFormatException::Message() const
 	{
 		return TString::Format("cannot convert from argument type %q to requested format %q", argument_type, format_name);

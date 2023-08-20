@@ -43,7 +43,6 @@ COMPILE_OPTIONS=(
 	$MAKE_OPTIONS
 	-DEL1_WITH_POSTGRES
 	-DEL1_WITH_VALGRIND
-	-ftemplate-depth=50
 	-fPIC
 	-fdiagnostics-color=always
 	-Wall
@@ -53,9 +52,11 @@ COMPILE_OPTIONS=(
 	-Wno-error=unused-function
 	-Wno-vla-cxx-extension
 	-Wno-unknown-warning-option
+	-Wno-gnu-array-member-paren-init
 	-I "submodules/googletest/googletest/include"
 	-std=gnu++20
 	-Wno-unused-const-variable
+	-ftemplate-depth=100
 	$(pkg-config --cflags libpq)
 	$(pkg-config --cflags krb5)
 	$(pkg-config --cflags zlib)
