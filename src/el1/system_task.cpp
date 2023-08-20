@@ -1,0 +1,701 @@
+#include "system_task.hpp"
+#include "system_time_timer.hpp"
+#include "system_memory.hpp"
+#include "error.hpp"
+#include "util.hpp"
+#include "def.hpp"
+#include "io_text_encoding_utf8.hpp"
+#include "io_text_string.hpp"
+#include <unistd.h>
+#include <stdlib.h>
+#include <signal.h>
+
+#ifdef EL1_WITH_VALGRIND
+#include <valgrind/valgrind.h>
+#endif
+
+#ifdef __SANITIZE_ADDRESS__
+#include <sanitizer/common_interface_defs.h>
+#endif
+
+namespace el1::system::task
+{
+	using namespace io::stream;
+	using namespace io::file;
+	using namespace io::text::string;
+	using namespace io::collection::list;
+	using namespace io::collection::map;
+	using namespace time::timer;
+	using namespace memory;
+
+	const char* TInvalidChildStateException::StateMnemonic(const EChildState state)
+	{
+		switch(state)
+		{
+			case EChildState::CONSTRUCTED:	return "CONSTRUCTED";
+			case EChildState::ALIVE:		return "ALIVE";
+			case EChildState::FINISHED:		return "FINISHED";
+			case EChildState::KILLED:		return "KILLED";
+			case EChildState::JOINING:		return "JOINING";
+		}
+
+		EL_THROW(TLogicException);
+	}
+
+	TString TInvalidChildStateException::Message() const
+	{
+		if(this->inverted)
+			return TString::Format("child process was in unacceptable state %q", StateMnemonic(this->actual_state));
+		else
+			return TString::Format("child process was in state %q, but control logic expected state %q", StateMnemonic(this->actual_state), StateMnemonic(this->expected_state));
+	}
+
+	error::IException* TInvalidChildStateException::Clone() const
+	{
+		return new TInvalidChildStateException(*this);
+	}
+
+	/***************************************************/
+
+	bool TFiberMutex::Accquire(const TTime timeout)
+	{
+		if(owner != nullptr)
+		{
+			if(timeout == 0)
+				return false;
+
+			TTimeWaitable wait_timeout(EClock::MONOTONIC, TTime::Now(EClock::MONOTONIC) + timeout);
+			TMemoryWaitable<usys_t> wait_locked((usys_t*)&owner, (usys_t*)NEG1, NEG1);
+
+			while(owner != nullptr)
+			{
+				if(timeout < 0)
+				{
+					// infinite timeout
+					wait_locked.WaitFor();
+				}
+				else //if(timeout > 0)
+				{
+					// use waitable
+					TFiber::WaitForMany({&wait_locked, &wait_timeout});
+				}
+			}
+		}
+
+		owner = TFiber::Self();
+		return true;
+	}
+
+	void TFiberMutex::Release()
+	{
+		EL_ERROR(owner != TFiber::Self(), TException, "tried to release a TFiberMutex that was not owned by the calling fiber");
+		owner = nullptr;
+	}
+
+	TFiberMutex::TFiberMutex() : owner(nullptr)
+	{
+	}
+
+	TFiberMutex::~TFiberMutex()
+	{
+		EL_WARN(owner != nullptr, TException, "TFiberMutex was still locked while beeing destructed");
+	}
+
+	/***************************************************/
+
+	TThread::TThread(const TString name, TFunction<void> main_func, const bool autostart) : name(name), mutex(), on_state_change(&this->mutex), thread_handle(nullptr), constructor_pid(TThread::Self()->ThreadPID()), thread_pid(-1), starter_pid(-1), terminator_pid(-1), state(EChildState::CONSTRUCTED), main_fiber(this)
+	{
+		this->active_fiber = &this->main_fiber;
+		this->previous_fiber = &this->main_fiber;
+		this->main_fiber.main_func = main_func;
+		this->main_fiber.exception = nullptr;
+		this->main_fiber.state = EFiberState::ACTIVE;
+		this->fibers.Append(&this->main_fiber);
+		if(autostart)
+			this->Start();
+	}
+
+	/***************************************************/
+
+	bool TFiber::DEBUG = false;
+	EStackAllocator TFiber::DEFAULT_STACK_ALLOCATOR = EStackAllocator::MALLOC;
+	usys_t TFiber::FIBER_DEFAULT_STACK_SIZE_BYTES = 16 * 1024;
+
+	usys_t TFiber::StackFree() const
+	{
+		volatile const byte_t marker = 0;
+		TFiber* const self = TThread::Self()->ActiveFiber();
+		const usys_t base = (usys_t)this->p_stack;
+		const usys_t sp = this == self ? (usys_t)&marker : (usys_t)this->registers.EL_ARCH_STACKPOINTER_REGISTER_NAME;
+
+		if(sp < base)
+		{
+			raise(SIGABRT);
+			throw "stack pointer underrun!";
+		}
+
+		return sp - base;
+	}
+
+	void TFiber::WaitForMany(const std::initializer_list<const IWaitable*> waitables)
+	{
+		WaitForMany(array_t<const IWaitable*>((const IWaitable**)waitables.begin(), waitables.end() - waitables.begin()));
+	}
+
+	void TFiber::WaitForMany(const array_t<const IWaitable*> waitables)
+	{
+		TFiber* self = TThread::Self()->ActiveFiber();
+
+		if(self->shutdown)
+		{
+			self->shutdown = false;
+			throw shutdown_t();
+		}
+
+		usys_t n_non_null = 0;
+		for(auto* waitable : waitables)
+			if(waitable != nullptr)
+				n_non_null++;
+
+		if(waitables.Count() == 0 || n_non_null == 0)
+			return;
+
+		self->blocked_by = waitables;
+		self->state = EFiberState::BLOCKED;
+		TFiber::Schedule();
+		self->blocked_by = array_t<const IWaitable*>();
+	}
+
+	TFiber::TFiber() : thread(TThread::Self()), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), stack_allocator(EStackAllocator::USER), shutdown(false)
+	{
+		memset(&this->eh_state, 0, sizeof(this->eh_state));
+	}
+
+	TFiber::TFiber(TThread* const thread) : thread(thread), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::ACTIVE), stack_allocator(EStackAllocator::USER), shutdown(false)
+	{
+		memset(&this->eh_state, 0, sizeof(this->eh_state));
+	}
+
+	void TFiber::AllocateStack(void* const p_stack_input, const usys_t sz_stack_input, const EStackAllocator allocator)
+	{
+		EL_ERROR(allocator == EStackAllocator::USER, TInvalidArgumentException, "allocator", "allocator can not be set to USER - USER is only used internally when p_stack and sz_stack are set");
+
+		if(p_stack_input != nullptr && sz_stack_input != 0 && !DEBUG)
+		{
+			this->stack_allocator = EStackAllocator::USER;
+			this->sz_stack = sz_stack_input;
+			this->p_stack = p_stack_input;
+		}
+		else
+		{
+			if(allocator == EStackAllocator::VIRTUAL_ALLOC || DEBUG)
+			{
+				const usys_t sz_redzone_min = DEBUG ? 512*1024 : 0;
+				const usys_t n_pages_redzone = util::ModCeil<usys_t>(sz_redzone_min, PAGE_SIZE) / PAGE_SIZE;
+				const usys_t sz_redzone = n_pages_redzone * PAGE_SIZE;
+				const usys_t sz_stack = util::ModCeil<usys_t>(sz_stack_input, PAGE_SIZE);
+
+				void* p_redzone_base = VirtualAlloc(sz_stack + 2 * sz_redzone, false, false, false, false);
+				void* p_stack = (byte_t*)p_redzone_base + sz_redzone;
+				this->stack_allocator = EStackAllocator::VIRTUAL_ALLOC;
+				this->sz_stack = sz_stack;
+				this->p_stack = p_stack;
+				VirtualAllocAt(p_stack, sz_stack, true, true, false, false, true);
+			}
+			else if(allocator == EStackAllocator::MALLOC)
+			{
+				this->p_stack = aligned_alloc(16, sz_stack_input);
+				EL_ERROR(this->p_stack == nullptr, TOutOfMemoryException, sz_stack_input);
+				this->stack_allocator = EStackAllocator::MALLOC;
+				this->sz_stack = sz_stack_input;
+			}
+			else
+				EL_THROW(TLogicException);
+		}
+	}
+
+	void TFiber::FreeStack()
+	{
+		switch(this->stack_allocator)
+		{
+			case EStackAllocator::USER:
+				// nothing to do
+				break;
+			case EStackAllocator::MALLOC:
+				free(this->p_stack);
+				break;
+			case EStackAllocator::VIRTUAL_ALLOC:
+			{
+				const usys_t sz_redzone_min = DEBUG ? 512*1024 : 0;
+				const usys_t n_pages_redzone = util::ModCeil<usys_t>(sz_redzone_min, PAGE_SIZE) / PAGE_SIZE;
+				const usys_t sz_redzone = n_pages_redzone * PAGE_SIZE;
+				void* p_redzone_base = (byte_t*)this->p_stack - sz_redzone;
+				VirtualFree(p_redzone_base, this->sz_stack + 2 * sz_redzone);
+				break;
+			}
+		}
+
+		this->p_stack = nullptr;
+		this->sz_stack = 0;
+	}
+
+	TFiber::TFiber(TFunction<void> main_func, const bool autostart, const usys_t sz_stack, void* const p_stack) : thread(TThread::Self()), main_func(main_func), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), shutdown(false)
+	{
+		memset(&this->eh_state, 0, sizeof(this->eh_state));
+		AllocateStack(p_stack, sz_stack, DEFAULT_STACK_ALLOCATOR);
+		if(autostart)
+			this->Start();
+	}
+
+	TFiber::~TFiber()
+	{
+		if(this != &this->thread->main_fiber)
+		{
+			if(this->state != EFiberState::CONSTRUCTED)
+			{
+				try
+				{
+					this->Shutdown();
+					std::unique_ptr<const IException> e = this->Join();
+					if(e)
+					{
+						e->Print("fiber terminated with exception");
+					}
+				}
+				catch(const IException& e)
+				{
+					e.Print("exception during fiber shutdown");
+				}
+			}
+
+			FreeStack();
+		}
+	}
+
+	void TFiber::Boot()
+	{
+		TFiber* const self = TThread::Self()->ActiveFiber();
+		#ifdef __SANITIZE_ADDRESS__
+			__sanitizer_finish_switch_fiber(nullptr, (const void**)&self->thread->previous_fiber->p_stack, (size_t*)&self->thread->previous_fiber->sz_stack);
+		#endif
+
+		try
+		{
+			self->main_func();
+			self->state = EFiberState::FINISHED;
+		}
+		catch(shutdown_t)
+		{
+			self->state = EFiberState::FINISHED;
+		}
+		catch(const IException& e)
+		{
+			self->exception = std::unique_ptr<const IException>(e.Clone());
+			self->state = EFiberState::CRASHED;
+		}
+		catch(const IException* e)
+		{
+			self->exception = std::unique_ptr<const IException>(e);
+			self->state = EFiberState::CRASHED;
+		}
+		catch(...)
+		{
+			self->exception = std::unique_ptr<const IException>(new TUnknownException());
+			self->state = EFiberState::CRASHED;
+		}
+
+		self->shutdown = false;
+		self->thread->fibers.RemoveItem(self, NEG1);
+		TFiber::Schedule();
+	}
+
+	void TFiber::Schedule()
+	{
+		TThread* const thread = TThread::Self();
+		TFiber* const self = thread->active_fiber;
+		auto& fibers = thread->fibers;
+		TFiber* next_fiber = nullptr;
+
+		if(self->shutdown)
+		{
+			self->shutdown = false;
+			throw shutdown_t();
+		}
+
+		// find another ready fiber
+		if(next_fiber == nullptr)
+		{
+			for(TFiber* fiber : fibers)
+			{
+				if(fiber == self)
+					continue;
+
+				if(fiber->state == EFiberState::READY)
+				{
+					next_fiber = fiber;
+					break;
+				}
+			}
+		}
+
+		// check-unblock blocked fibers
+		// this will target all non-THandleWaitables
+		if(next_fiber == nullptr)
+		{
+			for(TFiber* fiber : fibers)
+			{
+				if(fiber->state == EFiberState::BLOCKED)
+				{
+					for(const IWaitable* waitable : fiber->blocked_by)
+						if(waitable != nullptr)
+						{
+							waitable->Reset();
+							if(waitable->IsReady())
+							{
+								fiber->state = EFiberState::READY;
+							}
+						}
+
+					if(fiber->state == EFiberState::READY)
+					{
+						next_fiber = fiber;
+						break;
+					}
+				}
+			}
+		}
+
+		// check THandleWaitables
+		if(next_fiber == nullptr)
+		{
+			// this function only returns after some waitable became ready or a shutdown signal was received
+			KernelWaitForMany(fibers);
+
+			for(TFiber* fiber : fibers)
+			{
+				if(fiber->state == EFiberState::BLOCKED)
+				{
+					for(const IWaitable* waitable : fiber->blocked_by)
+						if(waitable != nullptr)
+						{
+							if(waitable->IsReady())
+							{
+								fiber->state = EFiberState::READY;
+								break;
+							}
+						}
+				}
+
+				if(fiber->state == EFiberState::READY || fiber->state == EFiberState::ACTIVE)
+				{
+					next_fiber = fiber;
+					// we do not break here - we want to process all waitables and update all fibers
+					// to process all information gained from the expensive kernel call
+				}
+			}
+
+			// this can only happen if KernelWaitForMany() has a bug
+			EL_ERROR(next_fiber == nullptr, TLogicException);
+		}
+
+		if(next_fiber != self)
+			next_fiber->SwitchTo();
+
+		self->state = EFiberState::ACTIVE;
+
+		if(self->shutdown)
+		{
+			self->shutdown = false;
+			throw shutdown_t();
+		}
+
+		return;
+	}
+
+	void TFiber::Yield()
+	{
+		TFiber::Schedule();
+	}
+
+	extern "C" void SwapRegisters(context_registers_t* const current, const context_registers_t* const target) noexcept asm ("__SwapRegisters__");
+
+	void TFiber::SwitchTo()
+	{
+		EL_ERROR(TThread::Self() != this->thread, TLogicException);
+		EL_ERROR(this->state == EFiberState::ACTIVE || this == TThread::Self()->active_fiber, TLogicException);
+		EL_ERROR(!this->IsAlive(), TLogicException);	// TODO better exception
+
+		TFiber* const self = TThread::Self()->active_fiber;
+
+		this->thread->active_fiber = this;
+		this->thread->previous_fiber = self;
+
+		if(this->state == EFiberState::STOPPED)
+			this->thread->fibers.Append(this);
+
+		this->state = EFiberState::ACTIVE;
+
+		if(self->state == EFiberState::ACTIVE)
+			self->state = EFiberState::READY;
+
+		self->eh_state = *__cxxabiv1::__cxa_get_globals();
+		*__cxxabiv1::__cxa_get_globals() = this->eh_state;
+
+		#ifdef __SANITIZE_ADDRESS__
+			void* fake_stack_save = nullptr;
+			__sanitizer_start_switch_fiber(self->IsAlive() ? &fake_stack_save : nullptr, this->p_stack, this->sz_stack);
+		#endif
+
+		#ifdef EL1_WITH_VALGRIND
+			auto stack_id = VALGRIND_STACK_REGISTER(p_stack, (byte_t*)p_stack + sz_stack);
+		#endif
+
+		// abrakadabra...
+		SwapRegisters(&self->registers, &this->registers);
+
+		#ifdef EL1_WITH_VALGRIND
+			VALGRIND_STACK_DEREGISTER(stack_id);
+		#endif
+
+		#ifdef __SANITIZE_ADDRESS__
+			__sanitizer_finish_switch_fiber(fake_stack_save, nullptr, nullptr);
+		#endif
+
+		this->eh_state = *__cxxabiv1::__cxa_get_globals();
+		*__cxxabiv1::__cxa_get_globals() = self->eh_state;
+
+		if(self->shutdown)
+		{
+			self->shutdown = false;
+			throw shutdown_t();
+		}
+
+		EL_ERROR(self->state != EFiberState::ACTIVE || this->thread->active_fiber != self, TLogicException);
+	}
+
+	void TFiber::Start()
+	{
+		EL_ERROR(TThread::Self() != this->thread, TLogicException);
+		EL_ERROR(this->state != EFiberState::CONSTRUCTED, TLogicException);	// TODO better exception
+		this->InitRegisters();
+		this->state = EFiberState::READY;
+		this->thread->fibers.Append(this);
+	}
+
+	void TFiber::Start(TFunction<void> new_main_func, const usys_t sz_stack_input, void* const p_stack_input)
+	{
+		EL_ERROR(TThread::Self() != this->thread, TLogicException);
+		EL_ERROR(this->state != EFiberState::CONSTRUCTED, TLogicException);	// TODO better exception
+
+		if( (sz_stack_input != this->sz_stack) || (p_stack_input != nullptr) )
+		{
+			FreeStack();
+			AllocateStack(p_stack_input, sz_stack_input, DEFAULT_STACK_ALLOCATOR);
+		}
+
+		this->main_func = new_main_func;
+		this->Start();
+	}
+
+	void TFiber::Stop()
+	{
+		EL_ERROR(TThread::Self() != this->thread, TLogicException);
+		EL_ERROR(!this->IsAlive(), TLogicException);	// TODO better exception
+		TFiber* const self = TThread::Self()->active_fiber;
+
+		if(this->state != EFiberState::STOPPED)
+		{
+			EL_ERROR(this->thread->fibers.RemoveItem(this, NEG1) != 1, TLogicException);
+			this->state = EFiberState::STOPPED;
+		}
+
+		if(this == self)
+			TFiber::Schedule();
+	}
+
+	void TFiber::Resume()
+	{
+		EL_ERROR(TThread::Self() != this->thread, TLogicException);
+		EL_ERROR(this->state == EFiberState::ACTIVE || this == this->thread->active_fiber, TLogicException);
+		EL_ERROR(!this->IsAlive(), TLogicException);	// TODO better exception
+
+		if(this->state == EFiberState::STOPPED)
+		{
+			// we put the fiber in READY state even though it might have been BLOCKED earlier when it was stopped
+			// the scheduler will activate the fiber, but the WaitFor() function will put it back to BLOCKED if needed
+			this->state = EFiberState::READY;
+			this->thread->fibers.Append(this);
+		}
+	}
+
+	// FIXME: this functiuon does not make sense this way
+	bool TFiber::Kill()
+	{
+		EL_ERROR(TThread::Self() != this->thread, TLogicException);
+		EL_ERROR(this->state == EFiberState::ACTIVE || this == this->thread->active_fiber, TLogicException);
+		if(!this->IsAlive())
+			return false;
+
+		if(this->state == EFiberState::BLOCKED || this->state == EFiberState::READY)
+			EL_ERROR(this->thread->fibers.RemoveItem(this, NEG1) != 1, TLogicException);
+
+		this->state = EFiberState::KILLED;
+
+		return true;
+	}
+
+	bool TFiber::Shutdown()
+	{
+		EL_ERROR(TThread::Self() != this->thread, TLogicException);
+		if(!this->IsAlive())
+			return false;
+
+		TFiber* const self = TThread::Self()->active_fiber;
+
+		if(this->state == EFiberState::STOPPED)
+		{
+			this->thread->fibers.Append(this);
+		}
+
+		// unblock / resume any fiber marked for shutdown
+		if(this->state != EFiberState::ACTIVE)
+			this->state = (self == this) ? EFiberState::ACTIVE : EFiberState::READY;
+
+		this->shutdown = true;
+
+		// do not throw shutdown_t here yet, otherwise it might throw-up in Schedule()
+
+		return true;
+	}
+
+	TFiber* TFiber::Self()
+	{
+		return TThread::Self()->ActiveFiber();
+	}
+
+	std::unique_ptr<const IException> TFiber::Join()
+	{
+		EL_ERROR(TThread::Self() != this->thread, TLogicException);
+		EL_ERROR(this->state == EFiberState::ACTIVE || this == this->thread->active_fiber, TLogicException);
+		EL_ERROR(this->state == EFiberState::CONSTRUCTED, TLogicException);
+
+		while(this->IsAlive())
+		{
+			if(this->state == EFiberState::BLOCKED)
+			{
+				TFiberStateWaitable on_fiber_state_change(this, this->state);
+				on_fiber_state_change.WaitFor();
+			}
+			else
+				this->SwitchTo();
+		}
+
+		this->state = EFiberState::CONSTRUCTED;
+
+		return std::move(this->exception);
+	}
+
+	EChildState TFiber::ChildState() const
+	{
+		switch(this->state)
+		{
+			case EFiberState::CONSTRUCTED: return EChildState::CONSTRUCTED;
+			case EFiberState::READY:       return EChildState::ALIVE;
+			case EFiberState::ACTIVE:      return EChildState::ALIVE;
+			case EFiberState::BLOCKED:     return EChildState::ALIVE;
+			case EFiberState::STOPPED:     return EChildState::ALIVE;
+			case EFiberState::FINISHED:    return EChildState::FINISHED;
+			case EFiberState::CRASHED:     return EChildState::KILLED;
+			case EFiberState::KILLED:      return EChildState::KILLED;
+		}
+
+		EL_THROW(TLogicException);
+	}
+
+	ETaskState TFiber::TaskState() const
+	{
+		switch(this->state)
+		{
+			case EFiberState::CONSTRUCTED: return ETaskState::NOT_CREATED;
+			case EFiberState::READY:       return ETaskState::RUNNING;
+			case EFiberState::ACTIVE:      return ETaskState::RUNNING;
+			case EFiberState::BLOCKED:     return ETaskState::BLOCKED;
+			case EFiberState::STOPPED:     return ETaskState::STOPPED;
+			case EFiberState::FINISHED:    return ETaskState::ZOMBIE;
+			case EFiberState::CRASHED:     return ETaskState::ZOMBIE;
+			case EFiberState::KILLED:      return ETaskState::ZOMBIE;
+		}
+
+		EL_THROW(TLogicException);
+	}
+
+	void TFiber::Sleep(const TTime time, const EClock clock)
+	{
+		TTimeWaitable waitable(clock, TTime::Now(clock) + time);
+		waitable.WaitFor();
+	}
+
+	/////////////////////////////////////////////////////////////
+
+	TSortedMap<fd_t, TProcess::EFDIO> TProcess::StdioStreams()
+	{
+		TSortedMap<fd_t, TProcess::EFDIO> map;
+		map.Add(0, TProcess::EFDIO::INHERIT);
+		map.Add(1, TProcess::EFDIO::INHERIT);
+		map.Add(2, TProcess::EFDIO::INHERIT);
+		return map;
+	}
+
+	ISource<byte_t>* TProcess::ReceiveStream(const fd_t fd)
+	{
+		return streams.Get(fd);
+	}
+
+	ISink<byte_t>* TProcess::SendStream(const fd_t fd)
+	{
+		return streams.Get(fd);
+	}
+
+	TProcess::TProcess(const TPath& exe, const TList<TString>& args, const TSortedMap<fd_t, const EFDIO>& streams, const TSortedMap<TString, const TString>& env) : pid(-1)
+	{
+		Start(exe, args, streams, env);
+	}
+
+	TProcess::TProcess() : pid(-1)
+	{
+	}
+
+	TProcess::~TProcess()
+	{
+		if(TaskState() != ETaskState::NOT_CREATED)
+		{
+			try
+			{
+				Shutdown();
+				Resume();
+				int status;
+				EL_WARN((status = Join()) != 0 && WARN_NONZERO_EXIT_IN_DESTRUCTOR, TException, TString::Format(L"subprocess PID=%d exited with code=%d", pid, status));
+			}
+			catch(const IException& e)
+			{
+				e.Print("error during child process shuttdown");
+			}
+		}
+	}
+
+	TString TProcess::Execute(const TPath& exe, const TList<TString>& args)
+	{
+		TSortedMap<fd_t, TProcess::EFDIO> map;
+		map.Add(0, TProcess::EFDIO::EMPTY);
+		map.Add(1, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
+		map.Add(2, TProcess::EFDIO::INHERIT);
+
+		TProcess proc(exe, args, map);
+		TString str = proc.ReceiveStream(1)->Pipe().Transform(io::text::encoding::TCharDecoder()).Collect();
+		int status;
+		EL_ERROR((status = proc.Join()) != 0, TException, TString::Format(L"subprocess %q exited with code=%d", (TString)exe, status));
+		return str;
+	}
+
+	bool TProcess::WARN_NONZERO_EXIT_IN_DESTRUCTOR = true;
+}

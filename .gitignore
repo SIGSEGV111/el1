@@ -1,0 +1,4 @@
+gen
+examples/gpio/blink
+examples/gpio/trigger
+examples/w1-test/w1-test

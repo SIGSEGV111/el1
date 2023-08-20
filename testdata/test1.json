@@ -1,0 +1,19 @@
+{
+	"mixed_array" : [1,2,3,4,5,"hello world",{},[]],
+	"mixed_map" : {
+		"name": "user1",
+		"password": "super-secret",
+		"roles": [ "admin", "user" ],
+		"age": 31,
+		"gender": "diverse",
+		"flags" : { "enabled": true }
+	},
+	"string1" : "hello world",
+	"string2" : "foobar",
+	"int1" : 17,
+	"int2": 13,
+	"float1": 12.5,
+	"float2": 88.5,
+	"empty_map" : {},
+	"empty_array": []
+}
