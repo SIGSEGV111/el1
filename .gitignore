@@ -3,3 +3,5 @@ examples/gpio/blink
 examples/gpio/trigger
 examples/w1-test/w1-test
 examples/bin2cpp/bin2cpp
+*.Makefile
+Makefile

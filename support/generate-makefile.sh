@@ -7,7 +7,7 @@ for cpp_file in "${CPP_FILES[@]}"; do
 done
 
 cat > Makefile <<EOF
-.PHONY: release dev libs clean verify Makefile
+.PHONY: release dev libs clean verify Makefile gdb
 
 release: gen/amalgam/libel1.so gen/amalgam/libel1.a gen/srclib/include/el1/el1.cpp
 
@@ -82,9 +82,12 @@ link-tests: gen/std/link-test-a gen/amalgam/link-test-a gen/std/link-test-so gen
 unit-tests: gen/std/gtests gen/amalgam/gtests gen/srclib/gtests
 	LD_LIBRARY_PATH=gen/std ./gen/std/gtests
 	LD_LIBRARY_PATH=gen/amalgam ./gen/amalgam/gtests
-	valgrind ${VALGRIND_OPTIONS[@]@Q} --log-file=gen/srclib/valgrind.log ./gen/srclib/gtests
+	valgrind ${VALGRIND_OPTIONS[@]@Q} --log-file=gen/srclib/valgrind.log ./gen/srclib/gtests --gtest_shuffle
 
 verify: link-tests unit-tests
+
+gdb: gen/srclib/gtests
+	gdb ./gen/srclib/gtests
 
 Makefile:
 	./support/generate-makefile.sh

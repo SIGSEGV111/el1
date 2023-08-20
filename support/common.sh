@@ -9,10 +9,6 @@ function die()
 }
 
 export CXX CC
-export PGDATABASE=postgres
-export PGHOST=localhost
-export PGUSER=postgres
-export PGPASSWORD=postgres
 
 if "$CXX" --version | grep -qF "clang"; then
 	declare -r CXX_COMPILER="EL_COMPILER_CLANG"
@@ -71,7 +67,7 @@ VALGRIND_OPTIONS=(
 	--trace-children=no
 	--track-fds=yes
 	--error-exitcode=1
-	--suppressions=valgrind.supp
+	--suppressions=support/valgrind.sup
 	--gen-suppressions=all
 )
 
