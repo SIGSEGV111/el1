@@ -79,12 +79,15 @@ link-tests: gen/std/link-test-a gen/amalgam/link-test-a gen/std/link-test-so gen
 	LD_LIBRARY_PATH=gen/std ./gen/std/link-test-so
 	LD_LIBRARY_PATH=gen/amalgam ./gen/amalgam/link-test-so
 
-unit-tests: gen/std/gtests gen/amalgam/gtests gen/srclib/gtests
-	LD_LIBRARY_PATH=gen/std ./gen/std/gtests
-	LD_LIBRARY_PATH=gen/amalgam ./gen/amalgam/gtests
-	valgrind ${VALGRIND_OPTIONS[@]@Q} --log-file=gen/srclib/valgrind.log ./gen/srclib/gtests --gtest_shuffle
+unit-tests: link-tests gen/std/gtests gen/amalgam/gtests gen/srclib/gtests
+	@echo ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+	LD_LIBRARY_PATH=gen/std ./gen/std/gtests ${GTEST_OPTIONS[@]@Q}
+	@echo ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
+	LD_LIBRARY_PATH=gen/amalgam ./gen/amalgam/gtests ${GTEST_OPTIONS[@]@Q}
+	valgrind ${VALGRIND_OPTIONS[@]@Q} --log-file=gen/srclib/valgrind.log ./gen/srclib/gtests --gtest_shuffle ${GTEST_OPTIONS[@]@Q}
+	@echo ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――
 
-verify: link-tests unit-tests
+verify: unit-tests
 
 gdb: gen/srclib/gtests
 	gdb ./gen/srclib/gtests

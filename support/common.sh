@@ -55,6 +55,18 @@ COMPILE_OPTIONS=(
 	$(pkg-config --cflags libpq)
 )
 
+GTEST_OPTIONS=()
+
+if [[ -v DIAG_COLOR ]]; then
+	if (($DIAG_COLOR)); then
+		COMPILE_OPTIONS+=("-fdiagnostics-color=always")
+		GTEST_OPTIONS+=("--gtest_color=yes")
+	else
+		COMPILE_OPTIONS+=("-fdiagnostics-color=never")
+		GTEST_OPTIONS+=("--gtest_color=no")
+	fi
+fi
+
 LIB_OPTIONS=("${COMPILE_OPTIONS[@]}" "${LINKER_OPTIONS[@]}" -shared)
 EXE_OPTIONS=("${COMPILE_OPTIONS[@]}" "${LINKER_OPTIONS[@]}" -pthread)
 

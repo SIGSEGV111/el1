@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 source "$HOME/bin/bash-commons/shell-util.sh"
-parseCommandlineArguments "follow" -- "$@"
+parseCommandlineArguments "f:follow" "t:target=string?dev" "j:jobs:NUMCPUS=integer?1" -- "$@"
 
 less_args=("--RAW-CONTROL-CHARS" "--clear-screen" "--tabs=4" "--ignore-case" "--SILENT")
 
@@ -20,9 +20,10 @@ function on_exit()
 }
 
 trap on_exit EXIT SIGINT SIGHUP SIGQUIT SIGTERM
+trap "" ERR
+set +e +o pipefail +o errtrace
 
-set +e
 while true; do
-	./dev-compile.sh 2>&1 | less "${less_args[@]}"
+	make -j $__jobs "$__target" 2>&1 | less "${less_args[@]}"
 	sleep 0.5
 done
