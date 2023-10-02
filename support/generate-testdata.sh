@@ -21,3 +21,4 @@ set +e
 	sleep 0.1
 	kill -KILL $pid
 ) 2>/dev/null
+exit 0

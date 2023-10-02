@@ -11,7 +11,7 @@ namespace el1::dev::i2c
 	struct II2CDevice;
 	struct II2CBus;
 
-	enum class ESpeedClass : u32_t
+	enum struct ESpeedClass : u32_t
 	{
 		STD  =  100000,	//	100 KBit/s
 		FULL =  400000,	//	400 KBit/s
@@ -19,8 +19,12 @@ namespace el1::dev::i2c
 		HIGH = 3200000	//	3.2 MBit/s
 	};
 
-	struct II2CDevice : io::stream::ISource<byte_t>, io::stream::ISink<byte_t>
+	struct II2CDevice : public io::stream::ISource<byte_t>, public io::stream::ISink<byte_t>
 	{
+		bool cache_addr;
+		u8_t last_regaddr;
+
+		II2CDevice();
 		virtual ~II2CDevice() {}
 		virtual II2CBus* Bus() const EL_GETTER = 0;
 		virtual u8_t Address() const EL_GETTER = 0;

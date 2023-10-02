@@ -90,13 +90,18 @@ namespace el1::dev::i2c::native
 	ESpeedClass TBus::MaxSupportedSpeed() const
 	{
 		TPath path = TString("/sys/bus/i2c/devices/") + device.FullName() + "/of_node/clock-frequency";
-		TFile file(path);
+		if(path.Exists())
+		{
+			TFile file(path);
 
-		u32_t clock;
-		file.ReadAll((byte_t*)&clock, sizeof(clock));
-		clock = be32toh(clock);
+			u32_t clock;
+			file.ReadAll((byte_t*)&clock, sizeof(clock));
+			clock = be32toh(clock);
 
-		return (ESpeedClass)clock;
+			return (ESpeedClass)clock;
+		}
+		else
+			return ESpeedClass::STD;
 	}
 
 	std::unique_ptr<II2CDevice> TBus::ClaimDevice(const u8_t address, const ESpeedClass sc_max)
