@@ -110,6 +110,14 @@ namespace el1::dev::i2c::ads111x
 		comp_high = 0x7FFF;
 	}
 
+	float config_t::ToVolts(const s16_t value) const
+	{
+		EL_ERROR(pga >= (sizeof(ARR_FSR) / sizeof(ARR_FSR[0])), TInvalidArgumentException, "pga", "pga out of range");
+		const float fsr_mv = ARR_FSR[pga];
+		const float f = (float)value / (value < 0 ? 32768.0f : 32767.0f);
+		return fsr_mv * f / 1000.0f;
+	}
+
 	void TADS111X::ReadConfig()
 	{
 		IF_DEBUG fprintf(stderr, "TADS111X::ReadConfig(): ... ");

@@ -34,6 +34,8 @@ namespace el1::dev::i2c::ads111x
 		FSR_0256 = 5,
 	};
 
+	static const u16_t ARR_FSR[] = { 6144, 4096, 2048, 1024, 512, 256 };
+
 	enum class EChannel : u8_t
 	{
 		DIFF_A0_A1 = 0,
@@ -113,6 +115,9 @@ namespace el1::dev::i2c::ads111x
 		void ConfigureHysteresisComparator(const s16_t low, const s16_t high, const ECompQueue q = ECompQueue::C1);
 
 		bool HasIrq() const EL_GETTER;
+
+		// converts the provided sensor value into Volts based on the selected FSR/PGA settings
+		float ToVolts(const s16_t value) const EL_GETTER;
 
 		config_t();
 		config_t(const config_t&);
