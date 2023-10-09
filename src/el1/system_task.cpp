@@ -157,6 +157,7 @@ namespace el1::system::task
 	void TFiber::WaitForMany(const array_t<const IWaitable*> waitables)
 	{
 		TFiber* self = TThread::Self()->ActiveFiber();
+		IF_DEBUG_PRINTF("TFiber@%p::WaitForMany(waitables=%zu): ENTER\n", self, (size_t)waitables.Count());
 
 		if(self->shutdown)
 		{
@@ -253,6 +254,7 @@ namespace el1::system::task
 
 	TFiber::TFiber(TFunction<void> main_func, const bool autostart, const usys_t sz_stack, void* const p_stack) : thread(TThread::Self()), main_func(main_func), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), shutdown(false)
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::TFiber(main_func=?, autostart=%s, sz_stack=%zu, p_stack=%p)\n", this, autostart ? "true":"false", (size_t)sz_stack, p_stack);
 		memset(&this->eh_state, 0, sizeof(this->eh_state));
 		AllocateStack(p_stack, sz_stack, DEFAULT_STACK_ALLOCATOR);
 		if(autostart)
@@ -261,7 +263,7 @@ namespace el1::system::task
 
 	TFiber::~TFiber()
 	{
-		IF_DEBUG_PRINTF("TFiber::~TFiber(): self=%p, this=%p ENTER\n", TFiber::Self(), this);
+		IF_DEBUG_PRINTF("TFiber@%p::~TFiber(): self=%p ENTER\n", this, TFiber::Self());
 		if(this != &this->thread->main_fiber)
 		{
 			if(this->state != EFiberState::CONSTRUCTED)
@@ -284,7 +286,7 @@ namespace el1::system::task
 
 			FreeStack();
 		}
-		IF_DEBUG_PRINTF("TFiber::~TFiber(): self=%p, this=%p END\n", TFiber::Self(), this);
+		IF_DEBUG_PRINTF("TFiber@%p::~TFiber(): self=%p END\n", this, TFiber::Self());
 	}
 
 	void TFiber::Boot()
@@ -294,7 +296,7 @@ namespace el1::system::task
 			__sanitizer_finish_switch_fiber(nullptr, (const void**)&self->thread->previous_fiber->p_stack, (size_t*)&self->thread->previous_fiber->sz_stack);
 		#endif
 
-		IF_DEBUG_PRINTF("TFiber::Boot(): self=%p\n", self);
+		IF_DEBUG_PRINTF("TFiber@%p::Boot(): ENTER\n", self);
 
 		try
 		{
@@ -334,6 +336,7 @@ namespace el1::system::task
 		TFiber* const self = thread->active_fiber;
 		auto& fibers = thread->fibers;
 		TFiber* next_fiber = nullptr;
+		IF_DEBUG_PRINTF("TFiber@%p::Schedule(): ENTER\n", self);
 
 		if(self->shutdown)
 		{
@@ -390,7 +393,9 @@ namespace el1::system::task
 		if(next_fiber == nullptr)
 		{
 			// this function only returns after some waitable became ready or a shutdown signal was received
+			IF_DEBUG_PRINTF("TFiber@%p::Schedule(): calling KernelWaitForMany(fibers=%zu)\n", self, (size_t)fibers.Count());
 			KernelWaitForMany(fibers);
+			IF_DEBUG_PRINTF("TFiber@%p::Schedule(): returned from KernelWaitForMany(fibers=%zu)\n", self, (size_t)fibers.Count());
 
 			for(TFiber* fiber : fibers)
 			{
@@ -401,6 +406,7 @@ namespace el1::system::task
 						{
 							if(waitable->IsReady())
 							{
+								IF_DEBUG_PRINTF("TFiber@%p::Schedule(): fiber=%p is now READY\n", self, fiber);
 								fiber->state = EFiberState::READY;
 								break;
 							}
@@ -419,6 +425,8 @@ namespace el1::system::task
 			EL_ERROR(next_fiber == nullptr, TLogicException);
 		}
 
+		IF_DEBUG_PRINTF("TFiber@%p::Schedule(): next_fiber=%p\n", self, next_fiber);
+
 		if(next_fiber != self)
 			next_fiber->SwitchTo();
 
@@ -431,11 +439,13 @@ namespace el1::system::task
 			throw shutdown_t();
 		}
 
+		IF_DEBUG_PRINTF("TFiber@%p::Schedule(): RETURN\n", self);
 		return;
 	}
 
 	void TFiber::Yield()
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::Yield()\n", Self());
 		TFiber::Schedule();
 	}
 
@@ -496,6 +506,7 @@ namespace el1::system::task
 
 	void TFiber::Start()
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::Start()\n", this);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		EL_ERROR(this->state != EFiberState::CONSTRUCTED, TLogicException);	// TODO better exception
 		this->InitRegisters();
@@ -505,6 +516,7 @@ namespace el1::system::task
 
 	void TFiber::Start(TFunction<void> new_main_func, const usys_t sz_stack_input, void* const p_stack_input)
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::Start(main_func=?, sz_stack_input=%zu, p_stack_input=%p)\n", this, (size_t)sz_stack_input, p_stack_input);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		EL_ERROR(this->state != EFiberState::CONSTRUCTED, TLogicException);	// TODO better exception
 
@@ -520,6 +532,7 @@ namespace el1::system::task
 
 	void TFiber::Stop()
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::Stop(): ENTER\n", this);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		EL_ERROR(!this->IsAlive(), TLogicException);	// TODO better exception
 		TFiber* const self = TThread::Self()->active_fiber;
@@ -532,10 +545,13 @@ namespace el1::system::task
 
 		if(this == self)
 			TFiber::Schedule();
+
+		IF_DEBUG_PRINTF("TFiber@%p::Stop(): RETURN\n", this);
 	}
 
 	void TFiber::Resume()
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::Resume()\n", this);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		EL_ERROR(this->state == EFiberState::ACTIVE || this == this->thread->active_fiber, TLogicException);
 		EL_ERROR(!this->IsAlive(), TLogicException);	// TODO better exception
@@ -552,6 +568,7 @@ namespace el1::system::task
 	// FIXME: this functiuon does not make sense this way
 	bool TFiber::Kill()
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::Kill()\n", this);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		EL_ERROR(this->state == EFiberState::ACTIVE || this == this->thread->active_fiber, TLogicException);
 		if(!this->IsAlive())
@@ -567,6 +584,7 @@ namespace el1::system::task
 
 	bool TFiber::Shutdown()
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::Shutdown()\n", this);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		if(!this->IsAlive())
 			return false;
@@ -596,6 +614,7 @@ namespace el1::system::task
 
 	std::unique_ptr<const IException> TFiber::Join()
 	{
+		IF_DEBUG_PRINTF("TFiber@%p::Join()\n", this);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		EL_ERROR(this->state == EFiberState::ACTIVE || this == this->thread->active_fiber, TLogicException);
 		EL_ERROR(this->state == EFiberState::CONSTRUCTED, TLogicException);

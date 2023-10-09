@@ -4,7 +4,14 @@
 #include "io_collection_list.hpp"
 #include "io_collection_map.hpp"
 #include "io_text_string.hpp"
+#include "io_stream_fifo.hpp"
 #include "system_task.hpp"
+#include "util_function.hpp"
+#include "util_event.hpp"
+#include "db.hpp"
+
+struct pg_result;
+typedef struct pg_result PGresult;
 
 namespace el1::db::postgres
 {
@@ -12,6 +19,47 @@ namespace el1::db::postgres
 	using namespace io::collection::list;
 	using namespace io::collection::map;
 	using namespace system::task;
+
+	struct TPostgresException;
+	class TResultStream;
+	class TStatement;
+	class TPostgresConnection;
+
+	static const u32_t N_FIFO_ROWS = 1024;
+
+	struct oid_type_map_t
+	{
+		// ID of the type on the server (see `select * from pg_types`).
+		// We assume these are constant - bad things will happen if they are not.
+		unsigned int oid;
+
+		// the size of the data type in postgres internal binary format
+		// -1 for variable sized types with a size field
+		// -2 for null-terminated strings of variable size
+		s8_t sz_bytes;
+
+		// name of the type in PostgreSQL
+		const char* pg_name;
+
+		// `type` specifies the C++ datatype produced by `deserialize()` / is expected by `serialize()`.
+		const std::type_info* type;
+
+		// First arg is a reference to this oid_type_map_t
+		// Second arg is the input buffer.
+		// Third arg the output buffer.
+		// Forth arg is the number of bytes in the input buffer (only `deserialize()`).
+		// `serialize()` returns the number of bytes stored (or would have been stored) in the output buffer.
+		// `serialize()` allows the output buffer to be `nullptr`. In this case no data is written, but the required size of the output buffer is computed and returned. In this case the returned size may be bigger than what is actually required. However when passing an actual output buffer the returned size will always be accurate.
+		// For `deserialize()` the output buffer must be large enough and correctly aligned to hold `type`.
+		// If nullptr is passed as output buffer to `deserialize()` then only error checks are performed.
+		util::function::TFunction<usys_t, const oid_type_map_t&, const void* const, void* const> serialize;
+		util::function::TFunction<void,   const oid_type_map_t&, const void* const, void* const, const usys_t> deserialize;
+		util::function::TFunction<void, void* const> destruct;
+	};
+
+	extern const oid_type_map_t ARR_OID_TYPE_MAP[];
+	extern const usys_t N_OID_TYPE_MAP;
+	static const usys_t SZ_FIELD_BUFFER = sizeof(void*) * 3;
 
 	struct TPostgresException : IException
 	{
@@ -21,175 +69,118 @@ namespace el1::db::postgres
 		IException* Clone() const override;
 
 		TPostgresException(void* pg_connection, const TString& description);
+		TPostgresException(PGresult* pg_result, const TString& description);
 	};
 
-	class TConnection;
-
-	template<typename ... TColumns>
-	class TResultSetStream
+	struct TPostgresColumnDescription : TColumnDescription
 	{
+		u16_t idx_typemap;
+		bool is_null;
+		alignas(TString) byte_t buffer[SZ_FIELD_BUFFER];
+
+		const oid_type_map_t& TypeInfo() const { return ARR_OID_TYPE_MAP[idx_typemap]; }
+	};
+
+	using result_ptr_t = std::unique_ptr<PGresult, void(*)(PGresult*)>;
+
+	class TResultStream : public IResultStream
+	{
+		friend class TPostgresConnection;
 		protected:
-			TConnection* const connection;
-			usys_t n_resultsets;
-			std::tuple<TColumns ...> tuple;
+			TPostgresConnection* conn;
+			io::stream::fifo::TFifo<void*, N_FIFO_ROWS> fifo;
+			io::collection::list::TList<TPostgresColumnDescription> columns;
+
+			TResultStream(TResultStream&&) = delete;
+			TResultStream(const TResultStream&) = delete;
+			TResultStream(TPostgresConnection* const conn);
+
+			result_ptr_t InternalMoveNext();
+			void DeserializeResult(result_ptr_t current_result);
+
+			void MoveFirst();
 
 		public:
-			using TOut = std::tuple<TColumns* ...>;
+			const system::waitable::IWaitable* OnNewData() const final override;
+			bool IsMetadataReady() const final override;
+			bool IsFirstRowReady() const final override;
+			bool IsNextRowReady() const final override;
 
-			TOut* NextItem();
+			usys_t CountColumns() const final override EL_GETTER;
+			IDatabaseConnection* Connection() const final override EL_GETTER;
+			bool End() const final override EL_GETTER;
+			const TPostgresColumnDescription& Column(const usys_t index) const final override EL_GETTER;
+			const void* Cell(const usys_t index) const final override EL_GETTER;
+			void DiscardAllRows() final override;
+			void MoveNext() final override;
 
-			TResultSetStream(TConnection* const connection, const usys_t n_resultsets);
+			~TResultStream();
 	};
 
-	using oid_t = unsigned int;
-
-	struct data_t
+	class TStatement : public IStatement
 	{
-		oid_t oid;
-		unsigned int length;
-		const void* data;
+		public:
+			TString SQL() const final override EL_GETTER;
+			usys_t CountArgs() const final override ;
+			std::unique_ptr<IResultStream> Execute(array_t<query_arg_t> args) final override ;
 	};
 
-	struct type_key_t
-	{
-		const char* tid;	// C++ typeid(T)
-		oid_t oid;			// postgres datatype OID
+	class TChannelListener;
 
-		bool operator!=(const type_key_t&) const EL_GETTER;
-		bool operator==(const type_key_t&) const EL_GETTER;
-		bool operator> (const type_key_t&) const EL_GETTER;
-		bool operator< (const type_key_t&) const EL_GETTER;
+	struct TNotifyChannel
+	{
+		TPostgresConnection* conn;
+		io::collection::list::TList<TChannelListener*> listeners;
 	};
 
-	using serialize_f = void (*)(const void* const object, TList<byte_t>& data);
-	using deserialize_f = void (*)(const array_t<const byte_t> data, void* const object);
-
-	struct type_convert_t
+	class TChannelListener
 	{
-		// converts a C++ value into pq binary format
-		// can be nullptr, in this case it is assumed the that types are binary compatible and no conversion is needed
-		serialize_f serialize;
-
-		// overrides an existing instance of the C++ datatype with the provided pq binary data
-		// can be nullptr, in this case it is assumed the that types are binary compatible and no conversion is needed
-		deserialize_f deserialize;
-	};
-
-	// this map lists for each pair of C++ datatype and postgres datatype a conversion routine
-	extern TSortedMap<type_key_t, type_convert_t> typemap;
-
-	// this map holds the postgres datatype that is used to transmit a certain C++ type
-	// key: typeid(T), value: postgres datatype OID
-	// if a match is found the resulting pair of C++ type and postgres type is used as key in the typemap above
-	// in order to find a conversion routine
-	extern TSortedMap<const char*, oid_t> sendtype;
-
-	class TConnection
-	{
+		friend class TPostgresConnection;
 		protected:
-			system::task::THandleWaitable on_rx_ready;
-			system::task::THandleWaitable on_tx_ready;
+			std::shared_ptr<TNotifyChannel> channel;
+			io::collection::list::TList<std::shared_ptr<const TString>> pending_events;
+			mutable system::waitable::TMemoryWaitable<usys_t> on_pending_event;
+
+		public:
+			TString Name() const EL_GETTER;	// will return empty string if the connection was closed
+			system::waitable::IWaitable* OnNotify() const EL_GETTER;
+			std::shared_ptr<const TString> Read();	// returns a pointer to the payload string, returns nullptr when no more events are currently pending - check `OnNotify()` to wait for further events
+
+			TChannelListener(const TChannelListener&) = delete;
+			TChannelListener(TChannelListener&&) = delete;
+			TChannelListener(std::shared_ptr<TNotifyChannel> channel);
+			~TChannelListener();
+	};
+
+	class TPostgresConnection : public IDatabaseConnection
+	{
+		friend class TResultStream;
+		friend class TChannelListener;
+		protected:
 			void* pg_connection;
-			void* pg_result;
-			int n_rows_cached;
-			int idx_row;
 
-			TFiber fiber_flusher;
+			io::collection::list::TList<TResultStream*> active_queries;
+			io::collection::map::TSortedMap<TString, std::shared_ptr<TNotifyChannel> > notify_channels;
+
+			TFiber fib_flusher;
+			TFiber fib_reader;
+
 			void FlusherMain();
+			void ReaderMain();
 
-			template<typename TColumn>
-			void _ReadCellData(TColumn*& typed_cell);
-
-			template<typename TColumn, typename ... TColumns>
-			void _ReadCellData(array_t<data_t> raw_cells, const unsigned index, TColumn*& typed_cell, TColumns*& ... typed_cells);
-
-			template<typename TColumn>
-			void _ReadCellData(array_t<data_t> raw_cells, const unsigned index, TColumn*& typed_cell);
+			void StartNotifyChannel(const TString& channel_name);
+			void ShutdownNotifyChannel(const TString& channel_name);
 
 		public:
-			TConnection(TConnection&&) = delete;
-			TConnection(const TConnection&) = delete;
-			TConnection(const TSortedMap<TString, const TString>& properties);
-			~TConnection();
+			TPostgresConnection(const TSortedMap<TString, const TString>& properties);
+			TPostgresConnection(const TPostgresConnection&) = delete;
+			TPostgresConnection(TPostgresConnection&&) = delete;
+			~TPostgresConnection();
 
-			template<typename ... TArgs>
-			void Prepare(const TString& name, const TString& sql);
-			void _Prepare(const TString& name, const TString& sql, const array_t<oid_t> param_oids);
+			std::unique_ptr<IStatement> Prepare(const TString& sql) final override;
+			std::unique_ptr<IResultStream> Execute(const TString& sql, array_t<query_arg_t> args = array_t<query_arg_t>()) final override;
 
-			template<typename ... TArgs>
-			void Execute(const TString& sql, TArgs ... args);
-			void Execute(const TString& sql) { _Execute(sql); }
-			void _Execute(const TString& sql, const array_t<const data_t> args = array_t<const data_t>());
-
-			// returns the number of rows in the result
-			// FIXME: this function might return a wrong count due to pipelining and single row mode
-			unsigned CountRows() const EL_GETTER;
-
-			// returns the number of columns in the result
-			unsigned CountColumns() const EL_GETTER;
-
-			// returns the index of the named column
-			unsigned ColumnNameToIndex(const TString& name) const EL_GETTER;
-
-			// fetches the next row and moves the iterator to it
-			// return true if the next row was fetched or false if there are no more rows in this resultset
-			// this function will block if there is outstanding data
-			bool FetchNextRow();
-
-			// alters the pointers passed as arguments to point to the values of the fields in the current row
-			// database NULL values will result in the respecitive pointer to be set to nullptr
-			// the memory is owned by the TConnection and must not be freed manually
-			// the pointers and their values remain valid until the next row is fetched or the results are discarded
-			// if the type of the pointer does not match with the type of the column an exception will be thrown
-			template<typename ... TColumns>
-			void ReadCellData(TColumns*& ... cells);
-
-			// returns the cells of the current row untranslated
-			void _ReadCellData(const array_t<data_t> cells);
-
-			// discards any pending results left to read
-			void DiscardResults();
-
-			// streams the rows of the result set
-			// if multiple statements were executed before with the same column layout they can be streamed in one go
-			// use n_resultsets to specify from how many previously executed statements you want to stream the results
-			// the results are streamed oldest to newest
-			template<typename ... TColumns>
-			TResultSetStream<TColumns ...> Stream(const usys_t n_resultsets = 1U);
+			std::unique_ptr<TChannelListener> SubscribeNotifyChannel(const TString& channel_name);
 	};
-
-	template<typename ... TColumns>
-	void TConnection::ReadCellData(TColumns*& ... typed_cells)
-	{
-		data_t arr_raw_cells[CountColumns()];
-		array_t raw_cells(arr_raw_cells, CountColumns());
-		_ReadCellData(raw_cells);
-		_ReadCellData(raw_cells, 0, typed_cells ...);
-	}
-
-	template<typename TColumn>
-	void TConnection::_ReadCellData(TColumn*& typed_cell)
-	{
-		data_t arr_raw_cells[CountColumns()];
-		array_t raw_cells(arr_raw_cells, CountColumns());
-		_ReadCellData(raw_cells);
-		_ReadCellData(raw_cells, 0, typed_cell);
-	}
-
-	template<typename TColumn, typename ... TColumns>
-	void TConnection::_ReadCellData(array_t<data_t> raw_cells, const unsigned index, TColumn*& typed_cell, TColumns*& ... typed_cells)
-	{
-		EL_ERROR(index >= raw_cells.Count(), TInvalidArgumentException, "cells", "resultset has less columns than arguments passed to to ReadCellData()");
-		_ReadCellData(raw_cells, index, typed_cell);
-		_ReadCellData(raw_cells, index + 1, typed_cells ...);
-	}
-
-	template<typename TColumn>
-	void TConnection::_ReadCellData(array_t<data_t> raw_cells, const unsigned index, TColumn*& typed_cell)
-	{
-		const data_t& raw_cell = raw_cells[index];
-		typed_cell = (TColumn*)raw_cell.data;
-		EL_ERROR(raw_cell.oid != 25 && raw_cell.data != nullptr && raw_cell.length != sizeof(TColumn), TInvalidArgumentException, "cells", "datatype/size mismatch");
-	}
 }
 #endif

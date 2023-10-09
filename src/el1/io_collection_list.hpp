@@ -113,6 +113,8 @@ namespace el1::io::collection::list
 			// FIXME: never use Shift() on a TList !
 			void Shift(const usys_t n_items);
 
+			system::waitable::TMemoryWaitable<usys_t> MakeItemCountWaitable(const usys_t* const n_expected_count) const;
+
 			usys_t AbsoluteIndex(const ssys_t rel_index, const bool allow_tail) const;
 			usys_t Count() const noexcept EL_GETTER { return n_items; }
 			void Reverse();
@@ -241,7 +243,7 @@ namespace el1::io::collection::list
 			TList(const T* const arr_items, const usys_t n_items, const usys_t n_prealloc = 0);
 			TList(T* const arr_items, const usys_t n_items, const bool claim, const usys_t n_prealloc = 0); // if claim is true, then n_prealloc is ignored
 			TList(const array_t<const T>& other);
-			TList(const array_t<T>& other);
+			// TList(const array_t<T>& other);
 			TList(const TList<T>& other);
 			constexpr TList(TList&& other) noexcept;
 			TList(std::initializer_list<T> list);
@@ -317,6 +319,12 @@ namespace el1::io::collection::list
 	};
 
 	/*****************************************************************************/
+
+	template<typename T>
+	system::waitable::TMemoryWaitable<usys_t> array_t<T>::MakeItemCountWaitable(const usys_t* const n_expected_count) const
+	{
+		return system::waitable::TMemoryWaitable<usys_t>(&n_items, n_expected_count, io::types::NEG1);
+	}
 
 	template<typename T>
 	TArrayPipe<T> array_t<T>::Pipe() const
@@ -826,12 +834,12 @@ namespace el1::io::collection::list
 			CopyConstruct(&other[0], other.Count());
 	}
 
-	template<typename T>
-	TList<T>::TList(const array_t<T>& other) : array_t<T>()
-	{
-		if(other.Count() > 0)
-			CopyConstruct(&other[0], other.Count());
-	}
+	// template<typename T>
+	// TList<T>::TList(const array_t<T>& other) : array_t<T>()
+	// {
+	// 	if(other.Count() > 0)
+	// 		CopyConstruct(&other[0], other.Count());
+	// }
 
 	template<typename T>
 	TList<T>::TList(const TList<T>& other) : array_t<T>()

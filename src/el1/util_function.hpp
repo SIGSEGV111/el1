@@ -8,7 +8,7 @@ namespace el1::util::function
 	template<typename R, typename ...A>
 	struct IFunction
 	{
-		virtual R operator()(A ...a) = 0;
+		virtual R operator()(A ...a) const = 0;
 		virtual ~IFunction() {}
 	};
 
@@ -23,7 +23,7 @@ namespace el1::util::function
 			function_ptr_t function;
 
 		public:
-			R operator()(A ...a) final override { return (this->object->*function)(a...); }
+			R operator()(A ...a) const final override { return (this->object->*function)(a...); }
 			TMemberFunction(T* object, function_ptr_t function) : object(object), function(function) {}
 	};
 
@@ -37,7 +37,7 @@ namespace el1::util::function
 			function_ptr_t function;
 
 		public:
-			R operator()(A ...a) final override { return function(a...); }
+			R operator()(A ...a) const final override { return function(a...); }
 			TBasicFunction(function_ptr_t function) : function(function) {}
 	};
 
@@ -48,7 +48,7 @@ namespace el1::util::function
 			L lambda;
 
 		public:
-			R operator()(A ...a) final override { return lambda(a...); }
+			R operator()(A ...a) const final override { return lambda(a...); }
 			TLambdaFunction(L lambda) : lambda(std::move(lambda)) {}
 	};
 
@@ -66,7 +66,7 @@ namespace el1::util::function
 			TFunction& operator=(const TFunction& rhs) = default;
 
 			bool operator==(const TFunction& rhs) const { return function.get() == rhs.function.get(); }
-			R operator()(A... a) { return (*function)(a...); }
+			R operator()(A... a) const { return (*function)(a...); }
 
 			TFunction(R (*function)(A... a)) : function(new TBasicFunction<R, A...>(function)) {}
 
