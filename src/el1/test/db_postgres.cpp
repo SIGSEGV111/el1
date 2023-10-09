@@ -20,21 +20,24 @@ namespace
 	}
 
 
-	TEST(db_postgres, TPostgresConnection_simple_select)
+	TEST(db_postgres, simple_select)
 	{
 		TSortedMap<TString,TString> properties;
 		TPostgresConnection connection(properties);
 
 		{
 			usys_t n_rows = 0;
-			for(auto rs = connection.Execute("select 1,2,3.0::float8,'hello world'"); !rs->End(); rs->MoveNext())
+			for(auto rs = connection.Execute("select 1,2,3.0::float8,'hello world',NULL,true,false"); !rs->End(); rs->MoveNext())
 			{
-				auto [i,j,f,s] = rs->Row<s32_t,s32_t,double,TString>();
+				auto [i,j,f,s,n,t,nt] = rs->Row<s32_t,s32_t,double,TString,void,bool,bool>();
 
 				EXPECT_TRUE(i != nullptr && *i == 1);
 				EXPECT_TRUE(j != nullptr && *j == 2);
 				EXPECT_TRUE(f != nullptr && *f == 3.0);
 				EXPECT_TRUE(s != nullptr && *s == "hello world");
+				EXPECT_TRUE(n == nullptr);
+				EXPECT_TRUE(t != nullptr && *t == true);
+				EXPECT_TRUE(nt != nullptr && *nt == false);
 
 				n_rows++;
 			}
@@ -53,7 +56,55 @@ namespace
 		}
 	}
 
-	TEST(db_postgres, TPostgresConnection_bad_query_recovery)
+	TEST(db_postgres, wrong_column_count)
+	{
+		TSortedMap<TString,TString> properties;
+		TPostgresConnection connection(properties);
+
+		{
+			usys_t n_rows = 0;
+			bool _throw = false;
+			for(auto rs = connection.Execute("select 1,2,3"); !rs->End(); rs->MoveNext())
+			{
+				try
+				{
+					auto [i,j] = rs->Row<s32_t, s32_t>();
+					EXPECT_TRUE(i != nullptr && *i == 1);
+					EXPECT_TRUE(j != nullptr && *j == 2);
+				}
+				catch(const TInvalidArgumentException&)
+				{
+					_throw = true;
+				}
+				n_rows++;
+			}
+			EXPECT_EQ(n_rows, 1U);
+			EXPECT_TRUE(_throw);
+		}
+
+		{
+			usys_t n_rows = 0;
+			bool _throw = false;
+			for(auto rs = connection.Execute("select 1"); !rs->End(); rs->MoveNext())
+			{
+				try
+				{
+					auto [i,j] = rs->Row<s32_t, s32_t>();
+					EXPECT_TRUE(i != nullptr && *i == 1);
+					EXPECT_TRUE(j != nullptr && *j == 2);
+				}
+				catch(const TInvalidArgumentException&)
+				{
+					_throw = true;
+				}
+				n_rows++;
+			}
+			EXPECT_EQ(n_rows, 1U);
+			EXPECT_TRUE(_throw);
+		}
+	}
+
+	TEST(db_postgres, bad_query_recovery)
 	{
 		TSortedMap<TString,TString> properties;
 		TPostgresConnection connection(properties);
@@ -67,7 +118,7 @@ namespace
 		EXPECT_TRUE(i != nullptr && *i == 1234);
 	}
 
-	TEST(db_postgres, TPostgresConnection_pipeline)
+	TEST(db_postgres, pipeline)
 	{
 		TSortedMap<TString,TString> properties;
 		TPostgresConnection connection(properties);

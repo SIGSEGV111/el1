@@ -21,6 +21,19 @@ namespace el1::db::postgres
 	static usys_t LookupTypeInfoByOid(const Oid oid);
 	static const oid_type_map_t* LookupTypeInfoByType(const std::type_info& type, const bool fallback_nullptr);
 
+	static void DestructNoOp(void* const)
+	{
+	}
+
+	static usys_t SerializeNoOp(const oid_type_map_t&, const void* const, void* const)
+	{
+		return 0;
+	}
+
+	static void DeserializeNoOp(const oid_type_map_t&, const void* const, void* const, const usys_t)
+	{
+	}
+
 	template<typename T>
 	static void Destruct(void* const value)
 	{
@@ -263,6 +276,7 @@ namespace el1::db::postgres
 		{    142, -1, "xml"        , &typeid(TString   ), &SerializeString        , &DeserializeString        , &Destruct<TString   > },
 		{    700,  4, "float4"     , &typeid(float     ), &SerializeFloat<float > , &DeserializeFloat<float > , &Destruct<float     > },
 		{    701,  8, "float8"     , &typeid(double    ), &SerializeFloat<double> , &DeserializeFloat<double> , &Destruct<double    > },
+		{    705,  0, "unknown"    , &typeid(void      ), &SerializeNoOp          , &DeserializeNoOp          , &DestructNoOp         },
 		{   1082,  4, "date"       , &typeid(TTime     ), &SerializeDate          , &DeserializeDate          , &Destruct<TTime     > },
 		{   1043, -1, "varchar"    , &typeid(char      ), &SerializeString        , &DeserializeString        , &Destruct<char      > },
 		{   1114,  8, "timestamp"  , &typeid(TTime     ), &SerializeTimestamp     , &DeserializeTimestamp     , &Destruct<TTime     > },
