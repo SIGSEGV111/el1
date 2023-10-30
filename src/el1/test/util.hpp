@@ -15,6 +15,13 @@ namespace el1::system::time
 	void PrintTo(const TTime t, std::ostream* os);
 }
 
+namespace el1::io::bcd
+{
+	class TBCD;
+	std::ostream& operator<<(std::ostream& os, const TBCD& v);
+	void PrintTo(const TBCD& v, std::ostream* os);
+}
+
 namespace el1::testing
 {
 	using namespace io::text::string;

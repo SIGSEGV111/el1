@@ -1,5 +1,6 @@
 #include "util.hpp"
 #include <math.h>
+#include <el1/io_bcd.hpp>
 
 namespace el1::io::text::string
 {
@@ -23,6 +24,26 @@ namespace el1::system::time
 	void PrintTo(const TTime t, std::ostream* os)
 	{
 		*os<<t;
+	}
+}
+
+namespace el1::io::bcd
+{
+	std::ostream& operator<<(std::ostream& os, const TBCD& v)
+	{
+		os<<(v.IsNegative() ? "-" : "+");
+		for(int i = v.CountInteger() - 1; i >= -v.CountDecimal(); i--)
+		{
+			if(i == -1)
+				os<<".";
+			os<<(int)v.Digit(i);
+		}
+		return os;
+	}
+
+	void PrintTo(const TBCD& v, std::ostream* os)
+	{
+		*os<<v;
 	}
 }
 
