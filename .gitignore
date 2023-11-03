@@ -4,6 +4,7 @@ examples/gpio/trigger
 examples/w1-test/w1-test
 examples/bin2cpp/bin2cpp
 examples/ads111x/ads111x
+examples/hx711/hx711
 examples/json-tolerant-parser/jtp
 /src/**/*.Makefile
 /Makefile
