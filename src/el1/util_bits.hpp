@@ -50,6 +50,17 @@ namespace el1::util::bits
 	inline static u32_t constexpr CollateBits32(u32_t in, u32_t pattern) { return CollateBits(in, pattern); }
 	inline static u64_t constexpr CollateBits64(u64_t in, u64_t pattern) { return CollateBits(in, pattern); }
 
+	unsigned CountOneBits(u8_t  in);
+	unsigned CountOneBits(u16_t in);
+	unsigned CountOneBits(u32_t in);
+	unsigned CountOneBits(u64_t in);
+
+	template<typename T, typename ... A>
+	unsigned CountOneBits(T a0, A ... a)
+	{
+		return CountOneBits(a0) + CountOneBits(a...);
+	}
+
 	/*****************************************/
 
 	template<typename T>

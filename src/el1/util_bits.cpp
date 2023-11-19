@@ -47,4 +47,24 @@ namespace el1::util::bits
 			n_bytes++;
 		return n_bytes;
 	}
+
+	unsigned CountOneBits(u8_t  in)
+	{
+		return __builtin_popcount(in);
+	}
+
+	unsigned CountOneBits(u16_t in)
+	{
+		return __builtin_popcount(in);
+	}
+
+	unsigned CountOneBits(u32_t in)
+	{
+		return __builtin_popcountl(in);
+	}
+
+	unsigned CountOneBits(u64_t in)
+	{
+		return __builtin_popcountll(in);
+	}
 }
