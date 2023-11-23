@@ -26,10 +26,10 @@ namespace el1::io::net::ip
 	{
 		union
 		{
-			byte_t octet[16]; // 01:23:45:67:89:1011:1213:1415
-			u16_t group[8]; // big endian, 0:1:2:3:4:5:6:7
-			u32_t u32[4];	// big endian
-			u64_t u64[2];	// big endian
+			struct { byte_t octet[16]; }; // 01:23:45:67:89:1011:1213:1415
+			struct { u16_t group[8]; }; // big endian, 0:1:2:3:4:5:6:7
+			struct { u32_t u32[4]; };	// big endian
+			struct { u64_t u64[2]; };	// big endian
 		};
 
 		constexpr ipaddr_t& operator=(const ipaddr_t& rhs) = default;
@@ -48,9 +48,12 @@ namespace el1::io::net::ip
 		bool IsV4() const EL_GETTER { return Version() == EIP::V4; }
 		bool IsV6() const EL_GETTER { return Version() == EIP::V6; }
 
+		explicit operator text::string::TString() const EL_GETTER;
+
 		ipaddr_t(const u32_t ipv4);
-		ipaddr_t(const u8_t cidr, const EIP ver); // MASK for given CIDR
 		ipaddr_t(const text::string::TString&, const EIP version = EIP::ANY);
+
+		static ipaddr_t MaskFromCidr(const u8_t cidr, const EIP ver);
 
 		constexpr ipaddr_t(const EIP version = EIP::V6) // ZERO
 		{
@@ -62,8 +65,18 @@ namespace el1::io::net::ip
 
 		constexpr ipaddr_t(ipaddr_t&&) = default;
 		constexpr ipaddr_t(const ipaddr_t&) = default;
+	};
 
-		explicit operator text::string::TString() const EL_GETTER;
+	struct netmask_t
+	{
+		ipaddr_t ip;
+		u8_t cidr;
+
+		bool Matches(const ipaddr_t& a) const EL_GETTER;
+
+		constexpr netmask_t(const EIP version = EIP::V6) : ip(version), cidr(0) {}
+		constexpr netmask_t(ipaddr_t ip, u8_t cidr) : ip(ip), cidr(cidr) {}
+		netmask_t(const text::string::TString&, const EIP version = EIP::ANY);
 	};
 
 	struct ipport_t

@@ -67,7 +67,7 @@ namespace el1::util::bits
 	constexpr T MakeBitMask(const unsigned idx)
 	{
 		EL_ERROR(idx >= sizeof(T) * 8, TIndexOutOfBoundsException, 0, sizeof(T) * 8 - 1, idx);
-		return (idx == 0) ? (T)1 : ((T)1 << (T)idx);
+		return (idx == 0) ? (T)1 : ( ((T)1) << idx );
 	}
 
 	template<typename T>
