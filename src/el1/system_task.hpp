@@ -27,7 +27,7 @@ namespace __cxxabiv1
 		#endif
 	};
 
-	extern "C" __cxa_eh_globals* __cxa_get_globals();
+	extern "C" __cxa_eh_globals* __cxa_get_globals() _GLIBCXX_NOTHROW __attribute__ ((__const__));
 }
 
 
