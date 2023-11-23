@@ -105,22 +105,32 @@ namespace el1::io::format::json
 			bool IsBoolean() const { return Type() == EType::BOOLEAN; }
 			bool& Boolean() EL_GETTER;
 			const bool& Boolean() const EL_GETTER;
+			explicit operator bool&() { return Boolean(); }
+			explicit operator const bool&() const { return Boolean(); }
 
 			bool IsNumber() const { return Type() == EType::NUMBER; }
 			double& Number() EL_GETTER;
 			const double& Number() const EL_GETTER;;
+			explicit operator double&() { return Number(); }
+			explicit operator const double&() const { return Number(); }
 
 			bool IsString() const { return Type() == EType::STRING; }
 			TString& String() EL_GETTER;
 			const TString& String() const EL_GETTER;
+			operator TString&() { return String(); }
+			operator const TString&() const { return String(); }
 
 			bool IsArray() const { return Type() == EType::ARRAY; }
 			TJsonArray& Array() EL_GETTER;
 			const array_t<const TJsonValue>& Array() const EL_GETTER;
+			operator TJsonArray&() { return Array(); }
+			operator array_t<const TJsonValue>() const { return Array(); }
 
 			bool IsMap() const { return Type() == EType::MAP; }
 			TJsonMap& Map() EL_GETTER;
 			const TConstJsonMap& Map() const EL_GETTER;
+			operator TJsonMap&() { return Map(); }
+			operator const TConstJsonMap&() const { return Map(); }
 
 			TJsonValue& operator=(const TJsonValue& rhs);
 			TJsonValue& operator=(TJsonValue&& rhs);

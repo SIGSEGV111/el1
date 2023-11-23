@@ -79,6 +79,11 @@ namespace el1::io::text::string
 			void ToLower();
 			void ToUpper();
 
+			TString Lower() const EL_GETTER;
+			TString Upper() const EL_GETTER;
+
+			static TString Padded(const TUTF32 pad_sign, const usys_t length);
+
 			double ToDouble() const EL_GETTER;
 			s64_t ToInteger() const EL_GETTER;
 

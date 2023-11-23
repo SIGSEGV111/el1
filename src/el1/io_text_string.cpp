@@ -1047,6 +1047,13 @@ namespace el1::io::text::string
 		chars.FillInsert(index, pad_sign, min_length - chars.Count());
 	}
 
+	TString TString::Padded(const TUTF32 pad_sign, const usys_t length)
+	{
+		TString str;
+		str.Pad(pad_sign, length, EPlacement::END);
+		return str;
+	}
+
 	void TString::Reverse()
 	{
 		chars.Reverse();
@@ -1126,6 +1133,20 @@ namespace el1::io::text::string
 	void TString::ToUpper()
 	{
 		Translate(MAP_LETTER_CASE, false);
+	}
+
+	TString TString::Lower() const
+	{
+		TString str = *this;
+		str.ToLower();
+		return str;
+	}
+
+	TString TString::Upper() const
+	{
+		TString str = *this;
+		str.ToUpper();
+		return str;
 	}
 
 	std::unique_ptr<char[]> TString::MakeCStr() const
