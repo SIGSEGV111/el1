@@ -32,6 +32,12 @@ namespace el1::io::net::ip
 			struct { u64_t u64[2]; };	// big endian
 		};
 
+		int Compare(const ipaddr_t& rhs) const EL_GETTER;
+		inline bool operator>(const ipaddr_t& rhs) const { return Compare(rhs) > 0; }
+		inline bool operator<(const ipaddr_t& rhs) const { return Compare(rhs) < 0; }
+		inline bool operator>=(const ipaddr_t& rhs) const { return Compare(rhs) >= 0; }
+		inline bool operator<=(const ipaddr_t& rhs) const { return Compare(rhs) <= 0; }
+
 		constexpr ipaddr_t& operator=(const ipaddr_t& rhs) = default;
 		constexpr bool operator==(const ipaddr_t& rhs) const { return this->u64[0] == rhs.u64[0] && this->u64[1] == rhs.u64[1]; }
 		constexpr bool operator!=(const ipaddr_t& rhs) const { return !(*this == rhs); }
@@ -40,6 +46,7 @@ namespace el1::io::net::ip
 		ipaddr_t& operator&=(const ipaddr_t& rhs);
 		ipaddr_t operator|(const ipaddr_t& rhs) const EL_GETTER;
 		ipaddr_t operator&(const ipaddr_t& rhs) const EL_GETTER;
+
 
 		u32_t& IPv4();
 		const u32_t& IPv4() const;

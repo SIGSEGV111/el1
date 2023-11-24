@@ -5,6 +5,11 @@ namespace el1::io::net::ip
 {
 	using namespace text::string;
 
+	int ipaddr_t::Compare(const ipaddr_t& rhs) const
+	{
+		return memcmp(this->octet, rhs.octet, sizeof(ipaddr_t::octet));
+	}
+
 	u32_t& ipaddr_t::IPv4()
 	{
 		EL_ERROR(!this->IsV4(), TException, TString::Format("%q is not an IPv4 address", this->operator TString()));
