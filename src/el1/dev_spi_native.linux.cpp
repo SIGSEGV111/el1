@@ -47,7 +47,11 @@ namespace el1::dev::spi::native
 
 	void TNativeSpiDevice::ExchangeBuffers(const void* const tx_buffer, void* const rx_buffer, const usys_t n_bytes, const bool clean_signal)
 	{
-		EL_ERROR(clean_signal, TNotImplementedException);
+		// this assumes we are running on a Raspberry Pi... which is not always true I guess..
+		// https://github.com/torvalds/linux/blob/master/drivers/spi/spi-bcm2835.c
+		EL_ERROR(clean_signal && n_bytes < 96, TException, "clean_signal requires at least 96 bytes to be transfered (FIXME)");
+
+		// EL_ERROR(clean_signal, TNotImplementedException);
 
 		while(this->bus->IsBusy() && this->bus->active_device != this)
 			this->bus->OnBusIdle().WaitFor();

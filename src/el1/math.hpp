@@ -14,7 +14,7 @@ namespace el1::math
 	};
 
 	template<typename T, unsigned n_dim>
-	struct TVector
+	struct vector_t
 	{
 		T v[n_dim];
 
@@ -28,63 +28,63 @@ namespace el1::math
 			return v[index];
 		}
 
-		constexpr TVector& operator+=(const TVector& rhs)
+		constexpr vector_t& operator+=(const vector_t& rhs)
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				v[i] += rhs.v[i];
 			return *this;
 		}
 
-		constexpr TVector& operator-=(const TVector& rhs)
+		constexpr vector_t& operator-=(const vector_t& rhs)
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				v[i] -= rhs.v[i];
 			return *this;
 		}
 
-		constexpr TVector& operator*=(const T rhs)
+		constexpr vector_t& operator*=(const T rhs)
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				v[i] *= rhs;
 			return *this;
 		}
 
-		constexpr TVector& operator/=(const T rhs)
+		constexpr vector_t& operator/=(const T rhs)
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				v[i] /= rhs;
 			return *this;
 		}
 
-		constexpr TVector operator+(const TVector& rhs) const
+		constexpr vector_t operator+(const vector_t& rhs) const
 		{
-			TVector r = *this;
+			vector_t r = *this;
 			r += rhs;
 			return r;
 		}
 
-		constexpr TVector operator-(const TVector& rhs) const
+		constexpr vector_t operator-(const vector_t& rhs) const
 		{
-			TVector r = *this;
+			vector_t r = *this;
 			r -= rhs;
 			return r;
 		}
 
-		constexpr TVector operator*(const T rhs) const
+		constexpr vector_t operator*(const T rhs) const
 		{
-			TVector r = *this;
+			vector_t r = *this;
 			r *= rhs;
 			return r;
 		}
 
-		constexpr TVector operator/(const T rhs) const
+		constexpr vector_t operator/(const T rhs) const
 		{
-			TVector r = *this;
+			vector_t r = *this;
 			r /= rhs;
 			return r;
 		}
 
-		constexpr bool AllBigger(const TVector& rhs) const
+		constexpr bool AllBigger(const vector_t& rhs) const
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				if(v[i] <= rhs[i])
@@ -92,7 +92,7 @@ namespace el1::math
 			return true;
 		}
 
-		constexpr bool AllLess(const TVector& rhs) const
+		constexpr bool AllLess(const vector_t& rhs) const
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				if(v[i] >= rhs[i])
@@ -100,7 +100,7 @@ namespace el1::math
 			return true;
 		}
 
-		constexpr bool AllBiggerEqual(const TVector& rhs) const
+		constexpr bool AllBiggerEqual(const vector_t& rhs) const
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				if(v[i] < rhs[i])
@@ -108,7 +108,7 @@ namespace el1::math
 			return true;
 		}
 
-		constexpr bool AllLessEqual(const TVector& rhs) const
+		constexpr bool AllLessEqual(const vector_t& rhs) const
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				if(v[i] > rhs[i])
@@ -116,7 +116,7 @@ namespace el1::math
 			return true;
 		}
 
-		constexpr bool operator==(const TVector& rhs) const
+		constexpr bool operator==(const vector_t& rhs) const
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				if(v[i] == rhs[i])
@@ -124,8 +124,8 @@ namespace el1::math
 			return true;
 		}
 
-		TVector& operator=(TVector&&) = default;
-		TVector& operator=(const TVector&) = default;
+		vector_t& operator=(vector_t&&) = default;
+		vector_t& operator=(const vector_t&) = default;
 
 		// computes the space defined by this vector
 		// generalization of area (2d) or volume (3d)
@@ -138,26 +138,26 @@ namespace el1::math
 		}
 
 		template<typename A>
-		explicit operator TVector<A, n_dim>() const
+		explicit operator vector_t<A, n_dim>() const
 		{
-			TVector<A, n_dim> r;
+			vector_t<A, n_dim> r;
 			for(unsigned i = 0; i < n_dim; i++)
 				r[i] = v[i];
 			return r;
 		}
 
 		template<typename TT>
-		constexpr TVector(const TT (&vv)[n_dim])
+		constexpr vector_t(const TT (&vv)[n_dim])
 		{
 			for(unsigned i = 0; i < n_dim; i++)
 				v[i] = vv[i];
 		}
 
-		TVector() = default;
-		TVector(TVector&&) = default;
-		TVector(const TVector&) = default;
+		vector_t() = default;
+		vector_t(vector_t&&) = default;
+		vector_t(const vector_t&) = default;
 	};
 
-	using v2f_t = TVector<float, 2>;
-	using v3f_t = TVector<float, 3>;
+	using v2f_t = vector_t<float, 2>;
+	using v3f_t = vector_t<float, 3>;
 }

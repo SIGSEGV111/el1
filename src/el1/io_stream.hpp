@@ -340,6 +340,59 @@ namespace el1::io::stream
 			TFilterPipe(TPipe* source, L callable) : source(source), callable(callable) {}
 	};
 
+	template<typename TPipe>
+	class TLimitPipe : public IPipe<TLimitPipe<TPipe>, typename TPipe::TOut>
+	{
+		protected:
+			TPipe* source;
+			iosize_t n_remaining;
+
+		public:
+			using TIn = typename TPipe::TOut;
+			using TOut = TIn;
+
+			const TOut* NextItem() final override
+			{
+				if(EL_UNLIKELY(n_remaining == 0))
+					return nullptr;
+
+				n_remaining--;
+				return source->NextItem();
+			}
+
+			TLimitPipe(TPipe* source, const iosize_t n_items_limit) : source(source), n_remaining(n_items_limit) {}
+	};
+
+	template<typename T>
+	class TLimitSource : public ISource<T>
+	{
+		protected:
+			ISource<T>* source;
+			iosize_t n_remaining;
+
+		public:
+			usys_t Read(T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT
+			{
+				if(n_remaining == 0)
+					return 0;
+
+				const usys_t n_max = util::Min<usys_t>(n_remaining, n_items_max);
+				const usys_t r = source->Read(arr_items, n_max);
+				n_remaining -= r;
+				return r;
+			}
+
+			const system::waitable::IWaitable* OnInputReady() const
+			{
+				if(n_remaining == 0)
+					return nullptr;
+				return this->source->OnInputReady();
+			}
+
+			TLimitSource(ISource<T>* source, const iosize_t n_items_limit) : source(source), n_remaining(n_items_limit) {}
+	};
+
+
 	template<typename TPipe, typename L>
 	class TMapPipe : public IPipe<TMapPipe<TPipe, L>, std::remove_cv_t<std::remove_reference_t<std::result_of_t<L(const typename TPipe::TOut&)>>>>
 	{
@@ -419,37 +472,6 @@ namespace el1::io::stream
 			}
 
 			TTransformPipe(TPipe* const source, TTransformator transformator) : source(source), transformator(transformator)
-			{
-			}
-	};
-
-	template<typename TPipe>
-	class TLimitPipe : public IPipe<TLimitPipe<TPipe>, typename TPipe::TOut>
-	{
-		public:
-			using TIn = typename TPipe::TOut;
-			using TOut = TIn;
-
-		protected:
-			TPipe* const source;
-			const iosize_t n_items_max;
-			iosize_t i;
-
-		public:
-			const TOut* NextItem() final override
-			{
-				if(i < n_items_max)
-				{
-					i++;
-					return source->NextItem();
-				}
-				else
-				{
-					return nullptr;
-				}
-			}
-
-			TLimitPipe(TPipe* const source, const iosize_t n_items_max) : source(source), n_items_max(n_items_max), i(0)
 			{
 			}
 	};

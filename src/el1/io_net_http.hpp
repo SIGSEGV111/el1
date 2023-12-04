@@ -116,5 +116,6 @@ namespace el1::io::net::http
 			static EStatus HandleSingleRequest(stream::ISource<byte_t>&, stream::ISink<byte_t>&, request_handler_t handler);
 
 			THttpServer(ip::TTcpServer* const tcp_server, request_handler_t handler);
+			~THttpServer();
 	};
 }

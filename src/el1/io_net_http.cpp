@@ -88,11 +88,14 @@ namespace el1::io::net::http
 		EL_THROW(TException, "unsupported status code");
 	}
 
-	static void SendResponse(ISink<byte_t>& sink, const THttpServer::response_t& response)
+	static void SendResponse(ISink<byte_t>& sink, THttpServer::response_t& response)
 	{
 		const char* const str_version = VersionToString(response.version);
 		const char* const str_status_text = StatusToString(response.status);
 		auto str_status_code = TString::Format("%d", (u16_t)response.status).MakeCStr();
+
+		if(response.body == nullptr)
+			response.header_fields.ContentLength(0);
 
 		sink.WriteAll((const byte_t*)str_version, strlen(str_version));
 		sink.WriteAll((const byte_t*)" ", 1);
@@ -193,7 +196,10 @@ namespace el1::io::net::http
 			}
 			arr_req.Clear();
 			EL_ERROR(request_line == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, "header not correctly terminated by empty line");
-			request.body = &source; // FIXME use limited source when content-length is provided
+
+			IF_DEBUG_PRINTF("got content-length %zu\n", (size_t)request.header_fields.ContentLength());
+			auto lp = ss.Limit(request.header_fields.ContentLength());
+			request.body = request.header_fields.ContentLength() == NEG1 ? &source : &lp;
 
 			EL_ERROR(request.method == EMethod::TRACE, THttpProcessingException, EStatus::METHOD_NOT_ALLOWED, "TRACE is not supported");
 
@@ -222,6 +228,9 @@ namespace el1::io::net::http
 		}
 		catch(const IException& e1)
 		{
+			if(EL_UNLIKELY(DEBUG))
+				e1.Print("HTTP HANDLER");
+
 			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): caught exception\n");
 			if(response_in_progress)
 			{
@@ -304,6 +313,7 @@ namespace el1::io::net::http
 				cleanup_handlers = 0;
 
 				// wait
+				IF_DEBUG_PRINTF("waiting ...\n");
 				TFiber::WaitForMany({ &this->tcp_server->OnClientConnect(), &wait_cleanup });
 			}
 			else
@@ -329,6 +339,11 @@ namespace el1::io::net::http
 		fiber(TFunction(this, &THttpServer::FiberMain), true)
 	{
 		IF_DEBUG_PRINTF("THttpServer constructor\n");
+	}
+
+	THttpServer::~THttpServer()
+	{
+		IF_DEBUG_PRINTF("THttpServer destructor\n");
 	}
 }
 

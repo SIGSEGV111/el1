@@ -302,30 +302,35 @@ namespace el1::system::task
 		{
 			self->main_func();
 			self->state = EFiberState::FINISHED;
+			IF_DEBUG_PRINTF("TFiber@%p::Boot(): fiber main exited\n", self);
 		}
 		catch(shutdown_t)
 		{
+			IF_DEBUG_PRINTF("TFiber@%p::Boot(): caught shutdown_t\n", self);
 			self->state = EFiberState::FINISHED;
 		}
 		catch(const IException& e)
 		{
+			IF_DEBUG_PRINTF("TFiber@%p::Boot(): caught IException @%p from %s:%d\n", self, &e, e.file, e.line);
 			self->exception = std::unique_ptr<const IException>(e.Clone());
 			self->state = EFiberState::CRASHED;
 		}
 		catch(const IException* e)
 		{
+			IF_DEBUG_PRINTF("TFiber@%p::Boot(): caught IException @%p from %s:%d\n", self, e, e->file, e->line);
 			self->exception = std::unique_ptr<const IException>(e);
 			self->state = EFiberState::CRASHED;
 		}
 		catch(...)
 		{
+			IF_DEBUG_PRINTF("TFiber@%p::Boot(): caught unknown exception\n", self);
 			self->exception = std::unique_ptr<const IException>(new TUnknownException());
 			self->state = EFiberState::CRASHED;
 		}
 
 		self->shutdown = false;
 		self->thread->fibers.RemoveItem(self, NEG1);
-		IF_DEBUG_PRINTF("TFiber::Boot(): calling scheduler self=%p\n", self);
+		IF_DEBUG_PRINTF("TFiber@%p::Boot(): terminating, calling scheduler\n", self);
 		TFiber::Schedule();
 	}
 
