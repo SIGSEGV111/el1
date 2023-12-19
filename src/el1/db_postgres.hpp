@@ -174,10 +174,13 @@ namespace el1::db::postgres
 			void ShutdownNotifyChannel(const TString& channel_name);
 
 		public:
+			TPostgresConnection();
 			TPostgresConnection(const TSortedMap<TString, const TString>& properties);
 			TPostgresConnection(const TPostgresConnection&) = delete;
 			TPostgresConnection(TPostgresConnection&&) = delete;
 			~TPostgresConnection();
+
+			void Connect(const TSortedMap<TString, const TString>& properties);
 
 			std::unique_ptr<IStatement> Prepare(const TString& sql) final override;
 			std::unique_ptr<IResultStream> Execute(const TString& sql, array_t<query_arg_t> args = array_t<query_arg_t>()) final override;

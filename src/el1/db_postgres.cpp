@@ -308,7 +308,7 @@ namespace el1::db::postgres
 		for(usys_t i = 0; i < N_OID_TYPE_MAP; i++)
 			if(*ARR_OID_TYPE_MAP[i].type == type)
 				return ARR_OID_TYPE_MAP + i;
-		EL_ERROR(!fallback_nullptr, TInvalidArgumentException, "type", "type not mapped");
+		EL_ERROR(!fallback_nullptr, TException, TString::Format("type %q not mapped", debug::Demangle(type.name())));
 		return nullptr;
 	}
 
@@ -683,8 +683,19 @@ namespace el1::db::postgres
 		}
 	}
 
-	TPostgresConnection::TPostgresConnection(const TSortedMap<TString, const TString>& properties) : pg_connection(nullptr)
+	TPostgresConnection::TPostgresConnection() : pg_connection(nullptr)
 	{
+	}
+
+	TPostgresConnection::TPostgresConnection(const TSortedMap<TString, const TString>& properties) : TPostgresConnection()
+	{
+		Connect(properties);
+	}
+
+	void TPostgresConnection::Connect(const TSortedMap<TString, const TString>& properties)
+	{
+		EL_ERROR(pg_connection != nullptr, TException, "already connected");
+
 		TList<std::unique_ptr<char[]>> keywords;
 		TList<std::unique_ptr<char[]>> values;
 
