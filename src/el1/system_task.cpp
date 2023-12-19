@@ -622,7 +622,8 @@ namespace el1::system::task
 		IF_DEBUG_PRINTF("TFiber@%p::Join()\n", this);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		EL_ERROR(this->state == EFiberState::ACTIVE || this == this->thread->active_fiber, TLogicException);
-		EL_ERROR(this->state == EFiberState::CONSTRUCTED, TLogicException);
+		if(this->state == EFiberState::CONSTRUCTED)
+			return nullptr;
 
 		while(this->IsAlive())
 		{
