@@ -284,7 +284,7 @@ namespace el1::io::collection::list
 			return n_items_max;
 		}
 
-		iosize_t ReadIn(stream::ISource<T>& source, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true) final override
+		iosize_t ReadIn(stream::ISource<T>& source, const iosize_t n_items_max = (iosize_t)-1, const bool = true) final override
 		{
 			const usys_t n_prealloc_req = util::Min<iosize_t>(n_items_max, n_items_prealloc);
 			usys_t n_preallocated = list->CountPreallocated();
@@ -472,7 +472,7 @@ namespace el1::io::collection::list
 
 	template<typename T>
 	template<typename S>
-	void array_t<T>::Sort(const ESortOrder order, S sorter)
+	void array_t<T>::Sort(const ESortOrder, S)
 	{
 		EL_NOT_IMPLEMENTED;
 	}
@@ -593,7 +593,7 @@ namespace el1::io::collection::list
 	T& TList_Insert_Impl<T, true>::Insert(const ssys_t index, T&& item)
 	{
 		TList<T>* list = static_cast<TList<T>*>(this);
-		return *list->GeneratorInsert(index, [&item](const usys_t i) { return std::move(item); }, 1);
+		return *list->GeneratorInsert(index, [&item](const usys_t) { return std::move(item); }, 1);
 	}
 
 	template<typename T>

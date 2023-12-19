@@ -17,7 +17,7 @@ namespace el1::db::postgres
 	using namespace io::format::json;
 	using namespace io::collection::list;
 
-	static Oid LookupOidByType(const std::type_info& type);
+	// static Oid LookupOidByType(const std::type_info& type);
 	static usys_t LookupTypeInfoByOid(const Oid oid);
 	static const oid_type_map_t* LookupTypeInfoByType(const std::type_info& type, const bool fallback_nullptr);
 
@@ -236,8 +236,7 @@ namespace el1::db::postgres
 		if(out)
 		{
 			const usys_t len = str.chars.Pipe().Transform(io::text::encoding::utf8::TUTF8Encoder()).Read((byte_t*)out, str.Length() * 4U);
-			((char*)out)[len] = 0;
-			return len + 1;
+			return len;
 		}
 		else
 		{
@@ -288,13 +287,13 @@ namespace el1::db::postgres
 
 	const usys_t N_OID_TYPE_MAP = sizeof(ARR_OID_TYPE_MAP) / sizeof(ARR_OID_TYPE_MAP[0]);
 
-	static Oid LookupOidByType(const std::type_info& type)
-	{
-		for(usys_t i = 0; i < N_OID_TYPE_MAP; i++)
-			if(*ARR_OID_TYPE_MAP[i].type == type)
-				return ARR_OID_TYPE_MAP[i].oid;
-		EL_THROW(TInvalidArgumentException, "type", "type not mapped");
-	}
+	// static Oid LookupOidByType(const std::type_info& type)
+	// {
+	// 	for(usys_t i = 0; i < N_OID_TYPE_MAP; i++)
+	// 		if(*ARR_OID_TYPE_MAP[i].type == type)
+	// 			return ARR_OID_TYPE_MAP[i].oid;
+	// 	EL_THROW(TInvalidArgumentException, "type", "type not mapped");
+	// }
 
 	static usys_t LookupTypeInfoByOid(const Oid oid)
 	{
@@ -340,6 +339,11 @@ namespace el1::db::postgres
 		return fifo.OnInputReady();
 	}
 
+	TString TResultStream::SQL() const
+	{
+		return sql;
+	}
+
 	bool TResultStream::IsMetadataReady() const
 	{
 		return columns.Count() > 0;
@@ -362,7 +366,7 @@ namespace el1::db::postgres
 
 	bool TResultStream::End() const
 	{
-		return fifo.OnOutputReady() == nullptr;
+		return fifo.Remaining() == 0 && fifo.OnInputReady() == nullptr;
 	}
 
 	usys_t TResultStream::CountColumns() const
@@ -441,14 +445,19 @@ namespace el1::db::postgres
 		const ExecStatusType status = PQresultStatus(current_result.get());
 		switch(status)
 		{
-			case PGRES_EMPTY_QUERY:
-				EL_THROW(TException, "empty query");
 			case PGRES_COMMAND_OK:
 				goto gt_begin;
+
 			case PGRES_TUPLES_OK:
 				// last result of this query to signal successful execution - it should not contain any rows
 				EL_ERROR(PQntuples(current_result.get()) != 0, TLogicException);
 				goto gt_begin;
+
+			case PGRES_SINGLE_TUPLE:
+				break;
+
+			case PGRES_EMPTY_QUERY:
+				EL_THROW(TException, "empty query");
 			case PGRES_COPY_OUT:
 				EL_THROW(TLogicException);
 			case PGRES_COPY_IN:
@@ -461,8 +470,6 @@ namespace el1::db::postgres
 				EL_THROW(TPostgresException, current_result.get(), "PGRES_FATAL_ERROR");
 			case PGRES_COPY_BOTH:
 				EL_THROW(TLogicException);
-			case PGRES_SINGLE_TUPLE:
-				break;
 			case PGRES_PIPELINE_SYNC:
 				EL_THROW(TLogicException);
 			case PGRES_PIPELINE_ABORTED:
@@ -501,7 +508,7 @@ namespace el1::db::postgres
 		DeserializeResult(InternalMoveNext());
 	}
 
-	TResultStream::TResultStream(TPostgresConnection* const conn) : conn(conn)
+	TResultStream::TResultStream(TPostgresConnection* const conn, TString sql) : conn(conn), sql(std::move(sql))
 	{
 	}
 
@@ -772,7 +779,8 @@ namespace el1::db::postgres
 	std::unique_ptr<IResultStream> TPostgresConnection::Execute(const TString& sql, array_t<query_arg_t> args)
 	{
 		Oid oids[args.Count()];
-		const void* values[args.Count()];
+		TList<byte_t> values[args.Count()];
+		void* value_ptrs[args.Count()];
 		int lengths[args.Count()];
 		int formats[args.Count()];
 
@@ -784,21 +792,24 @@ namespace el1::db::postgres
 
 			if(a.value != nullptr)
 			{
-				oids[i] = LookupOidByType(*a.type);
-				values[i] = a.value;
-				lengths[i] = a.sz_bytes;
+				const oid_type_map_t& ti = *LookupTypeInfoByType(*a.type, false);
+				oids[i] = ti.oid;
+				lengths[i] = ti.serialize(ti, a.value, nullptr);
+				values[i].SetCount(lengths[i]);
+				value_ptrs[i] = &values[i][0];
+				lengths[i] = ti.serialize(ti, a.value, value_ptrs[i]);
 				formats[i] = 1;
 			}
 			else
 			{
 				oids[i] = 0;
-				values[i] = nullptr;
+				value_ptrs[i] = nullptr;
 				lengths[i] = 0;
 				formats[i] = 1;
 			}
 		}
 
-		EL_ERROR(PQsendQueryParams((PGconn*)pg_connection, sql.MakeCStr().get(), args.Count(), &oids[0], (char**)&values[0], &lengths[0], &formats[0], 1) != 1, TPostgresException, pg_connection, "unable to dispatch query to server");
+		EL_ERROR(PQsendQueryParams((PGconn*)pg_connection, sql.MakeCStr().get(), args.Count(), &oids[0], (char**)&value_ptrs[0], &lengths[0], &formats[0], 1) != 1, TPostgresException, pg_connection, "unable to dispatch query to server");
 
 		PQsetSingleRowMode((PGconn*)pg_connection);	// sometimes it works, sometimes it doesn't - after consulting the libPQ source it depends on whether or not the connection has an active result pending. Now we can't know this here, since we are working in a pipeline and we are here on the sending side, not the receiving side, so we do not know in what state the result processing is. So by trial-and-error I found that the first query needs it here, while further queries need it in ReaderMain()... and that seems to work... for now.
 
@@ -806,7 +817,7 @@ namespace el1::db::postgres
 
 		fib_flusher.Resume();
 
-		auto rs = std::unique_ptr<TResultStream>(new TResultStream(this));
+		auto rs = std::unique_ptr<TResultStream>(new TResultStream(this, sql));
 		active_queries.Append(rs.get());
 		return rs;
 	}

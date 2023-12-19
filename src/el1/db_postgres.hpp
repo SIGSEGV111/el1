@@ -90,10 +90,11 @@ namespace el1::db::postgres
 			TPostgresConnection* conn;
 			io::stream::fifo::TFifo<void*, N_FIFO_ROWS> fifo;
 			io::collection::list::TList<TPostgresColumnDescription> columns;
+			const TString sql;
 
 			TResultStream(TResultStream&&) = delete;
 			TResultStream(const TResultStream&) = delete;
-			TResultStream(TPostgresConnection* const conn);
+			TResultStream(TPostgresConnection* const conn, TString sql);
 
 			result_ptr_t InternalMoveNext();
 			void DeserializeResult(result_ptr_t current_result);
@@ -101,6 +102,7 @@ namespace el1::db::postgres
 			void MoveFirst();
 
 		public:
+			TString SQL() const final override EL_GETTER;
 			const system::waitable::IWaitable* OnNewData() const final override;
 			bool IsMetadataReady() const final override;
 			bool IsFirstRowReady() const final override;

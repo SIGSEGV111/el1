@@ -763,7 +763,7 @@ namespace el1::io::stream
 	}
 
 	template<typename T>
-	iosize_t Pump(ISource<T>& source, ISink<T>& sink, const iosize_t n_items_max, const bool blocking)
+	iosize_t Pump(ISource<T>& source, ISink<T>& sink, const iosize_t n_items_max, const bool)
 	{
 		return _Pump<T>(source, sink, n_items_max);
 	}

@@ -136,7 +136,7 @@ namespace el1::error
 	}
 
 	template<typename E, typename ...A>
-	static void Throw [[ noreturn ]] (IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function, A... a)
+	static void Throw [[ noreturn ]] (IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function, A&&... a)
 	{
 		E e(a...);
 		e.Configure(nested, expression, file, line, function);
@@ -152,7 +152,7 @@ namespace el1::error
 	}
 
 	template<typename E, typename ...A>
-	static void Warning(IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function, A... a)
+	static void Warning(IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function, A&&... a)
 	{
 		E e(a...);
 		e.Configure(nested, expression, file, line, function);
@@ -163,7 +163,7 @@ namespace el1::error
 
 	#define EL_FORWARD(nested, type, ...) do { using namespace el1::error; Throw<type>((nested).Clone(), nullptr, __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__); } while(false)
 
-	#define EL_ANNOTATE_ERROR(expression, type, ...) (([&]() { using namespace el1::error; try { return ((expression)); } catch(const IException& nested) { Throw<type>(nested.Clone(), #expression, __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__); } })())
+	#define EL_ANNOTATE_ERROR(expression, type, ...) (([&](const char* const funcname) -> decltype(((expression))) { using namespace el1::error; try { return ((expression)); } catch(const IException& nested) { Throw<type>(nested.Clone(), #expression, __FILE__, __LINE__, funcname __VA_OPT__(,) __VA_ARGS__); } })(__func__))
 
 	#define EL_ERROR(condition, type, ...) do { if( EL_UNLIKELY((condition)) ) { using namespace el1::error; Throw<type>(nullptr, #condition, __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__); } } while(false)
 
@@ -173,13 +173,13 @@ namespace el1::error
 
 
 	#ifdef EL_OS_CLASS_POSIX
-		#define EL_SYSERR(syscall) (([&](){ \
+		#define EL_SYSERR(syscall) (([&](const char* const funcname){ \
 			using namespace el1::error; \
 			const auto __syscall_result = ((syscall)); \
 			if( EL_UNLIKELY((long)__syscall_result == -1L) ) \
-				Throw<TSyscallException>(nullptr, #syscall, __FILE__, __LINE__, __func__); \
+				Throw<TSyscallException>(nullptr, #syscall, __FILE__, __LINE__, funcname); \
 			return __syscall_result; \
-		})())
+		})(__func__))
 
 		struct TPthreadException : IException
 		{

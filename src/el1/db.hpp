@@ -44,6 +44,8 @@ namespace el1::db
 			// this function may return nullptr in case the connection was closed
 			virtual IDatabaseConnection* Connection() const EL_GETTER = 0;
 
+			virtual TString SQL() const EL_GETTER = 0;
+
 			// returns true once the end of the stream has been reached
 			virtual bool End() const EL_GETTER = 0;
 
@@ -123,8 +125,18 @@ namespace el1::db
 	template<typename ... A>
 	std::tuple<const A* ...> IResultStream::Row() const
 	{
-		EL_ERROR(sizeof...(A) != CountColumns(), TInvalidArgumentException, "A...", "the number of template arguments does not match with the number of columns in the query result");
-		return _RowToTuple<std::tuple<const A* ...> >(std::make_index_sequence<sizeof...(A)>());
+		try
+		{
+			const auto n_columns = CountColumns();
+			EL_ERROR(End(), TException, "EOF reached");
+			EL_ERROR(n_columns == 0, TException, "query did not produce any output");
+			EL_ERROR(sizeof...(A) != n_columns, TInvalidArgumentException, "A...", "the number of template arguments does not match with the number of columns in the query result");
+			return _RowToTuple<std::tuple<const A* ...> >(std::make_index_sequence<sizeof...(A)>());
+		}
+		catch(const error::IException& e)
+		{
+			EL_FORWARD(e, TException, TString::Format("while processing result of query %q", SQL()));
+		}
 	}
 
 	template<typename ... A>
