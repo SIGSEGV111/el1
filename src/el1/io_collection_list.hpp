@@ -206,13 +206,13 @@ namespace el1::io::collection::list
 		friend struct TList_Insert_Impl<T, std::is_copy_constructible<T>::value>;
 		friend struct TListSink<T>;
 		protected:
-			void Prealloc(const usys_t n_items_need);
 			void Shrink(const usys_t n_items_shrink);
 			void CopyConstruct(const T* arr_items_source, const usys_t n_items_source, const usys_t n_prealloc = 0);
 			void MoveItems(const usys_t idx_to, const usys_t idx_from, const usys_t n_items_move);
 			void DestructItems(const usys_t index, const usys_t n_items_destruct);
 
 		public:
+			void Prealloc(const usys_t n_items_need);
 			void Truncate() noexcept;
 			void Clear() noexcept;
 			void Clear(const usys_t n_prealloc); // n_prealloc == NEG1 => keep existing buffer

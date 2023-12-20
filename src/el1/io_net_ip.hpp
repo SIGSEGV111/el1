@@ -169,7 +169,7 @@ namespace el1::io::net::ip
 			// and remote_ip and remote_port (if not null) will return the ip and port of the sender of the message
 			bool Receive(collection::list::TList<byte_t>& msg_buffer, ipaddr_t* const remote_ip = nullptr, port_t* const remote_port = nullptr);
 
-			// return true iof the full message was sent successfully, returns false if the outbound queue is full
+			// return true if the full message was sent successfully, returns false if the outbound queue is full
 			// throws an exception if the message was sent but truncated for any reason
 			bool Send(const ipaddr_t remote_ip, const port_t remote_port, collection::list::array_t<const byte_t> msg_buffer) EL_WARN_UNUSED_RESULT;
 			bool Send(const ipaddr_t remote_ip, const port_t remote_port, const void* const buffer, const usys_t sz_buffer) EL_WARN_UNUSED_RESULT;
