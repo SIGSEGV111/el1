@@ -774,12 +774,12 @@ namespace el1::db::postgres
 
 	void TPostgresConnection::StartNotifyChannel(const TString& channel_name)
 	{
-		Execute(TString::Format("LISTEN %'q", channel_name));
+		Execute(TString::Format("LISTEN %s", channel_name))->DiscardAllRows();
 	}
 
 	void TPostgresConnection::ShutdownNotifyChannel(const TString& channel_name)
 	{
-		Execute(TString::Format("UNLISTEN %'q", channel_name));
+		Execute(TString::Format("UNLISTEN %s", channel_name))->DiscardAllRows();
 	}
 
 	std::unique_ptr<IStatement> TPostgresConnection::Prepare(const TString& sql)
@@ -838,7 +838,7 @@ namespace el1::db::postgres
 		std::shared_ptr<TNotifyChannel>* channel = notify_channels.Get(channel_name);
 		if(channel == nullptr)
 		{
-			channel = &notify_channels.Add(channel_name, std::shared_ptr<TNotifyChannel>(new TNotifyChannel()));
+			channel = &notify_channels.Add(channel_name, std::shared_ptr<TNotifyChannel>(new TNotifyChannel(this)));
 			StartNotifyChannel(channel_name);
 		}
 

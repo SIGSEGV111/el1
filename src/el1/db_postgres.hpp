@@ -133,6 +133,8 @@ namespace el1::db::postgres
 	{
 		TPostgresConnection* conn;
 		io::collection::list::TList<TChannelListener*> listeners;
+
+		TNotifyChannel(TPostgresConnection* conn) : conn(conn) {}
 	};
 
 	class TChannelListener
