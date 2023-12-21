@@ -2,6 +2,7 @@
 #include "io_text_encoding_utf8.hpp"
 #include <string.h>
 #include <iostream>
+#include <math.h>
 
 namespace el1::io::text::string
 {
@@ -229,6 +230,10 @@ namespace el1::io::text::string
 
 	TString TNumberFormatter::Format(const double _value) const
 	{
+		if(isnan(_value)) return "NAN";
+		if(isinf(_value) > 0) return "+INF";
+		if(isinf(_value) < 0) return "-INF";
+
 		double value = _value;
 		TString out = MakeDecimalPart(value);
 
@@ -244,6 +249,7 @@ namespace el1::io::text::string
 
 	TString TNumberFormatter::MakeDecimalPart(double& value) const
 	{
+		EL_ERROR(!isfinite(value), TInvalidArgumentException, "value", "value must be a finite float number");
 		const TList< TUTF32>& symbols = *config.symbols;
 		const u64_t n_symbols = symbols.Count();
 		EL_ERROR(n_symbols < 2, TInvalidArgumentException, "config.symbols", "we need at least two symbols to format a number");
