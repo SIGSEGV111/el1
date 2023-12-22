@@ -1,4 +1,6 @@
 #pragma once
+#include "def.hpp"
+#include "io_types.hpp"
 #include "io_graphics_color.hpp"
 
 namespace el1::dev::spi::led::neopixel

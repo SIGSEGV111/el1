@@ -231,8 +231,8 @@ namespace el1::io::text::string
 	TString TNumberFormatter::Format(const double _value) const
 	{
 		if(isnan(_value)) return "NAN";
-		if(isinf(_value) > 0) return "+INF";
-		if(isinf(_value) < 0) return "-INF";
+		if(isinf(_value)) return "INF";
+		EL_ERROR(!isfinite(_value), TLogicException);
 
 		double value = _value;
 		TString out = MakeDecimalPart(value);

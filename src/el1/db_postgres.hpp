@@ -183,6 +183,7 @@ namespace el1::db::postgres
 			~TPostgresConnection();
 
 			void Connect(const TSortedMap<TString, const TString>& properties);
+			void Disconnect();
 
 			std::unique_ptr<IStatement> Prepare(const TString& sql) final override;
 			std::unique_ptr<IResultStream> Execute(const TString& sql, array_t<query_arg_t> args = array_t<query_arg_t>()) final override;

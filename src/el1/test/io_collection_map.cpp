@@ -22,6 +22,14 @@ namespace
 		EXPECT_EQ(string_map.Items().Count(), 0U);
 	}
 
+	TEST(io_collection_map, TSortedMap_UniquePtr)
+	{
+		TSortedMap<int, std::unique_ptr<int>> map;
+		std::unique_ptr<int>& x = EL_ANNOTATE_ERROR(map.Add(10, std::unique_ptr<int>(new int(15))), TException, "test");
+		EXPECT_TRUE(*x == 15);
+		EXPECT_TRUE(*map[10] == 15);
+	}
+
 	TEST(io_collection_map, TSortedMap_Add)
 	{
 		{

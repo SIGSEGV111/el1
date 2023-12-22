@@ -129,7 +129,7 @@ namespace el1::io::net::http
 
 	usys_t THttpHeaderFields::ContentLength() const
 	{
-		const TString* v = this->Get(L"content-length");
+		const TString* v = this->Get(L"Content-Length");
 		if(v == nullptr)
 			return NEG1;
 		else
@@ -138,7 +138,7 @@ namespace el1::io::net::http
 
 	void THttpHeaderFields::ContentLength(const usys_t new_content_length)
 	{
-		this->Set(L"content-length", TString::Format("%d", new_content_length));
+		this->Set(L"Content-Length", TString::Format("%d", new_content_length));
 	}
 
 	EStatus THttpServer::HandleSingleRequest(ISource<byte_t>& source, ISink<byte_t>& sink, request_handler_t handler)
@@ -197,7 +197,7 @@ namespace el1::io::net::http
 			arr_req.Clear();
 			EL_ERROR(request_line == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, "header not correctly terminated by empty line");
 
-			IF_DEBUG_PRINTF("got content-length %zu\n", (size_t)request.header_fields.ContentLength());
+			IF_DEBUG_PRINTF("got Content-Length %zu\n", (size_t)request.header_fields.ContentLength());
 			auto lp = ss.Limit(request.header_fields.ContentLength());
 			request.body = request.header_fields.ContentLength() == NEG1 ? &source : &lp;
 

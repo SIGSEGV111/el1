@@ -72,7 +72,7 @@ namespace
 					EXPECT_TRUE(i != nullptr && *i == 1);
 					EXPECT_TRUE(j != nullptr && *j == 2);
 				}
-				catch(const TInvalidArgumentException&)
+				catch(const IException&)
 				{
 					_throw = true;
 				}
@@ -93,7 +93,7 @@ namespace
 					EXPECT_TRUE(i != nullptr && *i == 1);
 					EXPECT_TRUE(j != nullptr && *j == 2);
 				}
-				catch(const TInvalidArgumentException&)
+				catch(const IException&)
 				{
 					_throw = true;
 				}

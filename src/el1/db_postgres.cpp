@@ -1,4 +1,5 @@
 #ifdef EL1_WITH_POSTGRES
+#include "debug.hpp"
 #include "db_postgres.hpp"
 #include "io_collection_list.hpp"
 #include "io_format_json.hpp"
@@ -577,109 +578,131 @@ namespace el1::db::postgres
 
 	void TPostgresConnection::FlusherMain()
 	{
-		system::task::THandleWaitable on_tx_ready({.read=false,.write=true,.other=false}, PQsocket((PGconn*)pg_connection));
-		for(;;)
+		try
 		{
-			const int r = PQflush((PGconn*)pg_connection);
-			EL_ERROR(r < 0, TPostgresException, pg_connection, "unable to flush output buffer to server");
-			if(r > 0) // more data to send but unable at the moment
-				on_tx_ready.WaitFor();
-			else // no more data to send (r == 0)
-				TFiber::Self()->Stop();
+			system::task::THandleWaitable on_tx_ready({.read=false,.write=true,.other=false}, PQsocket((PGconn*)pg_connection));
+			for(;;)
+			{
+				const int r = PQflush((PGconn*)pg_connection);
+				EL_ERROR(r < 0, TPostgresException, pg_connection, "unable to flush output buffer to server");
+				if(r > 0) // more data to send but unable at the moment
+					on_tx_ready.WaitFor();
+				else // no more data to send (r == 0)
+					TFiber::Self()->Stop();
+			}
+		}
+		catch(shutdown_t)
+		{
+		}
+		catch(...)
+		{
+			Disconnect();
+			throw;
 		}
 	}
 
 	void TPostgresConnection::ReaderMain()
 	{
-		system::task::THandleWaitable on_rx_ready({.read=true,.write=false,.other=true}, PQsocket((PGconn*)pg_connection));
-		for(;;)
+		try
 		{
-			on_rx_ready.WaitFor();
-			EL_ERROR(PQconsumeInput((PGconn*)pg_connection) == 0, TPostgresException, pg_connection, "unable to process data from server server");
-
-			gt_begin:;
-			while(active_queries.Count() > 0 && PQisBusy((PGconn*)pg_connection) == 0)
+			system::task::THandleWaitable on_rx_ready({.read=true,.write=false,.other=true}, PQsocket((PGconn*)pg_connection));
+			for(;;)
 			{
-				void* const result = PQgetResult((PGconn*)pg_connection);
-				PQsetSingleRowMode((PGconn*)pg_connection);
-				TResultStream* const rs = active_queries[0];
+				on_rx_ready.WaitFor();
+				EL_ERROR(PQconsumeInput((PGconn*)pg_connection) == 0, TPostgresException, pg_connection, "unable to process data from server server");
 
-				if(EL_UNLIKELY(result == nullptr))
+				gt_begin:;
+				while(active_queries.Count() > 0 && PQisBusy((PGconn*)pg_connection) == 0)
 				{
-					// end of result stream reached
-					active_queries.Remove(0, 1U);
-					if(EL_LIKELY(rs != nullptr))
-					{
-						rs->fifo.CloseOutput();
-						rs->conn = nullptr;
-					}
-				}
-				else
-				{
-					const ExecStatusType status = PQresultStatus((PGresult*)result);
+					void* const result = PQgetResult((PGconn*)pg_connection);
+					PQsetSingleRowMode((PGconn*)pg_connection);
+					TResultStream* const rs = active_queries[0];
 
-					switch(status)
+					if(EL_UNLIKELY(result == nullptr))
 					{
-						case PGRES_EMPTY_QUERY:
-							break;
-						case PGRES_COMMAND_OK:
-							break;
-						case PGRES_TUPLES_OK:
-							break;
-						case PGRES_COPY_OUT:
-							EL_NOT_IMPLEMENTED;
-						case PGRES_COPY_IN:
-							EL_NOT_IMPLEMENTED;
-						case PGRES_BAD_RESPONSE:
-							EL_THROW(TLogicException);
-						case PGRES_NONFATAL_ERROR:
-							break;
-						case PGRES_FATAL_ERROR:
-							break;
-						case PGRES_COPY_BOTH:
-							EL_THROW(TLogicException);
-						case PGRES_SINGLE_TUPLE:
-							break;
-						case PGRES_PIPELINE_SYNC:
-							PQclear((PGresult*)result);
-							goto gt_begin;
-						case PGRES_PIPELINE_ABORTED:
-							rs->fifo.WriteAll(&result, 1U);
+						// end of result stream reached
+						active_queries.Remove(0, 1U);
+						if(EL_LIKELY(rs != nullptr))
+						{
 							rs->fifo.CloseOutput();
 							rs->conn = nullptr;
-							active_queries.Remove(0, 1U);
-							goto gt_begin;
-					}
-
-					if(EL_UNLIKELY(rs == nullptr))
-					{
-						// client lost interest in the query and closed the result stream => discard result
-						PQclear((PGresult*)result);
+						}
 					}
 					else
 					{
-						// hand over result
-						rs->fifo.WriteAll(&result, 1U);
+						const ExecStatusType status = PQresultStatus((PGresult*)result);
+
+						switch(status)
+						{
+							case PGRES_EMPTY_QUERY:
+								break;
+							case PGRES_COMMAND_OK:
+								break;
+							case PGRES_TUPLES_OK:
+								break;
+							case PGRES_COPY_OUT:
+								EL_NOT_IMPLEMENTED;
+							case PGRES_COPY_IN:
+								EL_NOT_IMPLEMENTED;
+							case PGRES_BAD_RESPONSE:
+								EL_THROW(TLogicException);
+							case PGRES_NONFATAL_ERROR:
+								break;
+							case PGRES_FATAL_ERROR:
+								break;
+							case PGRES_COPY_BOTH:
+								EL_THROW(TLogicException);
+							case PGRES_SINGLE_TUPLE:
+								break;
+							case PGRES_PIPELINE_SYNC:
+								PQclear((PGresult*)result);
+								goto gt_begin;
+							case PGRES_PIPELINE_ABORTED:
+								rs->fifo.WriteAll(&result, 1U);
+								rs->fifo.CloseOutput();
+								rs->conn = nullptr;
+								active_queries.Remove(0, 1U);
+								goto gt_begin;
+						}
+
+						if(EL_UNLIKELY(rs == nullptr))
+						{
+							// client lost interest in the query and closed the result stream => discard result
+							PQclear((PGresult*)result);
+						}
+						else
+						{
+							// hand over result
+							rs->fifo.WriteAll(&result, 1U);
+						}
+					}
+				}
+
+				while(PGnotify* event = PQnotifies((PGconn*)pg_connection))
+				{
+					const TString channel_name = event->relname;
+					auto payload = std::shared_ptr<const TString>(new TString(event->extra));
+					PQfreemem(event);
+
+					std::shared_ptr<TNotifyChannel>* channel = notify_channels.Get(channel_name);
+
+					// It might happen that all listeners went away and there was still an event in the queue from
+					// the server. Thus we might end up not having a TNotifyChannel any more but still received an event for it
+					if(channel != nullptr)
+					{
+						for(auto l : (*channel)->listeners)
+							l->pending_events.Append(payload);
 					}
 				}
 			}
-
-			while(PGnotify* event = PQnotifies((PGconn*)pg_connection))
-			{
-				const TString channel_name = event->relname;
-				auto payload = std::shared_ptr<const TString>(new TString(event->extra));
-				PQfreemem(event);
-
-				std::shared_ptr<TNotifyChannel>* channel = notify_channels.Get(channel_name);
-
-				// It might happen that all listeners went away and there was still an event in the queue from
-				// the server. Thus we might end up not having a TNotifyChannel any more but still received an event for it
-				if(channel != nullptr)
-				{
-					for(auto l : (*channel)->listeners)
-						l->pending_events.Append(payload);
-				}
-			}
+		}
+		catch(shutdown_t)
+		{
+		}
+		catch(...)
+		{
+			Disconnect();
+			throw;
 		}
 	}
 
@@ -748,7 +771,7 @@ namespace el1::db::postgres
 		fib_reader.Start(TFunction(this, &TPostgresConnection::ReaderMain));
 	}
 
-	TPostgresConnection::~TPostgresConnection()
+	void TPostgresConnection::Disconnect()
 	{
 		for(auto pair : notify_channels.Items())
 			pair.value->conn = nullptr;
@@ -760,16 +783,32 @@ namespace el1::db::postgres
 				r->conn = nullptr;
 			}
 
-		fib_flusher.Shutdown();
-		fib_reader.Shutdown();
+		active_queries.Clear();
+		notify_channels.Clear();
 
-		if(auto e = fib_flusher.Join())
-			e->Print("FlusherMain()");
-		if(auto e = fib_reader.Join())
-			e->Print("ReaderMain()");
+		if(TFiber::Self() != &fib_flusher)
+		{
+			fib_flusher.Shutdown();
+			if(auto e = fib_flusher.Join())
+				e->Print("FlusherMain()");
+		}
+
+		if(TFiber::Self() != &fib_reader)
+		{
+			fib_reader.Shutdown();
+			if(auto e = fib_reader.Join())
+				e->Print("ReaderMain()");
+		}
 
 		if(pg_connection != nullptr)
 			PQfinish((PGconn*)pg_connection);
+
+		pg_connection = nullptr;
+	}
+
+	TPostgresConnection::~TPostgresConnection()
+	{
+		Disconnect();
 	}
 
 	void TPostgresConnection::StartNotifyChannel(const TString& channel_name)

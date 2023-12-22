@@ -163,7 +163,7 @@ namespace el1::error
 
 	#define EL_FORWARD(nested, type, ...) do { using namespace el1::error; Throw<type>((nested).Clone(), nullptr, __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__); } while(false)
 
-	#define EL_ANNOTATE_ERROR(expression, type, ...) (([&](const char* const funcname) -> decltype(((expression))) { using namespace el1::error; try { return ((expression)); } catch(const IException& nested) { Throw<type>(nested.Clone(), #expression, __FILE__, __LINE__, funcname __VA_OPT__(,) __VA_ARGS__); } })(__func__))
+	#define EL_ANNOTATE_ERROR(expression, type, ...) (([&](const char* const funcname) -> decltype(auto) { using namespace el1::error; try { return ((expression)); } catch(const IException& nested) { Throw<type>(nested.Clone(), #expression, __FILE__, __LINE__, funcname __VA_OPT__(,) __VA_ARGS__); } })(__func__))
 
 	#define EL_ERROR(condition, type, ...) do { if( EL_UNLIKELY((condition)) ) { using namespace el1::error; Throw<type>(nullptr, #condition, __FILE__, __LINE__, __func__ __VA_OPT__(,) __VA_ARGS__); } } while(false)
 

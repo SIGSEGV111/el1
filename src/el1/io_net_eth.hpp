@@ -1,5 +1,5 @@
 #pragma once
-
+#include "def.hpp"
 #include "io_types.hpp"
 
 namespace el1::io::text::string
