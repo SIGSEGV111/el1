@@ -736,23 +736,122 @@ namespace el1::system::task
 		}
 	}
 
-	TString TProcess::Execute(const TPath& exe, const TList<TString>& args)
+	static const auto STREAM_FEEDER_FUNC = [](TProcess::TSink* const dst, const TString* const src) {
+		EL_ERROR(src == nullptr, TInvalidArgumentException, "src", "src must not be nullptr");
+		EL_ERROR(dst == nullptr, TInvalidArgumentException, "dst", "dst must not be nullptr");
+		src->chars.Pipe().Transform(io::text::encoding::TCharEncoder()).ToStream(*dst);
+		if(!dst->CloseOutput())
+			dst->Close();
+	};
+
+	static const auto STREAM_READER_FUNC = [](TProcess::TSource* const src, TString* const dst) {
+		EL_ERROR(src == nullptr, TInvalidArgumentException, "src", "src must not be nullptr");
+		EL_ERROR(dst == nullptr, TInvalidArgumentException, "dst", "dst must not be nullptr");
+		src->Pipe().Transform(io::text::encoding::TCharDecoder()).AppendTo(dst->chars);
+		if(!src->CloseInput())
+			src->Close();
+	};
+
+	bool TProcess::IsAlive() const
 	{
-		TSortedMap<fd_t, TProcess::EFDIO> map;
-		map.Add(0, TProcess::EFDIO::EMPTY);
-		map.Add(1, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
-		map.Add(2, TProcess::EFDIO::INHERIT);
+		switch(TaskState())
+		{
+			case ETaskState::NOT_CREATED:
+			case ETaskState::ZOMBIE:
+				return false;
+			case ETaskState::RUNNING:
+			case ETaskState::STOPPED:
+			case ETaskState::BLOCKED:
+				return true;
+		}
+		EL_THROW(TLogicException);
+	}
 
-		EL_ERROR(map.Items().Count() != 3, TLogicException);
-		EL_ERROR(map.Items()[0].key < 0, TLogicException);
-		EL_ERROR(map.Items()[1].key < 0, TLogicException);
-		EL_ERROR(map.Items()[2].key < 0, TLogicException);
+	process_id_t TProcess::PID() const
+	{
+		return pid;
+	}
 
-		TProcess proc(exe, args, map);
-		TString str = proc.ReceiveStream(1)->Pipe().Transform(io::text::encoding::TCharDecoder()).Collect();
-		int status;
-		EL_ERROR((status = proc.Join()) != 0, TException, TString::Format(L"subprocess %q exited with code=%d", (TString)exe, status));
-		return str;
+	TString TProcess::Execute(const TPath& exe, const TList<TString>& args, const TString* const stdin, TString* const _stderr, const TTime timeout)
+	{
+		TSortedMap<fd_t, TProcess::EFDIO> fdmap;
+		fdmap.Add(0, stdin == nullptr ? TProcess::EFDIO::EMPTY : TProcess::EFDIO::PIPE_PARENT_TO_CHILD);
+		fdmap.Add(1, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
+		fdmap.Add(2, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
+
+		TProcess proc(exe, args, fdmap);
+
+		TString stdout;
+		TString stderr;
+		TFiber stdin_feeder([&](){ STREAM_FEEDER_FUNC(proc.SendStream(0), stdin); }, stdin != nullptr);
+		TFiber stdout_reader([&](){ STREAM_READER_FUNC(proc.ReceiveStream(1), &stdout); });
+		TFiber stderr_reader([&](){ STREAM_READER_FUNC(proc.ReceiveStream(2), &stderr); });
+
+		try
+		{
+			const TTime ts_until = timeout >= 0 ? (TTime::Now(EClock::MONOTONIC) + timeout) : -1;
+			while(proc.IsAlive())
+				EL_ERROR(!proc.OnTerminate().WaitFor(ts_until, true), TTimeoutException, exe, args, stderr, proc.pid, timeout);
+
+			const process_id_t pid = proc.pid;
+			const int exit_code = proc.Join();
+
+			if(auto e = stdin_feeder.Join())  EL_FORWARD(*e, TLogicException);
+			if(auto e = stdout_reader.Join()) EL_FORWARD(*e, TLogicException);
+			if(auto e = stderr_reader.Join()) EL_FORWARD(*e, TLogicException);
+
+			if(_stderr != nullptr)
+				*_stderr = std::move(stderr);
+
+			EL_ERROR(exit_code != 0, TNonZeroExitException, exe, args, stderr, pid, exit_code);
+			return stdout;
+		}
+		catch(const IException& e)
+		{
+			proc.Shutdown();
+			if(stdin_feeder.Join())  {}
+			if(stdout_reader.Join()) {}
+			if(stderr_reader.Join()) {}
+			if(_stderr != nullptr)
+				*_stderr = stderr;
+			throw;
+		}
+	}
+
+	TProcess::ISubProcessException::ISubProcessException(const io::file::TPath& exe, const TArgs& args, io::text::string::TString stderr, const process_id_t pid) : exe(exe), args(args), stderr(std::move(stderr)), pid(pid) {}
+
+	TString TProcess::TNonZeroExitException::Message() const
+	{
+		TString s = TString::Format("%q", exe.ToString());
+		for(auto& a : args)
+			s += TString::Format(" %q", a);
+		return TString::Format("subprocess %d (%s) terminated with exit-code %d; stderr output:\n%s", pid, s, exit_code, stderr);
+	}
+
+	IException* TProcess::TNonZeroExitException::Clone() const
+	{
+		return new TNonZeroExitException(*this);
+	}
+
+	TProcess::TNonZeroExitException::TNonZeroExitException(const io::file::TPath& exe, const TArgs& args, io::text::string::TString stderr, const process_id_t pid, const int exit_code) : ISubProcessException(exe, args, std::move(stderr), pid), exit_code(exit_code)
+	{
+	}
+
+	TString TProcess::TTimeoutException::Message() const
+	{
+		TString s = TString::Format("%q", exe.ToString());
+		for(auto& a : args)
+			s += TString::Format(" %q", a);
+		return TString::Format("subprocess %d (%s) exeeded timeout of %d seconds; stderr output:\n%s", pid, s, timeout.ConvertToF(EUnit::SECONDS), stderr);
+	}
+
+	IException* TProcess::TTimeoutException::Clone() const
+	{
+		return new TTimeoutException(*this);
+	}
+
+	TProcess::TTimeoutException::TTimeoutException(const io::file::TPath& exe, const TArgs& args, io::text::string::TString stderr, const process_id_t pid, const TTime timeout) : ISubProcessException(exe, args, std::move(stderr), pid), timeout(timeout)
+	{
 	}
 
 	bool TProcess::WARN_NONZERO_EXIT_IN_DESTRUCTOR = true;

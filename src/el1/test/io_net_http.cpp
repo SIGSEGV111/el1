@@ -108,7 +108,7 @@ namespace
 		});
 
 		const TString url = TString::Format(L"http://localhost:%d/", tcp_server.LocalAddress().port);
-		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", url }), TException);
+		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url }), TProcess::TNonZeroExitException);
 		EXPECT_FALSE(fail);
 	}
 }

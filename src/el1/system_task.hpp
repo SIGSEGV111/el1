@@ -569,37 +569,82 @@ namespace el1::system::task
 				PIPE_CHILD_TO_PARENT	// pipe output from child to parent ISource<byte_t>
 			};
 
+			using TArgs = io::collection::list::TList<TString>;
+			using TEnv = io::collection::map::TSortedMap<TString, const TString>;
+			using TFdMap = io::collection::map::TSortedMap<fd_t, const EFDIO>;
+			using TSource = io::stream::ISource<byte_t>;
+			using TSink = io::stream::ISink<byte_t>;
+
+			struct ISubProcessException : IException
+			{
+				const io::file::TPath exe;
+				const TArgs args;
+				io::text::string::TString stderr;
+				const process_id_t pid;
+
+				ISubProcessException(const io::file::TPath& exe, const TArgs& args, io::text::string::TString stderr, const process_id_t pid);
+			};
+
+			struct TNonZeroExitException : ISubProcessException
+			{
+				const int exit_code;
+
+				io::text::string::TString Message() const;
+				IException* Clone() const;
+
+				TNonZeroExitException(const io::file::TPath& exe, const TArgs& args, io::text::string::TString stderr, const process_id_t pid, const int exit_code);
+			};
+
+			struct TTimeoutException : ISubProcessException
+			{
+				const TTime timeout;
+
+				io::text::string::TString Message() const;
+				IException* Clone() const;
+
+				TTimeoutException(const io::file::TPath& exe, const TArgs& args, io::text::string::TString stderr, const process_id_t pid, const TTime timeout);
+			};
+
 			THandleWaitable& OnTerminate() const { return on_terminate; }
-			void Start(const io::file::TPath& exe, const io::collection::list::TList<TString>& args = io::collection::list::TList<TString>(), const io::collection::map::TSortedMap<fd_t, const EFDIO>& streams = StdioStreams(), const io::collection::map::TSortedMap<TString, const TString>& env = EnvironmentVariables());
+			void Start(const io::file::TPath& exe, const TArgs& args = TArgs(), const TFdMap& streams = StdioStreams(), const TEnv& env = EnvironmentVariables());
 			void Stop() final override;
 			void Resume() final override;
 			bool Kill() final override;
 			bool Shutdown() final override;
 			int Join() EL_WARN_UNUSED_RESULT;
+			bool IsAlive() const;
+			process_id_t PID() const;
 
+			#ifdef EL_OS_LINUX
+				io::collection::map::TSortedMap<TString, TString> Status() const;
+			#endif
 
 // 			const THandleWaitable& OnStateChange() const;
 			ETaskState TaskState() const final override EL_WARN_UNUSED_RESULT;
 
 			// returns nullptr if the specified fd is not mapped (or going in the other direction)
-			io::stream::ISource<byte_t>* ReceiveStream(const fd_t fd) EL_GETTER;
+			TSource* ReceiveStream(const fd_t fd) EL_GETTER;
 			io::stream::ISink<byte_t>* SendStream(const fd_t fd) EL_GETTER;
 
 			static io::collection::map::TSortedMap<fd_t, EFDIO> StdioStreams();
 
 			TProcess(
 				const io::file::TPath& exe,
-				const io::collection::list::TList<TString>& args = io::collection::list::TList<TString>(),
-				const io::collection::map::TSortedMap<fd_t, const EFDIO>& streams = StdioStreams(),
-				const io::collection::map::TSortedMap<TString, const TString>& env = EnvironmentVariables()
+				const TArgs& args = TArgs(),
+				const TFdMap& streams = StdioStreams(),
+				const TEnv& env = EnvironmentVariables()
 			);
 
 			TProcess();
 			~TProcess();
 
-			static io::text::string::TString Execute(const io::file::TPath& exe, const io::collection::list::TList<TString>& args = io::collection::list::TList<TString>());
-
-			// io::collection::list::TList<memory::mapping_info_t> MemoryMappings() const;
+			static io::text::string::TString Execute(
+				const io::file::TPath& exe,
+				const TArgs& args = TArgs(),
+				const TString* const stdin = nullptr,
+				TString* const stderr = nullptr,
+				const TTime timeout = -1
+			);
 	};
 
 }

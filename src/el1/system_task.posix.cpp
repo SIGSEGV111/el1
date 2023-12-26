@@ -581,19 +581,19 @@ namespace el1::system::task
 
 	bool TProcess::Kill()
 	{
-		EL_ERROR(pid == -1, TException, "process not started yet");
+		if(pid == -1) return false;
 		return kill(pid, SIGKILL) == 0;
 	}
 
 	bool TProcess::Shutdown()
 	{
-		EL_ERROR(pid == -1, TException, "process not started yet");
+		if(pid == -1) return false;
 		return kill(pid, SIGTERM) == 0;
 	}
 
 	int TProcess::Join()
 	{
-		EL_ERROR(pid == -1, TException, "process not started yet");
+		if(pid == -1) return 0;
 
 		for(;;)
 		{
@@ -625,14 +625,6 @@ namespace el1::system::task
 				}
 			}
 		}
-	}
-
-	ETaskState TProcess::TaskState() const
-	{
-		if(pid == -1)
-			return ETaskState::NOT_CREATED;
-		else
-			return ETaskState::RUNNING; // FIXME
 	}
 }
 

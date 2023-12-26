@@ -423,6 +423,25 @@ namespace
 			const TString stdout = TProcess::Execute("/bin/echo", { "hello world" });
 			EXPECT_EQ(stdout, "hello world\n");
 		}
+
+		{
+			TString stdin = "hello world foobar";
+			const TString stdout = TProcess::Execute("/bin/cat", {}, &stdin, nullptr, 10);
+			EXPECT_EQ(stdout, "hello world foobar");
+		}
+
+		{
+			TString stdin = "hello world foobar";
+			TString stderr;
+			const TString stdout = TProcess::Execute("/bin/bash", { "-euc", "echo text_on_stderr 1>&2; echo text_on_stdout" }, &stdin, &stderr, 10);
+			EXPECT_EQ(stdout, "text_on_stdout\n");
+			EXPECT_EQ(stderr, "text_on_stderr\n");
+		}
+
+		{
+			EXPECT_THROW(TProcess::Execute("/bin/sleep", { "1m" }, nullptr, nullptr, 1), TProcess::TTimeoutException);
+			EXPECT_THROW(TProcess::Execute("/bin/false"), TProcess::TNonZeroExitException);
+		}
 	}
 
 	TEST(system_task, TFiber_Sleep)

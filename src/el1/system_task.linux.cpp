@@ -231,6 +231,42 @@ namespace el1::system::task
 		on_output_ready.Handle(tx);
 	}
 
+	io::collection::map::TSortedMap<TString, TString> TProcess::Status() const
+	{
+		using namespace io::text::encoding;
+		using namespace io::collection::map;
+		EL_ERROR(pid == -1, TException, "process not created");
+
+		TSortedMap<TString, TString> map;
+
+		TFile status_file(TString::Format("/proc/%d/status", pid));
+		status_file.Pipe().Transform(TCharDecoder()).Transform(TLineReader()).ForEach([&](const TString & line){
+			auto kv = line.SplitKV(':');
+			kv.key.Trim();
+			kv.value.Trim();
+			map.Add(std::move(kv.key), std::move(kv.value));
+		});
+
+		return map;
+	}
+
+	ETaskState TProcess::TaskState() const
+	{
+		if(pid == -1)
+			return ETaskState::NOT_CREATED;
+
+		const TUTF32 chr = Status()["State"][0];
+		switch(chr.code)
+		{
+			case 'S': return ETaskState::RUNNING;
+			case 'Z': return ETaskState::ZOMBIE;
+			case 'R': return ETaskState::RUNNING;
+			case 'D': return ETaskState::RUNNING;
+			case 'T': return ETaskState::STOPPED;
+			default: EL_THROW(TLogicException);
+		}
+	}
+
 }
 
 #endif
