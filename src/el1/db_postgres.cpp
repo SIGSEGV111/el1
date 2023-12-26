@@ -413,6 +413,7 @@ namespace el1::db::postgres
 			d.idx_typemap = LookupTypeInfoByOid(PQftype(current_result.get(), i));
 			d.type = ARR_OID_TYPE_MAP[d.idx_typemap].type;
 			d.is_null = true;
+			memset(d.buffer, 0, sizeof(d.buffer));
 			columns.MoveAppend(std::move(d));
 		}
 
