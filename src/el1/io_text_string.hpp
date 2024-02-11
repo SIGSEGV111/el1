@@ -58,6 +58,8 @@ namespace el1::io::text::string
 			usys_t Replace(const TString& needle, const TString& substitute, const ssys_t start = 0, const bool reverse = false, const usys_t n_max_replacements = NEG1);
 			void Insert(const ssys_t pos, const TString& str);
 			void Append(const TString& str);
+			bool BeginsWith(const TString& txt) const EL_GETTER;
+			bool EndsWith(const TString& txt) const EL_GETTER;
 
 			TString SliceSL(const ssys_t start, const usys_t length) const;
 			TString SliceBE(const ssys_t begin, const ssys_t end) const;

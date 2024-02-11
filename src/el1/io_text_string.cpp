@@ -729,6 +729,26 @@ namespace el1::io::text::string
 		chars.Append(str.chars);
 	}
 
+	bool TString::BeginsWith(const TString& txt) const
+	{
+		const usys_t l = util::Min(this->Length(), txt.Length());
+		for(usys_t i = 0; i < l; i++)
+			if(this->chars[i] != txt.chars[i])
+				return false;
+		return true;
+	}
+
+	bool TString::EndsWith(const TString& txt) const
+	{
+		const usys_t my_len = this->Length();
+		const usys_t txt_len = txt.Length();
+		const usys_t l = util::Min(my_len, txt_len);
+		for(usys_t i = 1; i <= l; i++)
+			if(this->chars[my_len - i] != txt.chars[txt_len - i])
+				return false;
+		return true;
+	}
+
 	bool TString::operator==(const TString& rhs) const
 	{
 		if(this == &rhs) return true;

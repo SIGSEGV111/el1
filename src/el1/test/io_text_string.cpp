@@ -79,6 +79,13 @@ namespace
 		EXPECT_GE(s4, s3);
 		EXPECT_LE(s3, s4);
 		EXPECT_NE(s3, s4);
+
+		EXPECT_TRUE(s1.BeginsWith("hello"));
+		EXPECT_FALSE(s1.BeginsWith("hello!"));
+
+		EXPECT_TRUE(s1.EndsWith("world"));
+		EXPECT_FALSE(s1.EndsWith("world!"));
+		EXPECT_FALSE(s1.EndsWith("_world"));
 	}
 
 	TEST(io_text_string, TString_Concat)
