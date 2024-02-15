@@ -76,6 +76,7 @@ namespace el1::io::net::http
 		EMethod method;
 		EVersion version;
 		text::string::TString url;
+		collection::map::TSortedMap<text::string::TString, text::string::TString> args;
 		THttpHeaderFields header_fields;
 	};
 

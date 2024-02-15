@@ -178,6 +178,28 @@ namespace el1::io::net::http
 			request.method = MethodFromString(arr_req[0]);
 			request.version = VersionFromString(arr_req[2]);
 			request.url = std::move(arr_req[1]);
+
+			const usys_t pos_args = request.url.Find('?');
+			if(pos_args != NEG1)
+			{
+				EL_ERROR(pos_args == 0, THttpProcessingException, EStatus::BAD_REQUEST, "empty URL");
+				TList<TString> arg_strs = request.url.SliceSL(pos_args + 1).Split('&');
+				for(auto& s : arg_strs)
+				{
+					EL_ERROR(s.Length() == 0, THttpProcessingException, EStatus::BAD_REQUEST, "empty request parameter");
+					if(s.Contains('='))
+					{
+						auto kv = s.SplitKV('=');
+						request.args.Add(std::move(kv.key), std::move(kv.value));
+					}
+					else
+					{
+						request.args.Add(std::move(s), "");
+					}
+				}
+				request.url = request.url.SliceBE(0, pos_args);
+			}
+
 			arr_req.Clear();
 
 			// read header values

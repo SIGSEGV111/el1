@@ -111,4 +111,34 @@ namespace
 		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url }), TProcess::TNonZeroExitException);
 		EXPECT_FALSE(fail);
 	}
+
+	TEST(io_net_http, THttpServer_args)
+	{
+		TTcpServer tcp_server;
+		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			EXPECT_EQ(request.url, "/test");
+			EXPECT_EQ(request.args.Items().Count(), 2U);
+			EXPECT_TRUE(request.args.Contains("abc"));
+			EXPECT_TRUE(request.args.Contains("foo"));
+			EXPECT_EQ(request.args["foo"], "bar");
+			response.status = EStatus::OK;
+		});
+
+		const TString url = TString::Format(L"http://localhost:%d/test?foo=bar&abc", tcp_server.LocalAddress().port);
+		TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url });
+	}
+
+	TEST(io_net_http, THttpServer_empty_arg)
+	{
+		bool fail = false;
+		TTcpServer tcp_server;
+		THttpServer http_server(&tcp_server, [&fail](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			fail = true;
+			response.status = EStatus::OK;
+		});
+
+		const TString url = TString::Format(L"http://localhost:%d/test?foo=bar&abc&", tcp_server.LocalAddress().port);
+		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url }), TProcess::TNonZeroExitException);
+		EXPECT_FALSE(fail);
+	}
 }
