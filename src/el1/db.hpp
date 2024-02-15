@@ -185,6 +185,6 @@ namespace el1::db
 	{
 		TList<query_arg_t> args;
 		_AddQueryArg(args, a ...);
-		return Execute(sql, args);
+		return Execute(sql, (array_t<query_arg_t>)args);
 	}
 }
