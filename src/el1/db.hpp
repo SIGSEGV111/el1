@@ -103,6 +103,9 @@ namespace el1::db
 		virtual ~IDatabaseConnection() {}
 		virtual std::unique_ptr<IStatement> Prepare(const TString& sql) = 0;
 		virtual std::unique_ptr<IResultStream> Execute(const TString& sql, array_t<query_arg_t> args = array_t<query_arg_t>()) = 0;
+
+		template<typename ... A>
+		std::unique_ptr<IResultStream> Execute(const TString& sql, const A& ... a);
 	};
 
 	/***************************************************************************************************/
@@ -158,5 +161,30 @@ namespace el1::db
 	template<typename ... A>
 	TResultPipe<A ...>::TResultPipe(IResultStream* const rs) : rs(rs)
 	{
+	}
+
+	template<typename T>
+	static void _AddQueryArg(TList<query_arg_t>& args, const T& v)
+	{
+		args.Append({
+			.type = &typeid(T),
+			.value = &v,
+			.sz_bytes = sizeof(T)
+		});
+	}
+
+	template<typename T, typename ... A>
+	static void _AddQueryArg(TList<query_arg_t>& args, const T& v, const A& ... a)
+	{
+		_AddQueryArg(args, v);
+		_AddQueryArg(args, a ...);
+	}
+
+	template<typename ... A>
+	std::unique_ptr<IResultStream> IDatabaseConnection::Execute(const TString& sql, const A& ... a)
+	{
+		TList<query_arg_t> args;
+		_AddQueryArg(args, a ...);
+		return Execute(sql, args);
 	}
 }

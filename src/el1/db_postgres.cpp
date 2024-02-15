@@ -547,7 +547,7 @@ namespace el1::db::postgres
 		return "";
 	}
 
-	system::waitable::IWaitable* TChannelListener::OnNotify() const
+	system::waitable::TMemoryWaitable* TChannelListener::OnNotify() const
 	{
 		return channel->conn != nullptr ? &on_pending_event : nullptr;
 	}

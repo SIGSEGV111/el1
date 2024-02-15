@@ -147,7 +147,7 @@ namespace el1::db::postgres
 
 		public:
 			TString Name() const EL_GETTER;	// will return empty string if the connection was closed
-			system::waitable::IWaitable* OnNotify() const EL_GETTER;
+			system::waitable::TMemoryWaitable* OnNotify() const EL_GETTER;
 			std::shared_ptr<const TString> Read();	// returns a pointer to the payload string, returns nullptr when no more events are currently pending - check `OnNotify()` to wait for further events
 
 			TChannelListener(const TChannelListener&) = delete;
@@ -187,6 +187,7 @@ namespace el1::db::postgres
 
 			std::unique_ptr<IStatement> Prepare(const TString& sql) final override;
 			std::unique_ptr<IResultStream> Execute(const TString& sql, array_t<query_arg_t> args = array_t<query_arg_t>()) final override;
+			using IDatabaseConnection::Execute;
 
 			std::unique_ptr<TChannelListener> SubscribeNotifyChannel(const TString& channel_name);
 	};
