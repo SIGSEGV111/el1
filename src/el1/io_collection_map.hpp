@@ -95,7 +95,6 @@ namespace el1::io::collection::map
 			using typename TSortedMap<TKey, const TValue>::sorter_function_t;
 
 			using TSortedMap<TKey, const TValue>::Items;
-			array_t<kv_pair_t> Items() { return this->items; }
 
 			// retreives the value associated with a key; throws if the key does not exist
 			TValue& operator[](const TKey& key) const;
