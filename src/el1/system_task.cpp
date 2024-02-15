@@ -570,7 +570,7 @@ namespace el1::system::task
 		}
 	}
 
-	// FIXME: this functiuon does not make sense this way
+	// FIXME: this function does not make sense this way
 	bool TFiber::Kill()
 	{
 		IF_DEBUG_PRINTF("TFiber@%p::Kill()\n", this);
