@@ -1041,11 +1041,15 @@ namespace el1::io::text::string
 		return { SliceBE(0, idx), SliceBE(idx + 1, Length()) };
 	}
 
-	TString TString::SliceSL(const ssys_t start, const usys_t length) const
+	TString TString::SliceSL(const ssys_t start, usys_t length) const
 	{
 		if(length == 0)
 			return "";
+
 		const usys_t idx_start = chars.AbsoluteIndex(start, true);
+		if(length == NEG1)
+			length = chars.Count() - start;
+
 		EL_ERROR(idx_start >= chars.Count(), TInvalidArgumentException, "start", "start is after the end of the string");
 		EL_ERROR(idx_start + length > chars.Count(), TInvalidArgumentException, "length", "start + length is after the end of the string");
 		return TString(&chars[idx_start], util::Min(this->Length() - idx_start, length));

@@ -61,7 +61,7 @@ namespace el1::io::text::string
 			bool BeginsWith(const TString& txt) const EL_GETTER;
 			bool EndsWith(const TString& txt) const EL_GETTER;
 
-			TString SliceSL(const ssys_t start, const usys_t length) const;
+			TString SliceSL(const ssys_t start, usys_t length = NEG1) const;
 			TString SliceBE(const ssys_t begin, const ssys_t end) const;
 
 			TList<TString> Split(const TString& delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
