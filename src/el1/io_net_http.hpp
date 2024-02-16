@@ -119,4 +119,7 @@ namespace el1::io::net::http
 			THttpServer(ip::TTcpServer* const tcp_server, request_handler_t handler);
 			~THttpServer();
 	};
+
+	text::string::TString UrlDecode(text::string::TString url);
+	text::string::TString UrlEncode(text::string::TString url);
 }

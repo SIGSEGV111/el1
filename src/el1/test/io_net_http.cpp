@@ -141,4 +141,19 @@ namespace
 		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url }), TProcess::TNonZeroExitException);
 		EXPECT_FALSE(fail);
 	}
+
+	TEST(io_net_http, THttpServer_decode_url)
+	{
+		TTcpServer tcp_server;
+		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			EXPECT_EQ(request.url, "/test%2f");
+			EXPECT_EQ(request.args.Items().Count(), 1U);
+			EXPECT_TRUE(request.args.Contains("ü"));
+			EXPECT_EQ(request.args["ü"], "1/_?");
+			response.status = EStatus::OK;
+		});
+
+		const TString url = TString::Format(L"http://localhost:%d/test%%2f?ü=1%%2f%%5f%%3f", tcp_server.LocalAddress().port);
+		TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url });
+	}
 }

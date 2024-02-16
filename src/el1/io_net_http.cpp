@@ -1,5 +1,6 @@
 #include "io_net_http.hpp"
 #include "io_text.hpp"
+#include "io_bcd.hpp"
 #include "io_text_encoding_utf8.hpp"
 
 #define IF_DEBUG_PRINTF(...) if(EL_UNLIKELY(DEBUG)) fprintf(stderr, __VA_ARGS__)
@@ -11,6 +12,7 @@ namespace el1::io::net::http
 	using namespace text::string;
 	using namespace text::encoding;
 	using namespace text::encoding::utf8;
+	using namespace bcd;
 	using namespace ip;
 	using namespace file;
 	using namespace collection::list;
@@ -190,11 +192,11 @@ namespace el1::io::net::http
 					if(s.Contains('='))
 					{
 						auto kv = s.SplitKV('=');
-						request.args.Add(std::move(kv.key), std::move(kv.value));
+						request.args.Add(UrlDecode(std::move(kv.key)), UrlDecode(std::move(kv.value)));
 					}
 					else
 					{
-						request.args.Add(std::move(s), "");
+						request.args.Add(UrlDecode(std::move(s)), "");
 					}
 				}
 				request.url = request.url.SliceBE(0, pos_args);
@@ -366,6 +368,24 @@ namespace el1::io::net::http
 	THttpServer::~THttpServer()
 	{
 		IF_DEBUG_PRINTF("THttpServer destructor\n");
+	}
+
+	TString UrlDecode(TString url)
+	{
+		const TString hex = "0123456789abcdef";
+		for(usys_t i = 0; i + 2 < url.Length(); i++)
+			if(url[i] == '%')
+			{
+				auto str = url.SliceSL(i + 1, 2).ToLower().Reverse();
+				url.chars[i].code = TBCD::FromString(str, hex).ToUnsignedInt();
+				url.chars.Remove(i + 1, 2);
+			}
+		return url;
+	}
+
+	TString UrlEncode(TString url)
+	{
+		EL_NOT_IMPLEMENTED;
 	}
 }
 
