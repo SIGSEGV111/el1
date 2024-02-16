@@ -69,8 +69,8 @@ namespace el1::io::text::string
 			kv_pair_tt<TString,TString> SplitKV(const TString& delimiter) const;
 			kv_pair_tt<TString,TString> SplitKV(const TUTF32 delimiter = '=') const;
 
-			void Pad(const TUTF32 pad_sign, const usys_t min_length, const EPlacement placement);
-			void Reverse();
+			TString& Pad(const TUTF32 pad_sign, const usys_t min_length, const EPlacement placement);
+			TString& Reverse();
 			void Escape(const array_t<const TUTF32> special_chars, const TUTF32 escape_sign);
 			void Unescape(const array_t<const TUTF32> special_chars, const TUTF32 escape_char);
 			void Quote(const TUTF32 quote_sign, const TUTF32 escape_sign);
@@ -78,8 +78,8 @@ namespace el1::io::text::string
 			void Truncate(const usys_t n_max_length);
 			void Cut(const usys_t n_begin, const usys_t n_end);
 			void Translate(const array_t<const symbol_map_t> map, const bool reverse = false);
-			void ToLower();
-			void ToUpper();
+			TString& ToLower();
+			TString& ToUpper();
 
 			TString Lower() const EL_GETTER;
 			TString Upper() const EL_GETTER;

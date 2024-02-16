@@ -1065,16 +1065,17 @@ namespace el1::io::text::string
 		return SliceSL(start, end_abs - start);
 	}
 
-	void TString::Pad(const TUTF32 pad_sign, const usys_t min_length, const EPlacement placement)
+	TString& TString::Pad(const TUTF32 pad_sign, const usys_t min_length, const EPlacement placement)
 	{
 		if(chars.Count() >= min_length || placement == EPlacement::NONE || pad_sign == TUTF32::TERMINATOR)
-			return;
+			return *this;
 
 		const usys_t index = 	placement == EPlacement::START ? 0 :
 								placement == EPlacement::END ? chars.Count() :
 								chars.Count() / 2;
 
 		chars.FillInsert(index, pad_sign, min_length - chars.Count());
+		return *this;
 	}
 
 	TString TString::Padded(const TUTF32 pad_sign, const usys_t length)
@@ -1084,9 +1085,10 @@ namespace el1::io::text::string
 		return str;
 	}
 
-	void TString::Reverse()
+	TString& TString::Reverse()
 	{
 		chars.Reverse();
+		return *this;
 	}
 
 	void TString::Escape(const array_t<const TUTF32> special_chars, const TUTF32 escape_sign)
@@ -1155,14 +1157,16 @@ namespace el1::io::text::string
 		});
 	}
 
-	void TString::ToLower()
+	TString& TString::ToLower()
 	{
 		Translate(MAP_LETTER_CASE, true);
+		return *this;
 	}
 
-	void TString::ToUpper()
+	TString& TString::ToUpper()
 	{
 		Translate(MAP_LETTER_CASE, false);
+		return *this;
 	}
 
 	TString TString::Lower() const
