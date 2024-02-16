@@ -1,4 +1,5 @@
 #include "io_bcd.hpp"
+#include "io_text_string.hpp"
 #include "util.hpp"
 #include <string.h>
 #include <endian.h>
@@ -115,9 +116,6 @@ namespace el1::io::bcd
 		run.is_negative = 0;
 		div.is_negative = 0;
 
-		// std::cerr<<"begin run = "<<run<<'\n';
-		// std::cerr<<"begin div = "<<div<<'\n';
-
 		const bool is_negative = out.is_negative;
 		out.SetZero();
 		out.EnsureDigits();
@@ -133,37 +131,20 @@ namespace el1::io::bcd
 			shift++;
 		}
 
-		// std::cerr<<"begin shift = "<<shift<<'\n';
-
 		while(!run.IsZero())
 		{
-			// std::cerr<<"head run = "<<run<<'\n';
-			// std::cerr<<"head div = "<<div<<'\n';
-			// std::cerr<<"head shift = "<<shift<<'\n';
-
 			while(run < div && !div.IsZero())
 			{
 				div >>= 1;
 				shift--;
 			}
 
-			// std::cerr<<"new shift = "<<shift<<'\n';
 
 			if(div.IsZero() || -shift > (int)out.n_decimal)
 				break;
 
-			// std::cerr<<"run = "<<run<<'\n';
-			// std::cerr<<"div = "<<div<<'\n';
-
 			for(f = 0; run >= div; f++)
 				run -= div;
-
-			// std::cerr<<"f   = "<<(int)f<<'\n';
-			// std::cerr<<"run = "<<run<<'\n';
-
-			// 0.13 : 0.14  => shift
-			// 0.13 : 0.01  => 13 => TLogicException
-			// 0.13 : 0.014
 
 			if(f < out.base)
 				out.Digit(shift, f);
@@ -173,10 +154,7 @@ namespace el1::io::bcd
 				tmp.Shift(shift);
 				out += tmp;
 			}
-			// std::cerr<<"new out = "<<out<<'\n';
 		}
-
-		// std::cerr<<"end out = "<<out<<'\n';
 	}
 
 	int TBCD::Add(TBCD& out, const TBCD& _lhs, const TBCD& _rhs)
@@ -582,6 +560,7 @@ namespace el1::io::bcd
 			v += d * m;
 			m *= base;
 		}
+
 		return v;
 	}
 
@@ -657,6 +636,7 @@ namespace el1::io::bcd
 
 	digit_t* TBCD::DigitsPointer()
 	{
+		EL_ERROR(IsInvalid(), TInvalidArgumentException, "this", "not valid");
 		if(InternalMemory())
 			return reinterpret_cast<digit_t*>(_mem);
 		else
@@ -830,67 +810,67 @@ namespace el1::io::bcd
 	TBCD::TBCD(float v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer), n_decimal(n_decimal), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(double v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer), n_decimal(n_decimal), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(const TBCD& v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, v.base, v.n_integer)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : RequiredDigits(base, v.base, v.n_decimal)), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(u8_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(s8_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(u16_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(s16_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(u32_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = (u64_t)v;
+		if(base != 1) *this = (u64_t)v;
 	}
 
 	TBCD::TBCD(s32_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(u64_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(s64_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
 	{
 		InitMem();
-		*this = v;
+		if(base != 1) *this = v;
 	}
 
 	TBCD::TBCD(TBCD v, const TBCD& conf_ref) : TBCD(std::move(v), conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
@@ -1550,4 +1530,33 @@ namespace el1::io::bcd
 	{
 		return this->ToUnsignedInt();
 	}
+
+	TBCD TBCD::FromString(const text::string::TString& str, const text::string::TString& symbols, const text::encoding::TUTF32 decimal_seperator)
+	{
+		if(str.Length() == 0)
+			return INVALID;
+		EL_ERROR(symbols.Length() > 254, TInvalidArgumentException, "symbols", "only up to 254 symbols are supported");
+		EL_ERROR(symbols.chars.Contains(decimal_seperator), TInvalidArgumentException, "symbols", "symbols must not include the decimal seperator character");
+
+		usys_t value;
+		usys_t pos_dec = str.chars.FindFirst(decimal_seperator);
+		TBCD bcd(0, symbols.Length(), str.Length() - (pos_dec == NEG1 ? 0 : pos_dec + 1), (pos_dec == NEG1 ? 0 : pos_dec));
+		digit_t* d = bcd.DigitsPointer();
+
+		for(auto chr : str.chars)
+		{
+			if(chr != decimal_seperator)
+			{
+				EL_ERROR((value = symbols.chars.FindFirst(chr)) == NEG1, TException, TString::Format("unknown character %q in numeric string %q; known numeric symbols are %q", chr, str, symbols));
+				if(value != 0)
+					bcd.is_zero = 0;
+				*d = (digit_t)value;
+				d++;
+			}
+		}
+
+		return bcd;
+	}
+
+	const TBCD TBCD::INVALID(0, 1, 0, 0);
 }

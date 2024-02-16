@@ -123,6 +123,9 @@ namespace el1::io::collection::list
 			bool Contains(const N needle, C comparator = EqualsComparator<T>) const EL_GETTER; // TODO: binary search vs. linear search
 
 			template<typename C = decltype(EqualsComparator<T>)>
+			usys_t FindFirst(const T& needle, C comparator = EqualsComparator<T>) const EL_GETTER;
+
+			template<typename C = decltype(EqualsComparator<T>)>
 			TList<range_t> Find(const T& needle, const usys_t n_max = NEG1, C comparator = EqualsComparator<T>) const EL_GETTER; // TODO: binary search vs. linear search
 
 			template<typename C>
@@ -375,6 +378,16 @@ namespace el1::io::collection::list
 			if(comparator(needle, arr_items[i]))
 				return true;
 		return false;
+	}
+
+	template<typename T>
+	template<typename C>
+	usys_t array_t<T>::FindFirst(const T& needle, C comparator) const
+	{
+		for(usys_t i = 0; i < n_items; i++)
+			if(comparator(needle, arr_items[i]))
+				return i;
+		return NEG1;
 	}
 
 	template<typename T>

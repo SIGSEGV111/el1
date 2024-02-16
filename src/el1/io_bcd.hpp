@@ -4,7 +4,13 @@
 #include "math.hpp"
 #include "io_types.hpp"
 #include "io_collection_list.hpp"
+#include "io_text_encoding.hpp"
 #include <memory>
+
+namespace el1::io::text::string
+{
+	class TString;
+}
 
 namespace el1::io::bcd
 {
@@ -48,6 +54,9 @@ namespace el1::io::bcd
 			void ConvertBCD(const TBCD& value);
 
 		public:
+			inline bool IsInvalid() const { return base == 1; }
+			inline bool IsValid() const { return base != 1; }
+
 			static u8_t RequiredDigits(const digit_t target_base, const digit_t source_base, const unsigned n_source_digits) EL_GETTER;
 
 			// these function will return an empty array if the digits were not allocated yet!
@@ -273,5 +282,10 @@ namespace el1::io::bcd
 			TBCD(const double v, const TBCD& conf_ref);
 
 			~TBCD();
+
+			static const TBCD INVALID;
+
+			// First digit in str is considered least significant value, while last position is most significant value (reversed to what humans do).
+			static TBCD FromString(const text::string::TString& str, const text::string::TString& symbols, const text::encoding::TUTF32 decimal_seperator = '.');
 	};
 }
