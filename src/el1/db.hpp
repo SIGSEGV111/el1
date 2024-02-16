@@ -104,6 +104,8 @@ namespace el1::db
 		virtual std::unique_ptr<IStatement> Prepare(const TString& sql) = 0;
 		virtual std::unique_ptr<IResultStream> Execute(const TString& sql, array_t<query_arg_t> args = array_t<query_arg_t>()) = 0;
 
+		std::unique_ptr<IResultStream> Execute(const TString& sql, const TList<query_arg_t>& args) { return Execute(sql, (array_t<query_arg_t>)args); }
+
 		template<typename ... A>
 		std::unique_ptr<IResultStream> Execute(const TString& sql, const A& ... a);
 	};
