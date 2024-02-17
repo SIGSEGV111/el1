@@ -27,9 +27,9 @@ namespace
 
 		{
 			usys_t n_rows = 0;
-			for(auto rs = connection.Execute("select 1,2,3.0::float8,'hello world',NULL,true,false"); !rs->End(); rs->MoveNext())
+			for(auto rs = connection.Execute("select 1,2,3.0::float8,'hello world',NULL,true,false,timestamp '2000-01-01',timestamp '1970-01-01'"); !rs->End(); rs->MoveNext())
 			{
-				auto [i,j,f,s,n,t,nt] = rs->Row<s32_t,s32_t,double,TString,void,bool,bool>();
+				auto [i,j,f,s,n,t,nt,ts1,ts2] = rs->Row<s32_t,s32_t,double,TString,void,bool,bool,TTime,TTime>();
 
 				EXPECT_TRUE(i != nullptr && *i == 1);
 				EXPECT_TRUE(j != nullptr && *j == 2);
@@ -38,6 +38,8 @@ namespace
 				EXPECT_TRUE(n == nullptr);
 				EXPECT_TRUE(t != nullptr && *t == true);
 				EXPECT_TRUE(nt != nullptr && *nt == false);
+				EXPECT_TRUE(ts1 != nullptr && *ts1 == 946684800);
+				EXPECT_TRUE(ts2 != nullptr && *ts2 == 0);
 
 				n_rows++;
 			}

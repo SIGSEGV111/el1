@@ -12,6 +12,7 @@
 #include <pgtypes_interval.h>
 #include <pgtypes_timestamp.h>
 #include <pgtypes_numeric.h>
+#include <endian.h>
 
 namespace el1::db::postgres
 {
@@ -210,24 +211,34 @@ namespace el1::db::postgres
 		}
 	}
 
-	static usys_t SerializeDate(const oid_type_map_t& ti, const void* const in, void* const out)
-	{
-		EL_NOT_IMPLEMENTED;
-	}
-
-	static void DeserializeDate(const oid_type_map_t& ti, const void* const in, void* const out, const usys_t sz_in)
-	{
-		EL_NOT_IMPLEMENTED;
-	}
-
 	static usys_t SerializeTimestamp(const oid_type_map_t& ti, const void* const in, void* const out)
 	{
-		EL_NOT_IMPLEMENTED;
+		// 64bit IEEE integer in µS since 2000-01-01 00:00:00 UTC (UNIXTIME: 946684800)
+		// https://stackoverflow.com/questions/54678121/manually-convert-postgresql-binary-format-of-timestamp-to-integer
+		EL_ERROR(ti.oid != 1114 && ti.oid != 1184, TNotImplementedException);
+
+		if(out)
+		{
+			const TTime& ts = *reinterpret_cast<const TTime*>(in);
+			s64_t& i = *reinterpret_cast<s64_t*>(out);
+			i = htobe64(ts.ConvertToI(EUnit::MICROSECONDS) - 946684800000000LL);
+		}
+
+		return 8;;
 	}
 
 	static void DeserializeTimestamp(const oid_type_map_t& ti, const void* const in, void* const out, const usys_t sz_in)
 	{
-		EL_NOT_IMPLEMENTED;
+		// 64bit IEEE integer in µS since 2000-01-01 00:00:00 UTC (UNIXTIME: 946684800)
+		// https://stackoverflow.com/questions/54678121/manually-convert-postgresql-binary-format-of-timestamp-to-integer
+		EL_ERROR((ti.oid != 1114 && ti.oid != 1184) || sz_in != 8, TNotImplementedException);
+
+		if(out)
+		{
+			const s64_t i = be64toh(*reinterpret_cast<const s64_t*>(in));
+			TTime& ts = *reinterpret_cast<TTime*>(out);
+			ts = TTime::ConvertFrom(EUnit::MICROSECONDS, i + 946684800000000LL);
+		};
 	}
 
 	static usys_t SerializeString(const oid_type_map_t& ti, const void* const in, void* const out)
@@ -277,8 +288,7 @@ namespace el1::db::postgres
 		{    700,  4, "float4"     , &typeid(float     ), &SerializeFloat<float > , &DeserializeFloat<float > , &Destruct<float     > },
 		{    701,  8, "float8"     , &typeid(double    ), &SerializeFloat<double> , &DeserializeFloat<double> , &Destruct<double    > },
 		{    705,  0, "unknown"    , &typeid(void      ), &SerializeNoOp          , &DeserializeNoOp          , &DestructNoOp         },
-		{   1082,  4, "date"       , &typeid(TTime     ), &SerializeDate          , &DeserializeDate          , &Destruct<TTime     > },
-		{   1043, -1, "varchar"    , &typeid(char      ), &SerializeString        , &DeserializeString        , &Destruct<char      > },
+		{   1043, -1, "varchar"    , &typeid(TString   ), &SerializeString        , &DeserializeString        , &Destruct<char      > },
 		{   1114,  8, "timestamp"  , &typeid(TTime     ), &SerializeTimestamp     , &DeserializeTimestamp     , &Destruct<TTime     > },
 		{   1184,  8, "timestamptz", &typeid(TTime     ), &SerializeTimestamp     , &DeserializeTimestamp     , &Destruct<TTime     > },
 		{   1186, 16, "interval"   , &typeid(TTime     ), &SerializeTimestamp     , &DeserializeTimestamp     , &Destruct<TTime     > },
