@@ -519,7 +519,7 @@ namespace el1::system::task
 			static TThread& MainThread();
 	};
 
-	const io::collection::map::TSortedMap<io::text::string::TString, const io::text::string::TString>& EnvironmentVariables();
+	io::collection::map::TSortedMap<io::text::string::TString, io::text::string::TString>& EnvironmentVariables();
 
 	io::collection::list::TList<fd_t> EnumOpenFileDescriptors();
 
@@ -641,8 +641,17 @@ namespace el1::system::task
 			static io::text::string::TString Execute(
 				const io::file::TPath& exe,
 				const TArgs& args = TArgs(),
+				const io::text::string::TString* const stdin = nullptr,
+				io::text::string::TString* const stderr = nullptr,
+				const TTime timeout = -1
+			);
+
+			static int ExecuteWithStatus(
+				const io::file::TPath& exe,
+				const TArgs& args = TArgs(),
 				const TString* const stdin = nullptr,
-				TString* const stderr = nullptr,
+				io::text::string::TString* const stdout = nullptr,
+				io::text::string::TString* const stderr = nullptr,
 				const TTime timeout = -1
 			);
 	};

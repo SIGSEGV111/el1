@@ -307,7 +307,7 @@ namespace el1::system::task
 		return map;
 	}
 
-	const TSortedMap<TString, const TString>& EnvironmentVariables()
+	TSortedMap<TString, TString>& EnvironmentVariables()
 	{
 		static TSortedMap<TString, TString> env = ReadEnvironment();
 		return env;

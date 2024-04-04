@@ -772,39 +772,47 @@ namespace el1::system::task
 		return pid;
 	}
 
-	TString TProcess::Execute(const TPath& exe, const TList<TString>& args, const TString* const stdin, TString* const _stderr, const TTime timeout)
+	TString TProcess::Execute(const TPath& exe, const TList<TString>& args, const TString* const stdin, TString* const stderr, const TTime timeout)
+	{
+		TString stdout;
+		const int exit_code = ExecuteWithStatus(exe, args, stdin, &stdout, stderr, timeout);
+		EL_ERROR(exit_code != 0, TNonZeroExitException, exe, args, stderr == nullptr ? "" : *stderr, -1, exit_code);
+		return stdout;
+	}
+
+	int TProcess::ExecuteWithStatus(const io::file::TPath& exe, const TArgs& args, const TString* const stdin, TString* const stdout, TString* const stderr, const TTime timeout)
 	{
 		TSortedMap<fd_t, TProcess::EFDIO> fdmap;
-		fdmap.Add(0, stdin == nullptr ? TProcess::EFDIO::EMPTY : TProcess::EFDIO::PIPE_PARENT_TO_CHILD);
-		fdmap.Add(1, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
-		fdmap.Add(2, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
+		fdmap.Add(0, stdin  == nullptr ? TProcess::EFDIO::INHERIT : TProcess::EFDIO::PIPE_PARENT_TO_CHILD);
+		fdmap.Add(1, stdout == nullptr ? TProcess::EFDIO::INHERIT : TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
+		fdmap.Add(2, stderr == nullptr ? TProcess::EFDIO::INHERIT : TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
 
 		TProcess proc(exe, args, fdmap);
 
-		TString stdout;
-		TString stderr;
+		TString _stdout;
+		TString _stderr;
 		TFiber stdin_feeder([&](){ STREAM_FEEDER_FUNC(proc.SendStream(0), stdin); }, stdin != nullptr);
-		TFiber stdout_reader([&](){ STREAM_READER_FUNC(proc.ReceiveStream(1), &stdout); });
-		TFiber stderr_reader([&](){ STREAM_READER_FUNC(proc.ReceiveStream(2), &stderr); });
+		TFiber stdout_reader([&](){ STREAM_READER_FUNC(proc.ReceiveStream(1), &_stdout); }, stdout != nullptr);
+		TFiber stderr_reader([&](){ STREAM_READER_FUNC(proc.ReceiveStream(2), &_stderr); }, stderr != nullptr);
 
 		try
 		{
 			const TTime ts_until = timeout >= 0 ? (TTime::Now(EClock::MONOTONIC) + timeout) : -1;
 			while(proc.IsAlive())
-				EL_ERROR(!proc.OnTerminate().WaitFor(ts_until, true), TTimeoutException, exe, args, stderr, proc.pid, timeout);
+				EL_ERROR(!proc.OnTerminate().WaitFor(ts_until, true), TTimeoutException, exe, args, _stderr, proc.pid, timeout);
 
-			const process_id_t pid = proc.pid;
 			const int exit_code = proc.Join();
 
 			if(auto e = stdin_feeder.Join())  EL_FORWARD(*e, TLogicException);
 			if(auto e = stdout_reader.Join()) EL_FORWARD(*e, TLogicException);
 			if(auto e = stderr_reader.Join()) EL_FORWARD(*e, TLogicException);
 
-			if(_stderr != nullptr)
-				*_stderr = std::move(stderr);
+			if(stdout != nullptr)
+				*stdout = std::move(_stdout);
+			if(stderr != nullptr)
+				*stderr = std::move(_stderr);
 
-			EL_ERROR(exit_code != 0, TNonZeroExitException, exe, args, stderr, pid, exit_code);
-			return stdout;
+			return exit_code;
 		}
 		catch(const IException& e)
 		{
@@ -812,8 +820,10 @@ namespace el1::system::task
 			if(stdin_feeder.Join())  {}
 			if(stdout_reader.Join()) {}
 			if(stderr_reader.Join()) {}
-			if(_stderr != nullptr)
-				*_stderr = stderr;
+			if(stdout != nullptr)
+				*stdout = std::move(_stdout);
+			if(stderr != nullptr)
+				*stderr = std::move(_stderr);
 			throw;
 		}
 	}
