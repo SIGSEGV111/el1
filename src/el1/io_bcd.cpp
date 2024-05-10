@@ -106,7 +106,7 @@ namespace el1::io::bcd
 		out.is_negative = is_negative;
 	}
 
-	void TBCD::AbsDiv(TBCD& out, const TBCD& lhs, const TBCD& rhs)
+	TBCD TBCD::AbsDiv(TBCD& out, const TBCD& lhs, const TBCD& rhs)
 	{
 		EL_ERROR(out.base != lhs.base || out.base != rhs.base, TLogicException);
 		EL_ERROR(rhs.IsZero(), TInvalidArgumentException, "rhs", "divisor cannot be zero");
@@ -139,9 +139,16 @@ namespace el1::io::bcd
 				shift--;
 			}
 
-
-			if(div.IsZero() || -shift > (int)out.n_decimal)
+			if(div.IsZero())
 				break;
+
+			if(-shift > (int)out.n_decimal)
+			{
+				return run;
+			}
+
+			// std::cerr<<"run = "<<run<<'\n';
+			// std::cerr<<"div = "<<div<<'\n';
 
 			for(f = 0; run >= div; f++)
 				run -= div;
@@ -155,6 +162,9 @@ namespace el1::io::bcd
 				out += tmp;
 			}
 		}
+
+		// std::cerr<<"end out = "<<out<<'\n';
+		return run;
 	}
 
 	int TBCD::Add(TBCD& out, const TBCD& _lhs, const TBCD& _rhs)
@@ -276,12 +286,12 @@ namespace el1::io::bcd
 		AbsMul(out, lhs, rhs);
 	}
 
-	void TBCD::Divide(TBCD& out, const TBCD& _lhs, const TBCD& _rhs)
+	TBCD TBCD::Divide(TBCD& out, const TBCD& _lhs, const TBCD& _rhs)
 	{
 		if(_lhs.IsZero())
 		{
 			out.SetZero();
-			return;
+			return out;
 		}
 
 		TBCD lhs_copy(0, out);
@@ -292,7 +302,7 @@ namespace el1::io::bcd
 		const TBCD& rhs = out.base == _rhs.base ? _rhs : rhs_copy;
 
 		out.is_negative = lhs.is_negative != rhs.is_negative;
-		AbsDiv(out, lhs, rhs);
+		return AbsDiv(out, lhs, rhs);
 	}
 
 	TBCD& TBCD::operator+=(const TBCD& rhs)
@@ -321,8 +331,7 @@ namespace el1::io::bcd
 
 	TBCD& TBCD::operator%=(const TBCD& rhs)
 	{
-		EL_NOT_IMPLEMENTED;
-		// *this = Divide(*this, *this, rhs);
+		*this = Divide(*this, *this, rhs);
 		return *this;
 	}
 

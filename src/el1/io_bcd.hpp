@@ -28,7 +28,7 @@ namespace el1::io::bcd
 			static int  AbsAdd(TBCD& out, const TBCD& lhs, const TBCD& rhs);
 			static int  AbsSub(TBCD& out, const TBCD& lhs, const TBCD& rhs);
 			static void AbsMul(TBCD& out, const TBCD& lhs, const TBCD& rhs);
-			static void AbsDiv(TBCD& out, const TBCD& lhs, const TBCD& rhs);
+			static TBCD AbsDiv(TBCD& out, const TBCD& lhs, const TBCD& rhs);
 
 			const digit_t base;	// 1 is invalid, 0 maps to 256
 			const u8_t n_integer;
@@ -129,7 +129,7 @@ namespace el1::io::bcd
 			static int  Add      (TBCD& out, const TBCD& lhs, const TBCD& rhs);
 			static int  Subtract (TBCD& out, const TBCD& lhs, const TBCD& rhs);
 			static void Multiply (TBCD& out, const TBCD& lhs, const TBCD& rhs);
-			static void Divide   (TBCD& out, const TBCD& lhs, const TBCD& rhs);
+			static TBCD Divide   (TBCD& out, const TBCD& lhs, const TBCD& rhs);
 
 			TBCD& operator+=(const TBCD& rhs);
 			TBCD& operator-=(const TBCD& rhs);

@@ -618,6 +618,44 @@ namespace
 		}
 	}
 
+	TEST(io_bcd, TBCD_Modulo)
+	{
+		{
+			TBCD a(11, 10, 8, 0);
+			TBCD b( 2, 10, 8, 0);
+			TBCD c = a % b;
+			EXPECT_EQ(c, 1);
+		}
+
+		{
+			TBCD a(5, 10, 8, 0);
+			TBCD b(4, 10, 8, 0);
+			TBCD c = a % b;
+			EXPECT_EQ(c, 1);
+		}
+
+		{
+			TBCD a(17, 10, 8, 0);
+			TBCD b(12, 10, 8, 0);
+			TBCD c = a % b;
+			EXPECT_EQ(c, 5);
+		}
+
+		{
+			TBCD a(27, 10, 8, 0);
+			TBCD b(12, 10, 8, 0);
+			TBCD c = a % b;
+			EXPECT_EQ(c, 3);
+		}
+
+		{
+			TBCD a(27, 10, 8, 1);
+			TBCD b(12, 10, 8, 1);
+			TBCD c = a % b;
+			EXPECT_EQ(c, 0.6);
+		}
+	}
+
 	TEST(io_bcd, TBCD_Add_loop)
 	{
 		TXorShift rng;
