@@ -1,6 +1,7 @@
 #!/bin/bash -eu
+<<<<<<< HEAD
 source "/opt/amp-bash-commons/shell-util.sh"
-parseCommandlineArguments "f:follow" "t:target=string?dev" "j:jobs:NUMCPUS=integer?1" -- "$@"
+parseCommandlineArguments "f:follow" "t:target=string?dev" "j:jobs:NUMCPUS=integer?1" "gtest_filter=string?" -- "$@"
 
 less_args=("--RAW-CONTROL-CHARS" "--clear-screen" "--tabs=4" "--ignore-case" "--SILENT")
 
@@ -24,6 +25,7 @@ trap "" ERR
 set +e +o pipefail +o errtrace
 
 export GTEST_COLOR=yes
+export GTEST_FILTER="$__gtest_filter"
 while true; do
 	make -j $__jobs "$__target" 2>&1 | less "${less_args[@]}"
 	sleep 0.5
