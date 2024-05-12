@@ -719,6 +719,18 @@ namespace el1::io::text::string
 		return tmp;
 	}
 
+	bool TString::BeginsWith(const TString& str) const
+	{
+		if(this->Length() < str.Length())
+			return false;
+
+		for(usys_t i = 0; i < str.Length(); i++)
+			if(str[i] != this->chars[i])
+				return false;
+
+		return true;
+	}
+
 	void TString::Insert(const ssys_t pos, const TString& str)
 	{
 		chars.Insert(pos, str.chars);

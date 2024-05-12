@@ -705,4 +705,14 @@ namespace
 			EXPECT_EQ(str.ToInteger(), 12);
 		}
 	}
+
+	TEST(io_text_string, TString_BeginsWith)
+	{
+		{
+			TString a = "hello world";
+			EXPECT_TRUE(a.BeginsWith("hello"));
+			EXPECT_FALSE(a.BeginsWith("hello."));
+			EXPECT_FALSE(a.BeginsWith("hello world "));
+		}
+	}
 }
