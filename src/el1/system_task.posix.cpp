@@ -33,7 +33,7 @@ namespace el1::system::task
 
 	/***************************************************/
 
-	bool TSimpleMutex::Accquire(const TTime timeout)
+	bool TSimpleMutex::Acquire(const TTime timeout)
 	{
 		if(this->IsAcquired())
 		{
@@ -251,7 +251,7 @@ namespace el1::system::task
 		void* exit_code = nullptr;
 		lock_data.mutex->Release();
 		EL_PTHREAD_ERROR(pthread_join(*reinterpret_cast<pthread_t*>(this->thread_handle), &exit_code));
-		lock_data.mutex->Accquire();
+		lock_data.mutex->Acquire();
 
 		this->state = EChildState::CONSTRUCTED;
 		this->on_state_change.Raise();

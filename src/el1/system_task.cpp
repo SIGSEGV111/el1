@@ -59,7 +59,7 @@ namespace el1::system::task
 
 	/***************************************************/
 
-	bool TFiberMutex::Accquire(const TTime timeout)
+	bool TFiberMutex::Acquire(const TTime timeout)
 	{
 		TFiber* self = TFiber::Self();
 

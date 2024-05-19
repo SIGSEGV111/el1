@@ -108,8 +108,8 @@ namespace el1::system::task
 
 	struct IMutex
 	{
-		void Accquire() { EL_ERROR(!Accquire(-1), TLogicException); }
-		virtual bool Accquire(const TTime timeout) = 0;
+		void Acquire() { EL_ERROR(!Acquire(-1), TLogicException); }
+		virtual bool Acquire(const TTime timeout) = 0;
 		virtual void Release() = 0;
 		virtual bool IsAcquired() const EL_GETTER = 0;
 	};
@@ -130,7 +130,7 @@ namespace el1::system::task
 			THandle handle;
 
 		public:
-			bool Accquire(const TTime timeout) final override;
+			bool Acquire(const TTime timeout) final override;
 			void Release() final override;
 			bool IsAcquired() const final override EL_GETTER;
 
@@ -156,7 +156,8 @@ namespace el1::system::task
 			unsigned n_accquire;
 
 		public:
-			bool Accquire(const TTime timeout) final override;
+			using IMutex::Acquire;
+			bool Acquire(const TTime timeout) final override;
 			void Release() final override;
 			bool IsAcquired() const final override EL_GETTER;
 
@@ -174,7 +175,7 @@ namespace el1::system::task
 			unsigned n_accquire;
 
 		public:
-			bool Accquire(const TTime timeout) final override;
+			bool Acquire(const TTime timeout) final override;
 			void Release() final override;
 			bool IsAcquired() const final override;
 
@@ -209,7 +210,7 @@ namespace el1::system::task
 
 		TMutexAutoLock(IMutex* const mutex) : mutex(mutex)
 		{
-			mutex->Accquire();
+			mutex->Acquire();
 		}
 
 		~TMutexAutoLock()
