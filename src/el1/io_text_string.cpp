@@ -741,15 +741,6 @@ namespace el1::io::text::string
 		chars.Append(str.chars);
 	}
 
-	bool TString::BeginsWith(const TString& txt) const
-	{
-		const usys_t l = util::Min(this->Length(), txt.Length());
-		for(usys_t i = 0; i < l; i++)
-			if(this->chars[i] != txt.chars[i])
-				return false;
-		return true;
-	}
-
 	bool TString::EndsWith(const TString& txt) const
 	{
 		const usys_t my_len = this->Length();
