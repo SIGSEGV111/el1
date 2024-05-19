@@ -57,6 +57,7 @@ namespace el1::io::bcd
 			inline bool IsInvalid() const { return base == 1; }
 			inline bool IsValid() const { return base != 1; }
 
+			// computes the number of required integer digits to fully represent the source value in the target base
 			static u8_t RequiredDigits(const digit_t target_base, const digit_t source_base, const unsigned n_source_digits) EL_GETTER;
 
 			// these function will return an empty array if the digits were not allocated yet!
