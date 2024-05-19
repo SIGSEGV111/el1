@@ -313,6 +313,29 @@ namespace
 // 		th.Resume();
 // 	}
 
+	TEST(system_task, TThread_TaskState)
+	{
+		volatile int state = 0;
+		TSimpleMutex mtx;
+		mtx.Acquire();
+
+		TThread t("test", [&](){
+			mtx.Acquire();
+			while(state == 0); // busy loop
+		});
+
+		TFiber::Sleep(0.1);
+		EXPECT_EQ(t.TaskState(), ETaskState::BLOCKED);
+		mtx.Release();
+		TFiber::Sleep(0.1);
+		EXPECT_EQ(t.TaskState(), ETaskState::RUNNING);
+		state = 1;
+		TFiber::Sleep(0.1);
+		if(auto e = t.Join())
+			throw e;
+		EXPECT_EQ(t.TaskState(), ETaskState::NOT_CREATED);
+	}
+
 	TEST(system_task, TProcess_simple_invoke)
 	{
 		{

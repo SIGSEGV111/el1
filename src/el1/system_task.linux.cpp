@@ -4,6 +4,8 @@
 #include "system_task.hpp"
 #include "io_collection_list.hpp"
 #include "io_file.hpp"
+#include "io_text_encoding_utf8.hpp"
+#include "io_text_string.hpp"
 #include <unistd.h>
 #include <pthread.h>
 #include <fcntl.h>
@@ -61,6 +63,35 @@ namespace el1::system::task
 		this->main_fiber.exception = nullptr;
 		this->main_fiber.state = EFiberState::ACTIVE;
 		this->fibers.Append(&this->main_fiber);
+	}
+
+	ETaskState TThread::TaskState() const
+	{
+		using namespace io::text::string;
+		using namespace io::text::encoding::utf8;
+		const TMutexAutoLock lock(&mutex);
+
+		if(ChildState() != EChildState::ALIVE)
+			return ETaskState::NOT_CREATED;
+
+		TString status = EL_ANNOTATE_ERROR(TFile(TString::Format("/proc/%d/status", thread_pid)), TException, "unable to read task state from procfs").Pipe()
+			.Transform(TUTF8Decoder())
+			.Transform(TLineReader())
+			.Filter([](const TString& line){ return line.BeginsWith("State:"); })
+			.First()
+			.SplitKV(':')
+			.value;
+
+		status.Trim();
+		switch(status[0].code)
+		{
+			case 'R': return ETaskState::RUNNING;
+			case 'S': return ETaskState::BLOCKED;
+			case 'I': return ETaskState::BLOCKED;	// ???
+			case 'D': return ETaskState::BLOCKED;
+			case 'Z': return ETaskState::ZOMBIE;
+			default: EL_THROW(TLogicException);
+		}
 	}
 
 	void* TThread::PthreadMain(void* arg)

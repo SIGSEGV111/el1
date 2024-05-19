@@ -178,11 +178,6 @@ namespace el1::system::task
 
 	/***************************************************/
 
-	ETaskState TThread::TaskState() const
-	{
-		EL_NOT_IMPLEMENTED;
-	}
-
 	void TThread::Start()
 	{
 		const TMutexAutoLock lock(&this->mutex);
