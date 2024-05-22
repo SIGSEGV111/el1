@@ -1,6 +1,7 @@
 #include "util.hpp"
 #include <math.h>
 #include <el1/io_bcd.hpp>
+#include <el1/util.hpp>
 
 namespace el1::io::text::string
 {
@@ -70,5 +71,51 @@ namespace el1::testing
 	bool operator==(int lhs, const TDebugItem& rhs)
 	{
 		return rhs.value == lhs;
+	}
+}
+
+namespace
+{
+	using namespace el1::util;
+	using namespace ::testing;
+
+	usys_t RunBinarySearch(const int* const arr, const usys_t n_items, const int needle)
+	{
+		return BinarySearch(
+			[&](const usys_t idx)
+			{
+				// std::cerr<<"idx = "<<idx<<"; needle = "<<needle<<std::endl;
+				if(arr[idx] > needle)
+					return 1;
+				else if(arr[idx] < needle)
+					return -1;
+				else
+					return 0;
+			},
+			n_items
+		);
+	}
+
+	TEST(util, BinarySearch)
+	{
+		{
+			const int arr[] = { 0,1,2,3,4,5,6,7,8,9 };
+			const usys_t n_items = sizeof(arr) / sizeof(arr[0]);
+			for(usys_t i = 0; i < n_items; i++)
+				EXPECT_EQ(RunBinarySearch(arr, n_items, i), i);
+
+			EXPECT_EQ(RunBinarySearch(arr, n_items,  100), NEG1);
+			EXPECT_EQ(RunBinarySearch(arr, n_items, -100), NEG1);
+		}
+
+		{
+			const int arr[] = { 0,1,2,3,4,5,6,7,8 };
+			const usys_t n_items = sizeof(arr) / sizeof(arr[0]);
+			for(usys_t i = 0; i < n_items; i++)
+				EXPECT_EQ(RunBinarySearch(arr, n_items, i), i);
+
+			EXPECT_EQ(RunBinarySearch(arr, n_items,  100), NEG1);
+			EXPECT_EQ(RunBinarySearch(arr, n_items, -100), NEG1);
+		}
 	}
 }

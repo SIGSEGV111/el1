@@ -18,6 +18,7 @@ namespace el1::dev::spi::led
 		protected:
 			std::unique_ptr<ISpiDevice> dev;
 			io::collection::list::TList<TSpiLed> leds;
+			int TestNumLeds(const unsigned num_leds) const;
 
 		public:
 			io::collection::list::array_t<TSpiLed> Leds() EL_GETTER;
@@ -36,7 +37,7 @@ namespace el1::dev::spi::led
 			 * @param num_leds The number of LEDs on the strip.
 			 * Use -1 to auto-detect. Auto-detection only works with MISO connected to the last LED - see above.
 			 */
-			TLedStrip(std::unique_ptr<ISpiDevice> dev, const int num_leds);
+			TLedStrip(std::unique_ptr<ISpiDevice> dev, int num_leds);
 	};
 
 	struct IVirtualLed
@@ -94,11 +95,27 @@ namespace el1::dev::spi::led
 	}
 
 	template<typename TSpiLed>
-	TLedStrip<TSpiLed>::TLedStrip(std::unique_ptr<ISpiDevice> _dev, const int num_leds) : dev(std::move(_dev))
+	TLedStrip<TSpiLed>::TLedStrip(std::unique_ptr<ISpiDevice> _dev, int num_leds) : dev(std::move(_dev))
 	{
-		if(num_leds < 0)
-			EL_NOT_IMPLEMENTED;
-		leds.FillInsert(0, TSpiLed(), num_leds);
+		EL_ERROR(num_leds < -1, TInvalidArgumentException, "num_leds", "num_leds must be >= -1");
 		dev->Clock(TSpiLed::HZ_SPI);
+
+		if(num_leds == -1)
+		{
+			int c;
+			num_leds = util::BinarySearch([&](auto n) { return c = TestNumLeds(n); }, 1024);
+			if(c > 0) num_leds--;
+		}
+
+		leds.FillInsert(0, TSpiLed(), num_leds);
+	}
+
+	template<typename TSpiLed>
+	int TLedStrip<TSpiLed>::TestNumLeds(const unsigned num_leds) const
+	{
+		const byte_t zero[sizeof(TSpiLed)] = {};
+		TSpiLed arr[num_leds + 1];
+		dev->ExchangeBuffers(arr, arr, sizeof(arr), true);
+		return memcmp(arr + num_leds, zero, sizeof(TSpiLed)) == 0 ? -1 : 1;
 	}
 }

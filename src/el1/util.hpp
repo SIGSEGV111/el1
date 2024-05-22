@@ -6,6 +6,8 @@
 
 #include "io_types.hpp"
 
+#include <iostream>
+
 namespace el1::util
 {
 	using namespace io::types;
@@ -97,4 +99,43 @@ namespace el1::util
 		inline static int FindLastSet(unsigned __int32 v) { return 32 - CountLeadingZeroes(v); }
 		inline static int FindLastSet(unsigned __int64 v) { return 64 - CountLeadingZeroes(v); }
 	#endif
+
+	template<typename L>
+	ssys_t BinarySearch(L lambda, ssys_t idx_start, ssys_t idx_end)
+	{
+		while(idx_start <= idx_end)
+		{
+			const usys_t idx_mid = (idx_end - idx_start) / 2 + idx_start;
+			// std::cerr<<"idx_start = "<<idx_start<<"; idx_end = "<<idx_end<<"; idx_mid = "<<idx_mid<<std::endl;
+			const int c = lambda(idx_mid);
+			if(c > 0)
+			{
+				// std::cerr<<"c > 0: search lower\n";
+				// search lower half
+				idx_end = idx_mid - 1;
+			}
+			else if(c < 0)
+			{
+				// std::cerr<<"c < 0: search upper\n";
+				// search upper half
+				idx_start = idx_mid + 1;
+			}
+			else
+			{
+				// std::cerr<<"c == 0: match\n";
+				// match
+				return idx_mid;
+			}
+		}
+
+		// std::cerr<<"no match\n";
+		// no match
+		return NEG1;
+	}
+
+	template<typename L>
+	ssys_t BinarySearch(L lambda, const usys_t n_items)
+	{
+		return BinarySearch(lambda, 0, n_items - 1);
+	}
 }

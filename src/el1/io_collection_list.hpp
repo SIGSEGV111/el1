@@ -424,6 +424,7 @@ namespace el1::io::collection::list
 	template<typename C>
 	usys_t array_t<T>::BinarySearch(C comparator, const bool closest_match, usys_t idx_start, usys_t n_items_search) const
 	{
+		//TODO implement using util::BinarySearch()
 		usys_t idx_pivot = NEG1;
 
 		while(n_items_search != 0)
