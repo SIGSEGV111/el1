@@ -3,6 +3,7 @@
 #include "error.hpp"
 #include "io_types.hpp"
 #include "io_collection_list.hpp"
+#include "io_text_string.hpp"
 
 namespace el1::io::collection::map
 {
@@ -20,13 +21,18 @@ namespace el1::io::collection::map
 
 	struct TGenericKeyNotFoundException : IException
 	{
-		TString Message() const final override;
+		io::text::string::TString Message() const override;
 	};
 
 	template<typename TKey>
 	struct TKeyNotFoundException : TGenericKeyNotFoundException
 	{
 		const TKey key;
+
+		io::text::string::TString Message() const final override
+		{
+			return TString::Format("the requested key %q was not found", strigify_t<TKey>::ToString(key, "<non-text value>"));
+		}
 
 		IException* Clone() const override { return new TKeyNotFoundException(*this); }
 
@@ -35,7 +41,7 @@ namespace el1::io::collection::map
 
 	struct TGenericKeyAlreadyExistsException : IException
 	{
-		TString Message() const final override;
+		io::text::string::TString Message() const final override;
 	};
 
 	template<typename TKey>
@@ -65,6 +71,7 @@ namespace el1::io::collection::map
 			void Clear() { items.Clear(); }
 
 			const TList<kv_pair_t>& Items() const { return items; }
+			array_t<kv_pair_t>& Items() { return items; }
 			sorter_function_t Sorter() const { return sorter; }
 
 			// retreives the value associated with a key; throws if the key does not exist

@@ -63,6 +63,33 @@ namespace el1::io::file
 		SOCKET			// unix socket
 	};
 
+	struct direntry_t
+	{
+		// ID of the file-system object
+		// unique within the file-system it resides on
+		u64_t obj_id;
+
+		// ID of the file-system (same as fs_info_t::id)
+		u64_t fs_id;
+
+		TString name;
+
+		iosize_t size;	// object size in bytes (this is the "apparent" or "virtual" size of the file-system object)
+		iosize_t usage;	// effective disk-usage in bytes (this can be lower due to compression/holes or higher due to overhead)
+
+		// type of object
+		// can even be NX if the object vanished during enumeration
+		EObjectType type;
+
+		// number of hardlinks
+		u32_t n_links;
+
+		TTime ts_created;
+		TTime ts_access;
+		TTime ts_status;
+		TTime ts_write;
+	};
+
 	class TPath
 	{
 		protected:
@@ -185,7 +212,7 @@ namespace el1::io::file
 			bool HasAccess(const TAccess request) const;
 
 			// moves the file-system object to a new location and/or renames it
-			// if it is a directoy, all its content will be recursivly moved along
+			// if it is a directoy, all its content will be recursively moved along
 			// this operation is often not atomic and can involve ("slow") copy and delete operations
 			// if the operation requires to delete files from the source location, then
 			// this will happen AFTER ALL files have been successfully copied to the new location
@@ -200,6 +227,12 @@ namespace el1::io::file
 			// deletes the file-system object specified by this path
 			// in case of a non-empty directory, you have to set recursive to true or else the call will fail
 			void Delete(const bool recursive) const;
+
+			// calls receiver for every file found in the path
+			// match_type limits the files returned, if set to NX no filter is applied
+			// unlike TDirectory::Enum() the fields in direntry_t always contain a valid as if QueryInfo() had been called
+			// bool Receiver(const TPath& cwd, const direntry_t& e);
+			u64_t Browse(util::function::TFunction<bool, const TPath&, const direntry_t&> receiver, const bool recursive = false, const EObjectType match_type = EObjectType::NX, const bool include_root = true) const;
 
 			// creates a canonicalized path object from a native textual path representation
 			// this strips away path components that have no effect (e.g. "./" or "xyz/../")
@@ -254,33 +287,6 @@ namespace el1::io::file
 		TInvalidPathException(const TPath& path, const usys_t idx_component, const EReason reason) : path(path), idx_component(idx_component), reason(reason) {}
 	};
 
-	struct direntry_t
-	{
-		// ID of the file-system object
-		// unique within the file-system it resides on
-		u64_t obj_id;
-
-		// ID of the file-system (same as fs_info_t::id)
-		u64_t fs_id;
-
-		TString name;
-
-		iosize_t size;	// object size in bytes (this is the "apparent" or "virtual" size of the file-system object)
-		iosize_t usage;	// effective disk-usage in bytes (this can be lower due to compression/holes or higher due to overhead)
-
-		// type of object
-		// can even be NX if the object vanished during enumeration
-		EObjectType type;
-
-		// number of hardlinks
-		u32_t n_links;
-
-		TTime ts_created;
-		TTime ts_access;
-		TTime ts_status;
-		TTime ts_write;
-	};
-
 	struct fs_info_t
 	{
 		// this is an implementation defined unique ID that can be used to
@@ -310,9 +316,9 @@ namespace el1::io::file
 			// do not alter the returned handle in any way!
 			const THandle& Handle() const EL_GETTER { return this->handle; }
 
-			// enumerates the content of the directoy
+			// enumerates the content of the directory
 			// this can be aborted by the receiver by returning false
-			// only direntry_t::name and obj_id are guaranteed to be valid
+			// only direntry_t::name is guaranteed to be valid
 			// fields that have no valid value are set to -1
 			void Enum(util::function::TFunction<bool, const direntry_t&> receiver) const;
 

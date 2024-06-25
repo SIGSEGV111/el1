@@ -101,6 +101,66 @@ namespace el1::io::format::json
 
 	////////////////////////////////////////////////////////////////////
 
+	bool TJsonValue::operator==(const TJsonValue& rhs) const
+	{
+		if(this->type == rhs.type)
+		{
+			switch(this->type)
+			{
+				case EType::NULLVALUE:
+					return true;
+
+				case EType::BOOLEAN:
+					return this->Boolean() == rhs.Boolean();
+
+				case EType::NUMBER:
+					return this->Number() == rhs.Number();
+
+				case EType::STRING:
+					return this->String() == rhs.String();
+
+				case EType::ARRAY:
+				{
+					auto& a1 = this->Array();
+					auto& a2 = rhs.Array();
+
+					if(a1.Count() != a2.Count())
+						return false;
+
+					for(usys_t i = 0; i < a1.Count(); i++)
+						if(a1[i] != a2[i])
+							return false;
+
+					return true;
+				}
+
+				case EType::MAP:
+				{
+					auto& a1 = this->Map().Items();
+					auto& a2 = rhs.Map().Items();
+
+					if(a1.Count() != a2.Count())
+						return false;
+
+					for(usys_t i = 0; i < a1.Count(); i++)
+						if(a1[i].key != a2[i].key || a1[i].value != a2[i].value)
+							return false;
+
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	bool TJsonValue::operator!=(const TJsonValue& rhs) const
+	{
+		return !(*this == rhs);
+	}
+
+	////////////////////////////////////////////////////////////////////
+
 	bool TJsonValue::IsNull() const
 	{
 		return type == EType::NULLVALUE;
@@ -124,6 +184,11 @@ namespace el1::io::format::json
 		return const_cast<TJsonValue*>(this)->Boolean();
 	}
 
+	const bool& TJsonValue::Boolean(const bool& _default) const
+	{
+		return IsBoolean() ? Boolean() : _default;
+	}
+
 	////////////////////////////////////////////////////////////////////
 
 	double& TJsonValue::Number()
@@ -137,6 +202,11 @@ namespace el1::io::format::json
 		return const_cast<TJsonValue*>(this)->Number();
 	}
 
+	const double& TJsonValue::Number(const double& _default) const
+	{
+		return IsNumber() ? Number() : _default;
+	}
+
 	////////////////////////////////////////////////////////////////////
 
 	TString& TJsonValue::String()
@@ -148,6 +218,11 @@ namespace el1::io::format::json
 	const TString& TJsonValue::String() const
 	{
 		return const_cast<TJsonValue*>(this)->String();
+	}
+
+	const TString& TJsonValue::String(const TString& _default) const
+	{
+		return IsString() ? String() : _default;
 	}
 
 	////////////////////////////////////////////////////////////////////
@@ -531,6 +606,16 @@ namespace el1::io::format::json
 				this->ToStream(sink);
 			}
 		);
+	}
+
+	const TJsonValue& TJsonValue::operator()(const char* const key) const
+	{
+		return (IsMap() && Map().Contains(key)) ? Map()[key] : NULLVALUE;
+	}
+
+	const TJsonValue& TJsonValue::operator()(const TString& key) const
+	{
+		return (IsMap() && Map().Contains(key)) ? Map()[key] : NULLVALUE;
 	}
 
 	////////////////////////////////////////////////////////////////////

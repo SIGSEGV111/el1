@@ -53,7 +53,7 @@ namespace el1::io::text::string
 			bool Contains(const TUTF32 needle) const;
 			usys_t Find(const TString& needle, const ssys_t start = 0, const bool reverse = false) const;
 			usys_t Find(const TUTF32 needle, const ssys_t start = 0, const bool reverse = false) const;
-			void Trim(const bool start = true, const bool end = true, const array_t<const TUTF32> trim_chars = WHITESPACE_CHARS);
+			TString& Trim(const bool start = true, const bool end = true, const array_t<const TUTF32> trim_chars = WHITESPACE_CHARS);
 			void ReplaceAt(const ssys_t pos, const usys_t length, const TString& substitute);
 			usys_t Replace(const TString& needle, const TString& substitute, const ssys_t start = 0, const bool reverse = false, const usys_t n_max_replacements = NEG1);
 			void Insert(const ssys_t pos, const TString& str);
@@ -161,6 +161,22 @@ namespace el1::io::text::string
 			{
 				this->buffer.chars.Clear(n_max_length);
 			}
+	};
+
+	template<typename T>
+	struct strigify_t
+	{
+		template<typename U>
+		static auto ToString(const U& v, const TString&) -> decltype((io::text::string::TString)v)
+		{
+			return (io::text::string::TString)v;
+		}
+
+		template<typename U>
+		static const io::text::string::TString& ToString(U&&, const TString& alt)
+		{
+			return alt;
+		}
 	};
 
 	struct TUndefineFormatException : error::IException

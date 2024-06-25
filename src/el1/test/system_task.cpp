@@ -362,7 +362,7 @@ namespace
 		stream_map.Add(1, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
 		stream_map.Add(2, TProcess::EFDIO::INHERIT);
 
-		TProcess proc1("/bin/tac", {}, stream_map);
+		TProcess proc1("/usr/bin/tac", {}, stream_map);
 
 		EXPECT_EQ(proc1.SendStream(0)->Write((const byte_t*)"hello world\nfoobar\n", 19U), 19U);
 		proc1.SendStream(0)->Close();
@@ -398,7 +398,7 @@ namespace
 			stream_map.Add(1, TProcess::EFDIO::DISCARD);
 			stream_map.Add(2, TProcess::EFDIO::INHERIT);
 
-			TProcess proc1("/bin/head", { "-c", "128" }, stream_map);
+			TProcess proc1("/usr/bin/head", { "-c", "128" }, stream_map);
 			EXPECT_EQ(proc1.Join(), 0);
 		}
 
@@ -408,7 +408,7 @@ namespace
 			stream_map.Add(1, TProcess::EFDIO::DISCARD);
 			stream_map.Add(2, TProcess::EFDIO::INHERIT);
 
-			TProcess proc1("/bin/head", { "-c", "128" }, stream_map);
+			TProcess proc1("/usr/bin/head", { "-c", "128" }, stream_map);
 			EXPECT_EQ(proc1.Join(), 0);
 		}
 
@@ -418,7 +418,7 @@ namespace
 			stream_map.Add(1, TProcess::EFDIO::DISCARD);
 			stream_map.Add(2, TProcess::EFDIO::INHERIT);
 
-			TProcess proc1("/bin/head", { "-c", "128" }, stream_map);
+			TProcess proc1("/usr/bin/head", { "-c", "128" }, stream_map);
 			EXPECT_EQ(proc1.Join(), 0);
 		}
 	}

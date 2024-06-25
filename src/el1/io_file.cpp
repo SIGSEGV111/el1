@@ -275,6 +275,13 @@ namespace el1::io::file
 		return *this;
 	}
 
+// 	u64_t TPath::Browse(util::function::TFunction<bool, const TPath&, const direntry_t&> receiver, const bool recursive, const EObjectType match_type, const bool include_root) const
+// 	{
+// 		TDirectory root(*this);
+//
+// 		EL_NOT_IMPLEMENTED;
+// 	}
+
 	/************************************************************************/
 
 	bool TDirectory::Contains(const TString& name) const

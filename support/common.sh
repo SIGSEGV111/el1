@@ -49,6 +49,8 @@ COMPILE_OPTIONS=(
 	-Werror
 	-Wno-unused-parameter
 	-Wno-error=unused-function
+	-Wno-vla-cxx-extension
+	-Wno-unknown-warning-option
 	-I "submodules/googletest/googletest/include"
 	-std=gnu++20
 	-Wno-unused-const-variable

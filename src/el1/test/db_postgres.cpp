@@ -1,6 +1,7 @@
 #ifdef EL1_WITH_POSTGRES
 #include <gtest/gtest.h>
 #include <el1/db_postgres.hpp>
+#include <el1/io_format_json.hpp>
 #include <arpa/inet.h>
 
 using namespace ::testing;
@@ -9,6 +10,7 @@ namespace
 {
 	using namespace el1::db::postgres;
 	using namespace el1::io::text::string;
+	using namespace el1::io::format::json;
 	using namespace el1::io::collection::list;
 	using namespace el1::io::collection::map;
 	using namespace el1::error;
@@ -27,9 +29,9 @@ namespace
 
 		{
 			usys_t n_rows = 0;
-			for(auto rs = connection.Execute("select 1,2,3.0::float8,'hello world',NULL,true,false,timestamp '2000-01-01',timestamp '1970-01-01'"); !rs->End(); rs->MoveNext())
+			for(auto rs = connection.Execute("select 1,2,3.0::float8,'hello world',NULL,true,false,timestamp '2000-01-01',timestamp '1970-01-01', '{\"num\":0}'::jsonb"); !rs->End(); rs->MoveNext())
 			{
-				auto [i,j,f,s,n,t,nt,ts1,ts2] = rs->Row<s32_t,s32_t,double,TString,void,bool,bool,TTime,TTime>();
+				auto [i,j,f,s,n,t,nt,ts1,ts2,js] = rs->Row<s32_t,s32_t,double,TString,void,bool,bool,TTime,TTime,TJsonValue>();
 
 				EXPECT_TRUE(i != nullptr && *i == 1);
 				EXPECT_TRUE(j != nullptr && *j == 2);
@@ -40,6 +42,7 @@ namespace
 				EXPECT_TRUE(nt != nullptr && *nt == false);
 				EXPECT_TRUE(ts1 != nullptr && *ts1 == 946684800);
 				EXPECT_TRUE(ts2 != nullptr && *ts2 == 0);
+				EXPECT_TRUE(js != nullptr && js->Map().Contains("num"));
 
 				n_rows++;
 			}
@@ -156,5 +159,17 @@ namespace
 		}
 		EXPECT_EQ(n_rows, 1U);
  	}
+
+ 	TEST(db_postgres, TPostgresConnection_Prepare)
+	{
+		TSortedMap<TString,TString> properties;
+		TPostgresConnection connection(properties);
+
+		auto ps = connection.Prepare("SELECT 1234");
+		auto rs = ps->Execute();
+		EXPECT_EQ(rs->CountColumns(), 1U);
+		auto [i] = rs->Row<s32_t>();
+		EXPECT_TRUE(i != nullptr && *i == 1234);
+	}
 }
 #endif

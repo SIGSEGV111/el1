@@ -23,6 +23,7 @@ namespace el1::io::format::json
 	using TJsonMap = TSortedMap<TString, TJsonValue>;
 	using TConstJsonMap = TSortedMap<TString, const TJsonValue>;
 	using TJsonArray = TList<TJsonValue>;
+	using TConstJsonArray = const array_t<const TJsonValue>;
 
 	enum class EReason : u8_t
 	{
@@ -85,14 +86,19 @@ namespace el1::io::format::json
 				return type;
 			}
 
+			bool operator==(const TJsonValue& rhs) const EL_GETTER;
+			bool operator!=(const TJsonValue& rhs) const EL_GETTER;
+
 			TJsonValue& operator[](const TString& key) EL_GETTER  { return Map()[key]; }
 			const TJsonValue& operator[](const TString& key) const EL_GETTER { return Map()[key]; }
-
 			TJsonValue& operator[](const char* const key) EL_GETTER  { return Map()[key]; }
 			const TJsonValue& operator[](const char* const key) const EL_GETTER { return Map()[key]; }
 
 			TJsonValue& operator[](const ssys_t index) { return Array()[index]; }
 			const TJsonValue& operator[](const ssys_t index) const EL_GETTER { return Array()[index]; }
+
+			const TJsonValue& operator()(const char* const key) const EL_GETTER;
+			const TJsonValue& operator()(const TString& key) const EL_GETTER;
 
 			#if (__SIZEOF_SIZE_T__ != __SIZEOF_INT__)	// ssys_t vs. int
 				TJsonValue& operator[](const int index) { return Array()[index]; }
@@ -105,18 +111,21 @@ namespace el1::io::format::json
 			bool IsBoolean() const { return Type() == EType::BOOLEAN; }
 			bool& Boolean() EL_GETTER;
 			const bool& Boolean() const EL_GETTER;
+			const bool& Boolean(const bool& _default) const EL_GETTER;
 			explicit operator bool&() { return Boolean(); }
 			explicit operator const bool&() const { return Boolean(); }
 
 			bool IsNumber() const { return Type() == EType::NUMBER; }
 			double& Number() EL_GETTER;
-			const double& Number() const EL_GETTER;;
+			const double& Number() const EL_GETTER;
+			const double& Number(const double& _default) const EL_GETTER;
 			explicit operator double&() { return Number(); }
 			explicit operator const double&() const { return Number(); }
 
 			bool IsString() const { return Type() == EType::STRING; }
 			TString& String() EL_GETTER;
 			const TString& String() const EL_GETTER;
+			const TString& String(const TString& _default) const EL_GETTER;
 			operator TString&() { return String(); }
 			operator const TString&() const { return String(); }
 

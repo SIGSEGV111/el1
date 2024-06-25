@@ -59,7 +59,7 @@ namespace el1::db::postgres
 
 	extern const oid_type_map_t ARR_OID_TYPE_MAP[];
 	extern const usys_t N_OID_TYPE_MAP;
-	static const usys_t SZ_FIELD_BUFFER = sizeof(void*) * 3;
+	static const usys_t SZ_FIELD_BUFFER = sizeof(void*) * 8;
 
 	struct TPostgresException : IException
 	{
@@ -79,6 +79,8 @@ namespace el1::db::postgres
 		alignas(TString) byte_t buffer[SZ_FIELD_BUFFER];
 
 		const oid_type_map_t& TypeInfo() const { return ARR_OID_TYPE_MAP[idx_typemap]; }
+
+		~TPostgresColumnDescription();
 	};
 
 	using result_ptr_t = std::unique_ptr<PGresult, void(*)(PGresult*)>;
@@ -121,10 +123,18 @@ namespace el1::db::postgres
 
 	class TStatement : public IStatement
 	{
+		protected:
+			TPostgresConnection* const conn;
+			const TString name;
+			const TString sql;
+
 		public:
 			TString SQL() const final override EL_GETTER;
-			usys_t CountArgs() const final override ;
-			std::unique_ptr<IResultStream> Execute(array_t<query_arg_t> args) final override ;
+			std::unique_ptr<IResultStream> Execute(array_t<query_arg_t> args) final override;
+			using IStatement::Execute;
+
+			TStatement(TPostgresConnection* const conn, TString sql);
+			~TStatement();
 	};
 
 	class TChannelListener;

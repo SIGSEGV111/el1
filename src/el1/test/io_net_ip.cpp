@@ -14,7 +14,44 @@ namespace
 	using namespace el1::error;
 	using namespace el1::system::task;
 
-	TEST(io_net_ip, ipaddr_t_parse)
+	TEST(io_net_ip, EnumMyIpAddresses)
+	{
+		auto addrs = EnumMyIpAddresses();
+		EXPECT_GE(addrs.Count(), 3U);
+		EXPECT_TRUE(addrs.Contains(ipaddr_t("127.0.0.1")));
+		EXPECT_TRUE(addrs.Contains(ipaddr_t("::1")));
+	}
+
+	TEST(io_net_ip_ipaddr_t, IsLoopback)
+	{
+		ipaddr_t a1("127.0.0.1");
+		ipaddr_t a2("127.0.0.2");
+		ipaddr_t a3("10.42.13.1");
+		ipaddr_t a4("10.42.12.2");
+		ipaddr_t a5("::1");
+		ipaddr_t a6("::2");
+
+		EXPECT_TRUE(a1.IsLoopback());
+		EXPECT_TRUE(a2.IsLoopback());
+		EXPECT_FALSE(a3.IsLoopback());
+		EXPECT_FALSE(a4.IsLoopback());
+		EXPECT_TRUE(a5.IsLoopback());
+		EXPECT_FALSE(a6.IsLoopback());
+	}
+
+		TEST(io_net_ip_ipaddr_t, MatchingPrefixLength)
+	{
+		ipaddr_t a1("127.0.0.1");
+		ipaddr_t a2("127.0.0.2");
+		ipaddr_t a3("10.42.13.1");
+		ipaddr_t a4("10.42.12.2");
+
+		EXPECT_EQ(a1.MatchingPrefixLength(a1), 128U);
+		EXPECT_EQ(a1.MatchingPrefixLength(a2), 126U);
+		EXPECT_EQ(a3.MatchingPrefixLength(a4), 128U - 8U - 1U);
+	}
+
+	TEST(io_net_ip_ipaddr_t, parse)
 	{
 		ipaddr_t("127.0.0.1");
 		ipaddr_t("10.42.13.114");
@@ -32,6 +69,22 @@ namespace
 		EXPECT_THROW(ipaddr_t("0001:0002:0003:0004:0005:0006:0007:0008:0009"), TException);
 
 		EXPECT_THROW(ipaddr_t("hello world"), TException);
+	}
+
+	TEST(io_net_ip, ResolveHostname)
+	{
+		{
+			const TList<ipaddr_t> addrs = ResolveHostname("localhost");
+			EXPECT_TRUE(addrs.Contains(ipaddr_t("127.0.0.1")));
+			EXPECT_TRUE(addrs.Contains(ipaddr_t("::1")));
+		}
+
+		{
+			// this obviously will need an update from time to time ...
+			const TList<ipaddr_t> addrs = ResolveHostname("heise.de");
+			EXPECT_TRUE(addrs.Contains(ipaddr_t("193.99.144.80")));
+			EXPECT_TRUE(addrs.Contains(ipaddr_t("2a02:2e0:3fe:1001:302::")));
+		}
 	}
 
 	TEST(io_net_ip, TUdpNode_construct)

@@ -54,7 +54,7 @@ namespace el1::io::stream::producer
 				peek_buffer(nullptr, 0),
 				idx_peek(0)
 			{
-				fiber.Start(util::function::TFunction(this, &TProducerPipe::FiberMain));
+				fiber.Start(util::function::TFunction<void>(this, &TProducerPipe::FiberMain));
 			}
 	};
 

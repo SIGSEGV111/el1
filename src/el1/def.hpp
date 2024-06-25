@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 
 #ifdef __linux__
 	#define EL_OS_CLASS_POSIX
@@ -45,11 +46,8 @@
 #define EL_GETTER EL_NO_SIDE_EFFECTS EL_WARN_UNUSED_RESULT
 #define EL_SETTER
 
-
 namespace el1
 {
-	static const unsigned long PAGE_SIZE = 4096UL;
-
 	enum class EEndianity
 	{
 		LITTLE,
@@ -57,4 +55,17 @@ namespace el1
 	};
 
 	static const EEndianity ENDIANITY = EEndianity::LITTLE;
+	static const unsigned long PAGE_SIZE = 4096UL;
+
+	template<typename T, typename C = T>
+	inline std::unique_ptr<C> New()
+	{
+		return std::unique_ptr<C>(static_cast<C*>(new T()));
+	}
+
+	template<typename T, typename C = T, typename ... A>
+	inline std::unique_ptr<C> New(A&& ... a)
+	{
+		return std::unique_ptr<C>(static_cast<C*>(new T(std::forward<A>(a) ...)));
+	}
 }

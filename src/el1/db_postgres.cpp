@@ -13,6 +13,7 @@
 #include <pgtypes_timestamp.h>
 #include <pgtypes_numeric.h>
 #include <endian.h>
+#include <atomic>
 
 namespace el1::db::postgres
 {
@@ -266,12 +267,41 @@ namespace el1::db::postgres
 
 	static usys_t SerializeJson(const oid_type_map_t& ti, const void* const in, void* const out)
 	{
-		EL_NOT_IMPLEMENTED;
+		const TJsonValue& json = *(const TJsonValue*)in;
+		TString str = json.ToString();
+		// str.chars.Insert(0, TUTF32(1U));
+
+		if(out)
+		{
+			const usys_t len = str.chars.Pipe().Transform(io::text::encoding::utf8::TUTF8Encoder()).Read((byte_t*)out, str.Length() * 4U);
+			// debug::Hexdump("SerializeJson", out, len);
+			return len;
+		}
+		else
+		{
+			return str.Length() * 4U;
+		}
 	}
 
 	static void DeserializeJson(const oid_type_map_t& ti, const void* const in, void* const out, const usys_t sz_in)
 	{
-		EL_NOT_IMPLEMENTED;
+		// fprintf(stderr, "DeserializeJson: in = %p (\"%s\"), sz_in = %zu, out = %p\n", in, (const char*)in, (size_t)sz_in, out);
+		// debug::Hexdump("DeserializeJson", in, sz_in);
+		if(out)
+		{
+			TString s;
+			if(ti.oid == 3802)
+			{
+				EL_ERROR(sz_in == 0, TLogicException);
+				s = TString((const char*)in + 1, sz_in - 1);	// there is a 0x01 character at the start that obviously confuses the JSON parser - the purpose of that 0x01 is unknown
+			}
+			else
+			{
+				s = TString((const char*)in, sz_in);
+			}
+
+			new (out) TJsonValue(TJsonValue::Parse(s));
+		}
 	}
 
 	const oid_type_map_t ARR_OID_TYPE_MAP[] = {
@@ -293,25 +323,18 @@ namespace el1::db::postgres
 		{   1184,  8, "timestamptz", &typeid(TTime     ), &SerializeTimestamp     , &DeserializeTimestamp     , &Destruct<TTime     > },
 		{   1186, 16, "interval"   , &typeid(TTime     ), &SerializeTimestamp     , &DeserializeTimestamp     , &Destruct<TTime     > },
 		{   1266, 12, "timetz"     , &typeid(TTime     ), &SerializeTimestamp     , &DeserializeTimestamp     , &Destruct<TTime     > },
+		{   3802, -1, "jsonb"      , &typeid(TJsonValue), &SerializeJson          , &DeserializeJson          , &Destruct<TJsonValue> },
 		{ 222755, -2, "cstring"    , &typeid(TString   ), &SerializeString        , &DeserializeString        , &Destruct<TString   > },
 	};
 
 	const usys_t N_OID_TYPE_MAP = sizeof(ARR_OID_TYPE_MAP) / sizeof(ARR_OID_TYPE_MAP[0]);
-
-	// static Oid LookupOidByType(const std::type_info& type)
-	// {
-	// 	for(usys_t i = 0; i < N_OID_TYPE_MAP; i++)
-	// 		if(*ARR_OID_TYPE_MAP[i].type == type)
-	// 			return ARR_OID_TYPE_MAP[i].oid;
-	// 	EL_THROW(TInvalidArgumentException, "type", "type not mapped");
-	// }
 
 	static usys_t LookupTypeInfoByOid(const Oid oid)
 	{
 		for(usys_t i = 0; i < N_OID_TYPE_MAP; i++)
 			if(ARR_OID_TYPE_MAP[i].oid == oid)
 				return i;
-		EL_THROW(TException, TString::Format("oid %d not mapped to C++ datatype", oid));
+		EL_THROW(TException, TString::Format("OID %d not mapped to C++ datatype", oid));
 	}
 
 	static const oid_type_map_t* LookupTypeInfoByType(const std::type_info& type, const bool fallback_nullptr)
@@ -319,7 +342,7 @@ namespace el1::db::postgres
 		for(usys_t i = 0; i < N_OID_TYPE_MAP; i++)
 			if(*ARR_OID_TYPE_MAP[i].type == type)
 				return ARR_OID_TYPE_MAP + i;
-		EL_ERROR(!fallback_nullptr, TException, TString::Format("type %q not mapped", debug::Demangle(type.name())));
+		EL_ERROR(!fallback_nullptr, TException, TString::Format("C++ datatype %q not mapped to postgres OID", debug::Demangle(type.name())));
 		return nullptr;
 	}
 
@@ -341,6 +364,18 @@ namespace el1::db::postgres
 
 	TPostgresException::TPostgresException(PGresult* pg_result, const TString& description) : message(TString::Format("%s: %s", description, PQresultErrorMessage(pg_result)))
 	{
+	}
+
+	/**********************************************************************************/
+
+	TPostgresColumnDescription::~TPostgresColumnDescription()
+	{
+		if(!is_null)
+		{
+			auto& ti = TypeInfo();
+			ti.destruct(buffer);
+			is_null = true;
+		}
 	}
 
 	/**********************************************************************************/
@@ -377,6 +412,8 @@ namespace el1::db::postgres
 
 	bool TResultStream::End() const
 	{
+		if(!IsMetadataReady())
+			const_cast<TResultStream*>(this)->MoveFirst();
 		return fifo.Remaining() == 0 && fifo.OnInputReady() == nullptr;
 	}
 
@@ -432,63 +469,62 @@ namespace el1::db::postgres
 
 	result_ptr_t TResultStream::InternalMoveNext()
 	{
-		gt_begin:;
-
-		while(fifo.Remaining() == 0)
-		{
-			auto w = OnNewData();
-			if(w == nullptr)
-			{
-				// EOF
-				fifo.CloseInput();
-				return result_ptr_t(nullptr, &PQclear);
-			}
-			w->WaitFor();
-		}
-
 		result_ptr_t current_result(nullptr, &PQclear);
+		void* tmp;
+
+		for(;;)
 		{
-			void* tmp;
+			while(fifo.Remaining() == 0)
+			{
+				auto w = OnNewData();
+				if(w == nullptr)
+				{
+					// EOF
+					fifo.CloseInput();
+					return result_ptr_t(nullptr, &PQclear);
+				}
+				w->WaitFor();
+			}
+
 			EL_ERROR(fifo.Read(&tmp, 1) != 1, TLogicException);
 			EL_ERROR(tmp == nullptr, TLogicException);
 			current_result = result_ptr_t((PGresult*)tmp, &PQclear);
+
+			const ExecStatusType status = PQresultStatus(current_result.get());
+			switch(status)
+			{
+				case PGRES_COMMAND_OK:
+					break;
+
+				case PGRES_TUPLES_OK:
+					// last result of this query to signal successful execution - it should not contain any rows
+					EL_ERROR(PQntuples(current_result.get()) != 0, TLogicException);
+					break;
+
+				case PGRES_SINGLE_TUPLE:
+					return current_result;
+
+				// error handling...
+				case PGRES_EMPTY_QUERY:
+					EL_THROW(TException, "empty query");
+				case PGRES_COPY_OUT:
+					EL_THROW(TLogicException);
+				case PGRES_COPY_IN:
+					EL_THROW(TLogicException);
+				case PGRES_BAD_RESPONSE:
+					EL_THROW(TLogicException);
+				case PGRES_NONFATAL_ERROR:
+					EL_THROW(TPostgresException, current_result.get(), "PGRES_NONFATAL_ERROR");
+				case PGRES_FATAL_ERROR:
+					EL_THROW(TPostgresException, current_result.get(), "PGRES_FATAL_ERROR");
+				case PGRES_COPY_BOTH:
+					EL_THROW(TLogicException);
+				case PGRES_PIPELINE_SYNC:
+					EL_THROW(TLogicException);
+				case PGRES_PIPELINE_ABORTED:
+					EL_THROW(TPostgresException, current_result.get(), "PGRES_PIPELINE_ABORTED");
+			}
 		}
-
-		const ExecStatusType status = PQresultStatus(current_result.get());
-		switch(status)
-		{
-			case PGRES_COMMAND_OK:
-				goto gt_begin;
-
-			case PGRES_TUPLES_OK:
-				// last result of this query to signal successful execution - it should not contain any rows
-				EL_ERROR(PQntuples(current_result.get()) != 0, TLogicException);
-				goto gt_begin;
-
-			case PGRES_SINGLE_TUPLE:
-				break;
-
-			case PGRES_EMPTY_QUERY:
-				EL_THROW(TException, "empty query");
-			case PGRES_COPY_OUT:
-				EL_THROW(TLogicException);
-			case PGRES_COPY_IN:
-				EL_THROW(TLogicException);
-			case PGRES_BAD_RESPONSE:
-				EL_THROW(TLogicException);
-			case PGRES_NONFATAL_ERROR:
-				EL_THROW(TPostgresException, current_result.get(), "PGRES_NONFATAL_ERROR");
-			case PGRES_FATAL_ERROR:
-				EL_THROW(TPostgresException, current_result.get(), "PGRES_FATAL_ERROR");
-			case PGRES_COPY_BOTH:
-				EL_THROW(TLogicException);
-			case PGRES_PIPELINE_SYNC:
-				EL_THROW(TLogicException);
-			case PGRES_PIPELINE_ABORTED:
-				EL_THROW(TPostgresException, current_result.get(), "PGRES_PIPELINE_ABORTED");
-		}
-
-		return current_result;
 	}
 
 	void TResultStream::DeserializeResult(result_ptr_t current_result)
@@ -539,6 +575,44 @@ namespace el1::db::postgres
 		void* r = nullptr;
 		while(fifo.Read(&r, 1) == 1)
 			PQclear((PGresult*)r);
+	}
+
+	/**********************************************************************************/
+
+	static TString GenerateUniqueStatementName()
+	{
+		static std::atomic_uint i = 0;
+		i++;
+		return TString::Format("st_%d", (unsigned)i);
+	}
+
+	TString TStatement::SQL() const
+	{
+		return sql;
+	}
+
+	std::unique_ptr<IResultStream> TStatement::Execute(array_t<query_arg_t> args)
+	{
+		TString exec = "EXECUTE ";
+		exec += name;
+		if(args.Count() > 0)
+		{
+			exec += "($1";
+			for(usys_t i = 1; i < args.Count(); i++)
+				exec += TString::Format(",$%d", i);
+			exec += ")";
+		}
+		return conn->Execute(exec, args);
+	}
+
+	TStatement::TStatement(TPostgresConnection* const conn, TString sql) : conn(conn), name(GenerateUniqueStatementName()), sql(sql)
+	{
+		conn->Execute(TString::Format("PREPARE %s AS %s", name, sql))->DiscardAllRows();
+	}
+
+	TStatement::~TStatement()
+	{
+		conn->Execute(TString::Format("DEALLOCATE %s", name))->DiscardAllRows();
 	}
 
 	/**********************************************************************************/
@@ -834,7 +908,7 @@ namespace el1::db::postgres
 
 	std::unique_ptr<IStatement> TPostgresConnection::Prepare(const TString& sql)
 	{
-		EL_NOT_IMPLEMENTED;
+		return New<TStatement>(this, sql);
 	}
 
 	std::unique_ptr<IResultStream> TPostgresConnection::Execute(const TString& sql, array_t<query_arg_t> args)

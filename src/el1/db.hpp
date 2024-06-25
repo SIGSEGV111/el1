@@ -2,6 +2,7 @@
 
 #include "io_stream.hpp"
 #include "io_text_string.hpp"
+#include "debug.hpp"
 
 namespace el1::db
 {
@@ -94,8 +95,10 @@ namespace el1::db
 	{
 		virtual ~IStatement() {}
 		virtual TString SQL() const EL_GETTER = 0;
-		virtual usys_t CountArgs() const = 0;
 		virtual std::unique_ptr<IResultStream> Execute(array_t<query_arg_t> args) = 0;
+
+		template<typename ... A>
+		std::unique_ptr<IResultStream> Execute(const A& ... a);
 	};
 
 	struct IDatabaseConnection
@@ -117,7 +120,7 @@ namespace el1::db
 	template<typename T, std::size_t I>
 	const T* IResultStream::_CheckAndCastCellValue(const void* const value) const
 	{
-		EL_ERROR( !(*Column(I).type == typeid(T) || typeid(T) == typeid(void)), TInvalidArgumentException, "T", "wrong datatype for result field");
+		EL_ERROR( !(*Column(I).type == typeid(T) || typeid(T) == typeid(void)), TException, TString::Format("wrong datatype for result field (fetched: %s, expected: %s)", debug::Demangle(Column(I).type->name()), debug::Demangle(typeid(T).name())));
 		return reinterpret_cast<const T*>(value);
 	}
 
@@ -165,9 +168,14 @@ namespace el1::db
 	{
 	}
 
+	static inline void _AddQueryArg(TList<query_arg_t>& args)
+	{
+	}
+
 	template<typename T>
 	static void _AddQueryArg(TList<query_arg_t>& args, const T& v)
 	{
+		_AddQueryArg(args); // just to remove the warning about _AddQueryArg(args) beeing unused
 		args.Append({
 			.type = &typeid(T),
 			.value = &v,
@@ -188,5 +196,13 @@ namespace el1::db
 		TList<query_arg_t> args;
 		_AddQueryArg(args, a ...);
 		return Execute(sql, (array_t<query_arg_t>)args);
+	}
+
+	template<typename ... A>
+	std::unique_ptr<IResultStream> IStatement::Execute(const A& ... a)
+	{
+		TList<query_arg_t> args;
+		_AddQueryArg(args, a ...);
+		return Execute((array_t<query_arg_t>)args);
 	}
 }

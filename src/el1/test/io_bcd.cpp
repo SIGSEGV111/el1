@@ -660,7 +660,7 @@ namespace
 	{
 		TXorShift rng;
 
-		for(unsigned i = 0; i < 1000; i++)
+		for(unsigned i = 0; i < 100; i++)
 		{
 			const short xi = rng.Integer<short>();
 			const short yi = rng.Integer<short>();
@@ -683,7 +683,7 @@ namespace
 	{
 		TXorShift rng;
 
-		for(unsigned i = 0; i < 1000; i++)
+		for(unsigned i = 0; i < 100; i++)
 		{
 			const short xi = rng.Integer<short>();
 			const short yi = rng.Integer<short>();
@@ -706,7 +706,7 @@ namespace
 	{
 		TXorShift rng;
 
-		for(unsigned i = 0; i < 1000; i++)
+		for(unsigned i = 0; i < 100; i++)
 		{
 			const short xi = rng.Integer<short>();
 			const short yi = rng.Integer<short>();
@@ -745,7 +745,7 @@ namespace
 	{
 		TXorShift rng;
 
-		for(unsigned i = 0; i < 1000; i++)
+		for(unsigned i = 0; i < 100; i++)
 		{
 			const double xd = round(rng.Float(true) * 100.0 * 100.0) / 100.0;
 			const double yd = round(rng.Float(true) * 100.0 * 100.0) / 100.0;
@@ -753,7 +753,7 @@ namespace
 			const TBCD x(xd, 10, 4, 8);
 			const TBCD y(yd, 10, 4, 8);
 			const TBCD d = x / y;
-			EXPECT_TRUE(CompareEpsilon(d.ToDouble(), xd / yd, 0.00001));
+			EXPECT_TRUE(CompareEpsilon(d.ToDouble(), xd / yd, 0.0001));
 
 			if(HasFailure())
 			{

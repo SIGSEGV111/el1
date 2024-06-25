@@ -5,6 +5,35 @@ namespace el1::io::net::ip
 {
 	using namespace text::string;
 
+	bool ipaddr_t::IsLoopback() const
+	{
+		switch(Version())
+		{
+			case EIP::V4: return octet[12] == 127;
+			case EIP::V6: return u64[0] == 0 && u32[2] == 0 && octet[12] == 0 && octet[13] == 0 && octet[14] == 0 && octet[15] == 1;
+			case EIP::ANY: EL_THROW(TLogicException);
+		}
+		EL_THROW(TLogicException);
+	}
+
+	u8_t ipaddr_t::MatchingPrefixLength(const ipaddr_t& rhs) const
+	{
+		if(this->Version() != rhs.Version())
+			return 0;
+
+		using namespace util::bits;
+
+		for(usys_t i = 0; i < 16; i++)
+			if(this->octet[i] != rhs.octet[i])
+			{
+				usys_t j = 0;
+				for(; j < 8 && GetBit(this->octet + i, 7-j) == GetBit(rhs.octet + i, 7-j); j++);
+				return (u8_t)(i * 8 + j);
+			}
+
+		return 128;
+	}
+
 	int ipaddr_t::Compare(const ipaddr_t& rhs) const
 	{
 		return memcmp(this->octet, rhs.octet, sizeof(ipaddr_t::octet));

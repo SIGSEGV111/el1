@@ -14,25 +14,25 @@ namespace el1::dev::gpio
 
 	enum class EMode : u8_t
 	{
-		DISABLED,	// HIGHZ, drivers disabled, irq disabled, if possible: input disabled, pull-resistors disabled
-		INPUT,		// HIGHZ, drivers disabled
-		OUTPUT,
-		ALT_FUNC
+		DISABLED = 0,	// HIGHZ, drivers disabled, irq disabled, if possible: input disabled, pull-resistors disabled
+		INPUT = 1,		// HIGHZ, drivers disabled
+		OUTPUT = 2,
+		ALT_FUNC = 3
 	};
 
 	enum class ETrigger : u8_t
 	{
-		DISABLED,
-		RISING_EDGE,
-		FALLING_EDGE,
-		BOTH_EDGES
+		DISABLED = 0,
+		RISING_EDGE = 1,
+		FALLING_EDGE = 2,
+		BOTH_EDGES = 3
 	};
 
 	enum class EPull : u8_t
 	{
-		DISABLED,
-		UP,
-		DOWN
+		DISABLED = 0,
+		UP = 1,
+		DOWN = 2
 	};
 
 	struct IPin

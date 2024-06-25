@@ -163,7 +163,7 @@ namespace el1::io::collection::list
 			constexpr array_t(T* const arr_items, const usys_t n_items) noexcept : arr_items(arr_items), n_items(n_items) {}
 			constexpr array_t(const array_t&) = default;
 			constexpr array_t(array_t&& other) = default;
-			constexpr ~array_t() = default;
+			~array_t() = default;
 	};
 
 	/*****************************************************************************/

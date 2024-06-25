@@ -1,11 +1,19 @@
 #include "io_net_ip.hpp"
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/udp.h>
-#include <netinet/tcp.h>
 #include <arpa/inet.h>
+#include <cstring>
 #include <fcntl.h>
+#include <ifaddrs.h>
+#include <iostream>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
 #include <string.h>
+#include <string>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <vector>
 
 namespace el1::io::net::ip
 {
@@ -210,6 +218,60 @@ namespace el1::io::net::ip
 
 	/*********************************************************************************/
 
+	TList<ipaddr_t> EnumMyIpAddresses()
+	{
+		TList<ipaddr_t> addrs;
+		struct ifaddrs* ifaddr;
+		EL_SYSERR(getifaddrs(&ifaddr));
+
+		try
+		{
+			for(struct ifaddrs* ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next)
+			{
+				if(ifa->ifa_addr == nullptr)
+					continue;
+
+				const int family = ifa->ifa_addr->sa_family;
+				if (family == AF_INET || family == AF_INET6)
+					addrs.Append(ConvertFromPosix(*ifa->ifa_addr).ip);
+			}
+		}
+		catch(...)
+		{
+			freeifaddrs(ifaddr);
+			throw;
+		}
+
+		freeifaddrs(ifaddr);
+		return addrs;
+	}
+
+	TList<ipaddr_t> ResolveHostname(const text::string::TString& hostname)
+	{
+		TList<ipaddr_t> addrs;
+
+		struct addrinfo* res = nullptr;
+		int status = 0;
+		EL_ERROR(status = getaddrinfo(hostname.MakeCStr().get(), nullptr, nullptr, &res) != 0, TException, gai_strerror(status));
+
+		try
+		{
+			for(struct addrinfo* p = res; p != nullptr; p = p->ai_next)
+				if(p->ai_family == AF_INET || p->ai_family == AF_INET6)
+					addrs.Append(ConvertFromPosix(*p->ai_addr).ip);
+		}
+		catch(...)
+		{
+			freeaddrinfo(res);
+			throw;
+		}
+
+		freeaddrinfo(res);
+		return addrs;
+	}
+
+	/*********************************************************************************/
+
 	handle_t TTcpClient::Handle()
 	{
 		return this->handle;
@@ -264,7 +326,7 @@ namespace el1::io::net::ip
 		if(this->on_rx_ready.Handle() == -1)
 			return 0;
 
-		const ssize_t r = read(this->handle, arr_items, n_items_max);
+		const ssize_t r = ::read(this->handle, arr_items, n_items_max);
 		if(r > 0)
 		{
 			return r;
@@ -287,7 +349,7 @@ namespace el1::io::net::ip
 		if(this->on_tx_ready.Handle() == -1)
 			return 0;
 
-		const ssize_t r = write(this->handle, arr_items, n_items_max);
+		const ssize_t r = ::write(this->handle, arr_items, n_items_max);
 		if(r > 0)
 		{
 			return r;

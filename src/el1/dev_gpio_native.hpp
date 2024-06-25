@@ -2,6 +2,7 @@
 
 #include "system_task.hpp"
 #include "system_handle.hpp"
+#include "system_waitable.hpp"
 #include "io_file.hpp"
 #include "dev_gpio.hpp"
 
@@ -12,26 +13,24 @@ namespace el1::dev::gpio::native
 	using namespace io::file;
 
 	class TNativeGpioController;
+	class TNativeGpioPin;
 
 	class TNativeGpioPin : public IPin
 	{
-		friend class TNativeGpioController;
-
-		protected:
-			const unsigned id;
+		private:
+			TNativeGpioController* const controller;
+			THandleWaitable on_input_trigger;
 			EMode mode;
 			ETrigger trigger;
-			#ifdef EL_OS_LINUX
-				mutable TFile state;
-			#endif
-			THandleWaitable on_input_trigger;
-
-			TPath Directory();
-			TNativeGpioPin(const unsigned id);
+			EPull pull;
+			u32_t debounce_us;
 
 		public:
+			void Configure(const EMode new_mode, const ETrigger new_trigger, const EPull new_pull, const u32_t new_debounce_us);
+
 			IController* Controller() const final override EL_GETTER;
 			void AutoCommit(const bool) final override EL_SETTER;
+			void Commit() final override;
 
 			bool State() const final override;
 			void State(const bool) final override EL_SETTER;
@@ -50,25 +49,22 @@ namespace el1::dev::gpio::native
 
 			THandleWaitable& OnInputTrigger() final override { return on_input_trigger; }
 
-			~TNativeGpioPin();
+			TNativeGpioPin(TNativeGpioController* const controller, const usys_t index);
+			virtual ~TNativeGpioPin();
 	};
 
 	class TNativeGpioController : public IController
 	{
 		friend class TNativeGpioPin;
-
-		protected:
-			unsigned base;
-			TNativeGpioController();
-
-			void ExportPin(const unsigned id);
-			void UnexportPin(const unsigned id);
+		private:
+			TFile io;
+			usys_t n_pins;
 
 		public:
+			usys_t CountPins() const EL_GETTER { return n_pins; }
 			std::unique_ptr<IPin> ClaimPin(const usys_t index) final override;
 
-			static TNativeGpioController* Instance();
-
+			TNativeGpioController(TFile);
 			virtual ~TNativeGpioController() {}
 	};
 }

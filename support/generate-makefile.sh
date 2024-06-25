@@ -89,6 +89,14 @@ unit-tests: link-tests gen/std/gtests gen/amalgam/gtests gen/srclib/gtests
 
 verify: unit-tests
 
+install: gen/std/libel1.so gen/amalgam/libel1.a gen/srclib/include/el1/el1.cpp
+	rm -rf /usr/include/el1
+	cp -rv gen/srclib/include/el1 /usr/include/el1
+	chmod 0755 /usr/include/el1
+	chmod -R 0644 /usr/include/el1/*
+	test -d /usr/lib64 && cp gen/std/libel1.so /usr/lib64/ || cp gen/std/libel1.so /usr/lib/
+	test -d /usr/lib64 && cp gen/amalgam/libel1.a /usr/lib64/ || cp gen/amalgam/libel1.a /usr/lib/
+
 gdb: gen/srclib/gtests
 	gdb ./gen/srclib/gtests
 

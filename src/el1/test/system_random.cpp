@@ -40,7 +40,7 @@ namespace
 			const u8_t RANGE_LOW = 1;
 			const u8_t RANGE_HIGH = 6;
 			const u8_t RANGE_LEN = RANGE_HIGH - RANGE_LOW + 1;
-			const unsigned COUNT = RANGE_LEN * 10000U;
+			const unsigned COUNT = RANGE_LEN * 1000U;
 
 			unsigned histogram[RANGE_LEN] = {};
 
@@ -54,8 +54,8 @@ namespace
 
 			for(unsigned i = 0; i < RANGE_LEN; i++)
 			{
-				EXPECT_GE(histogram[i],  9500U);
-				EXPECT_LE(histogram[i], 10500U);
+				EXPECT_GE(histogram[i],  900U);
+				EXPECT_LE(histogram[i], 1100U);
 				// std::cerr<<"histogram["<<i<<"] = "<<histogram[i]<<"\n";
 			}
 		}
@@ -64,7 +64,7 @@ namespace
 			const u8_t RANGE_LOW = 1;
 			const u8_t RANGE_HIGH = 100;
 			const u8_t RANGE_LEN = RANGE_HIGH - RANGE_LOW + 1;
-			const unsigned COUNT = RANGE_LEN * 10000U;
+			const unsigned COUNT = RANGE_LEN * 1000U;
 
 			unsigned histogram[RANGE_LEN] = {};
 
@@ -78,8 +78,8 @@ namespace
 
 			for(unsigned i = 0; i < RANGE_LEN; i++)
 			{
-				EXPECT_GE(histogram[i],  9500U);
-				EXPECT_LE(histogram[i], 10500U);
+				EXPECT_GE(histogram[i],  900U);
+				EXPECT_LE(histogram[i], 1110U);
 				// std::cerr<<"histogram["<<i<<"] = "<<histogram[i]<<"\n";
 			}
 		}

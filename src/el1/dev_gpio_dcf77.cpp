@@ -222,7 +222,7 @@ namespace el1::dev::gpio::dcf77
 		signal(std::move(signal)),
 		distance(distance),
 		on_update(),
-		fib_worker(util::function::TFunction(this, &TDCF77::WorkerMain))
+		fib_worker(util::function::TFunction<void>(this, &TDCF77::WorkerMain))
 	{
 		this->signal->Mode(EMode::INPUT);
 		this->signal->Trigger(ETrigger::RISING_EDGE);

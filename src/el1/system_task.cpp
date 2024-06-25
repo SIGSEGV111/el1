@@ -129,6 +129,34 @@ namespace el1::system::task
 
 	/***************************************************/
 
+	bool TFiber::TShutdownWaitable::IsReady() const
+	{
+		return fiber ? fiber->shutdown : true;
+	}
+
+	TFiber::TShutdownWaitable::TShutdownWaitable(const TShutdownWaitable& rhs) : fiber(rhs.fiber)
+	{
+		fiber->block_shutdown++;
+	}
+
+	TFiber::TShutdownWaitable::TShutdownWaitable(TShutdownWaitable&& rhs) : fiber(rhs.fiber)
+	{
+		rhs.fiber = nullptr;
+	}
+
+	TFiber::TShutdownWaitable::TShutdownWaitable(TFiber* const fiber) : fiber(fiber)
+	{
+		fiber->block_shutdown++;
+	}
+
+	TFiber::TShutdownWaitable::~TShutdownWaitable()
+	{
+		if(fiber)
+			fiber->block_shutdown--;
+	}
+
+	/***************************************************/
+
 	bool TFiber::DEBUG = false;
 	EStackAllocator TFiber::DEFAULT_STACK_ALLOCATOR = EStackAllocator::MALLOC;
 	usys_t TFiber::FIBER_DEFAULT_STACK_SIZE_BYTES = 16 * 1024;
@@ -159,7 +187,7 @@ namespace el1::system::task
 		TFiber* self = TThread::Self()->ActiveFiber();
 		IF_DEBUG_PRINTF("TFiber@%p::WaitForMany(waitables=%zu): ENTER\n", self, (size_t)waitables.Count());
 
-		if(self->shutdown)
+		if(self->shutdown && self->block_shutdown == 0)
 		{
 			self->shutdown = false;
 			throw shutdown_t();
@@ -179,14 +207,34 @@ namespace el1::system::task
 		self->blocked_by = array_t<const IWaitable*>();
 	}
 
-	TFiber::TFiber() : thread(TThread::Self()), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), stack_allocator(EStackAllocator::USER), shutdown(false)
+	TFiber::TFiber() : thread(TThread::Self()), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), stack_allocator(EStackAllocator::USER), shutdown(false), block_shutdown(0)
 	{
 		memset(&this->eh_state, 0, sizeof(this->eh_state));
 	}
 
-	TFiber::TFiber(TThread* const thread) : thread(thread), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::ACTIVE), stack_allocator(EStackAllocator::USER), shutdown(false)
+	TFiber::TFiber(TThread* const thread) : thread(thread), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::ACTIVE), stack_allocator(EStackAllocator::USER), shutdown(false), block_shutdown(0)
 	{
 		memset(&this->eh_state, 0, sizeof(this->eh_state));
+	}
+
+	void TFiber::BlockShutdown(const bool s)
+	{
+		TFiber* const self = TThread::Self()->ActiveFiber();
+		if(s)
+		{
+			this->block_shutdown++;
+		}
+		else
+		{
+			EL_ERROR(this->block_shutdown == 0, TLogicException);
+			this->block_shutdown--;
+		}
+
+		if(self == this && self->shutdown && self->block_shutdown == 0)
+		{
+			this->shutdown = false;
+			throw shutdown_t();
+		}
 	}
 
 	void TFiber::AllocateStack(void* const p_stack_input, const usys_t sz_stack_input, const EStackAllocator allocator)
@@ -252,7 +300,7 @@ namespace el1::system::task
 		this->sz_stack = 0;
 	}
 
-	TFiber::TFiber(TFunction<void> main_func, const bool autostart, const usys_t sz_stack, void* const p_stack) : thread(TThread::Self()), main_func(main_func), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), shutdown(false)
+	TFiber::TFiber(TFunction<void> main_func, const bool autostart, const usys_t sz_stack, void* const p_stack) : thread(TThread::Self()), main_func(main_func), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), shutdown(false), block_shutdown(0)
 	{
 		IF_DEBUG_PRINTF("TFiber@%p::TFiber(main_func=?, autostart=%s, sz_stack=%zu, p_stack=%p)\n", this, autostart ? "true":"false", (size_t)sz_stack, p_stack);
 		memset(&this->eh_state, 0, sizeof(this->eh_state));
@@ -343,7 +391,7 @@ namespace el1::system::task
 		TFiber* next_fiber = nullptr;
 		IF_DEBUG_PRINTF("TFiber@%p::Schedule(): ENTER\n", self);
 
-		if(self->shutdown)
+		if(self->shutdown && self->block_shutdown == 0)
 		{
 			self->shutdown = false;
 			throw shutdown_t();
@@ -438,7 +486,7 @@ namespace el1::system::task
 		self->state = EFiberState::ACTIVE;
 		thread->active_fiber = self;
 
-		if(self->shutdown)
+		if(self->shutdown && self->block_shutdown == 0)
 		{
 			self->shutdown = false;
 			throw shutdown_t();
@@ -502,7 +550,7 @@ namespace el1::system::task
 
 		IF_DEBUG_PRINTF("SwitchTo(): returned from=%p to=%p (my last switch was to %p)\n", self->thread->previous_fiber, self, this);
 
-		if(self->shutdown)
+		if(self->shutdown && self->block_shutdown == 0)
 		{
 			self->shutdown = false;
 			throw shutdown_t();

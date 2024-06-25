@@ -46,7 +46,7 @@ namespace el1::system::waitable
 
 		protected:
 			mutable bool is_ready;
-			const wait_t wait;
+			wait_t wait;
 			handle::handle_t handle;
 
 		public:
@@ -87,5 +87,40 @@ namespace el1::system::waitable
 
 				return (*watch & mask) != (*ref & mask);
 			}
+	};
+
+	enum class EWaitUntil
+	{
+		EQUAL,
+		NOT_EQUAL
+	};
+
+	template<typename T>
+	struct TStateWaitable : public IWaitable
+	{
+		T reference_state;
+		const T* monitored_state;
+		EWaitUntil wait_until;
+
+		bool IsReady() const final override
+		{
+			switch(wait_until)
+			{
+				case EWaitUntil::EQUAL:
+					return reference_state == *monitored_state;
+
+				case EWaitUntil::NOT_EQUAL:
+					return reference_state != *monitored_state;
+			}
+
+			return true;
+		}
+
+		TStateWaitable& operator=(TStateWaitable&&) = default;
+		TStateWaitable& operator=(const TStateWaitable&) = default;
+		TStateWaitable(TStateWaitable&&) = default;
+		TStateWaitable(const TStateWaitable&) = default;
+
+		TStateWaitable(T reference_state, const T* const monitored_state, const EWaitUntil wait_until) : reference_state(std::move(reference_state)), monitored_state(monitored_state), wait_until(wait_until) {}
 	};
 }

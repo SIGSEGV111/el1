@@ -18,8 +18,8 @@ namespace el1::io::text::encoding
 	{
 		u32_t code;
 
-		constexpr ~TUTF32() = default;
-		constexpr TUTF32() = default;
+		~TUTF32() = default;
+		TUTF32() = default;
 		constexpr TUTF32(TUTF32&&) = default;
 		constexpr TUTF32(const TUTF32&) = default;
 		constexpr TUTF32(const u32_t code) : code(code) {}

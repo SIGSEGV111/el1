@@ -2,116 +2,84 @@
 #ifdef EL_OS_LINUX
 
 #include "dev_gpio_native.hpp"
-
-#include <stdio.h>
-#include "system_task.hpp"
+#include <linux/gpio.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <string.h>
+#include <unistd.h>
 
 namespace el1::dev::gpio::native
 {
-	static const char* const SYSFS_GPIO_BASE = "/sys/class/gpio";
-	static std::unique_ptr<TNativeGpioController> controller = nullptr;
-
-	TPath TNativeGpioPin::Directory()
+	void TNativeGpioPin::Configure(const EMode new_mode, const ETrigger new_trigger, const EPull new_pull, const u32_t new_debounce_us)
 	{
-		const TString str = "%s/gpio%d";
-		return TString::Format(str, SYSFS_GPIO_BASE, controller->base + id);
+		struct gpio_v2_line_config config = {};
+		config.flags = GPIO_V2_LINE_FLAG_EVENT_CLOCK_HTE
+			| (new_mode == EMode::INPUT  ? GPIO_V2_LINE_FLAG_INPUT  : 0)
+			| (new_mode == EMode::OUTPUT ? GPIO_V2_LINE_FLAG_OUTPUT : 0)
+			| ((new_mode != EMode::DISABLED && (new_trigger == ETrigger::RISING_EDGE  || new_trigger == ETrigger::BOTH_EDGES)) ? GPIO_V2_LINE_FLAG_EDGE_RISING  : 0)
+			| ((new_mode != EMode::DISABLED && (new_trigger == ETrigger::FALLING_EDGE || new_trigger == ETrigger::BOTH_EDGES)) ? GPIO_V2_LINE_FLAG_EDGE_FALLING : 0)
+			| ((new_mode != EMode::DISABLED && new_pull == EPull::UP       ) ? GPIO_V2_LINE_FLAG_BIAS_PULL_UP   : 0)
+			| ((new_mode != EMode::DISABLED && new_pull == EPull::DOWN     ) ? GPIO_V2_LINE_FLAG_BIAS_PULL_DOWN : 0)
+			| ((new_mode != EMode::DISABLED || new_pull == EPull::DISABLED ) ? GPIO_V2_LINE_FLAG_BIAS_DISABLED  : 0);
+
+		if(new_mode == EMode::INPUT)
+		{
+			config.num_attrs = 1;
+			config.attrs[0].attr.id = GPIO_V2_LINE_ATTR_ID_DEBOUNCE;
+			config.attrs[0].attr.debounce_period_us = new_debounce_us;
+			config.attrs[0].mask = 1;
+		}
+
+		EL_SYSERR(ioctl(on_input_trigger.Handle(), GPIO_V2_LINE_SET_CONFIG_IOCTL, &config));
+		this->mode = new_mode;
+		this->trigger = new_trigger;
+		this->pull = new_pull;
+		this->debounce_us = new_debounce_us;
 	}
 
 	IController* TNativeGpioPin::Controller() const
 	{
-		return TNativeGpioController::Instance();
+		return controller;
 	}
 
 	void TNativeGpioPin::AutoCommit(const bool)
 	{
-		// noting to do
-		// auto-commit is always on
+		// no effect
+	}
+
+	void TNativeGpioPin::Commit()
+	{
+		// no effect
 	}
 
 	bool TNativeGpioPin::State() const
 	{
-		byte_t buffer;
-		state.Offset(0);
-		state.Read(&buffer, 1);
-		return buffer != '0';
+		struct gpio_v2_line_values values = { .bits = 0, .mask = 1 };
+		EL_SYSERR(ioctl(on_input_trigger.Handle(), GPIO_V2_LINE_GET_VALUES_IOCTL, &values));
+		return values.bits != 0;
 	}
 
 	void TNativeGpioPin::State(const bool new_state)
 	{
-		EL_ERROR(mode != EMode::OUTPUT, TException, "pin must be in OUTPUT mode before setting its state");
-		state.Offset(0);
-		state.Write((const byte_t*)(new_state ? "1" : "0"), 1);
+		EL_ERROR(mode != EMode::OUTPUT, TException, "line must be in OUTPUT mode before you can change the state");
+		struct gpio_v2_line_values values = { .bits = (new_state ? 1U : 0U), .mask = 1 };
+		EL_SYSERR(ioctl(on_input_trigger.Handle(), GPIO_V2_LINE_SET_VALUES_IOCTL, &values));
 	}
 
 	EMode TNativeGpioPin::Mode() const
 	{
-		return mode;
+		return this->mode;
 	}
 
 	void TNativeGpioPin::Mode(const EMode new_mode)
 	{
-		if(mode == new_mode) return;
+		if(this->mode == new_mode)
+			return;
 
-		TFile direction(Directory() + "direction", TAccess::RW);
-
-		switch(new_mode)
-		{
-			case EMode::DISABLED:
-			case EMode::INPUT:
-				direction.Write((const byte_t*)"in", 2);
-				break;
-
-			case EMode::OUTPUT:
-				direction.Write((const byte_t*)"out", 3);
-				break;
-
-			case EMode::ALT_FUNC:
-				EL_THROW(TInvalidArgumentException, "new_mode", "ALT_FUNC mode cannot be set through Mode() - it has to be set through AlternateFunction()");
-
-			default:
-				EL_THROW(TLogicException);
-		}
-
-		mode = new_mode;
+		Configure(new_mode, this->trigger, this->pull, this->debounce_us);
 	}
 
-	ETrigger TNativeGpioPin::Trigger() const
-	{
-		return trigger;
-	}
-
-	void TNativeGpioPin::Trigger(const ETrigger new_trigger)
-	{
-		if(trigger == new_trigger) return;
-
-		TFile edge(Directory() + "edge", TAccess::RW);
-
-		switch(new_trigger)
-		{
-			case ETrigger::DISABLED:
-				edge.Write((const byte_t*)"none", 4);
-				break;
-
-			case ETrigger::RISING_EDGE:
-				edge.Write((const byte_t*)"rising", 6);
-				break;
-
-			case ETrigger::FALLING_EDGE:
-				edge.Write((const byte_t*)"falling", 7);
-				break;
-
-			case ETrigger::BOTH_EDGES:
-				edge.Write((const byte_t*)"both", 4);
-				break;
-
-			default:
-				EL_THROW(TLogicException);
-		}
-
-		trigger = new_trigger;
-	}
-
-	void TNativeGpioPin::AlternateFunction(const int func)
+	void TNativeGpioPin::AlternateFunction(const int)
 	{
 		EL_NOT_IMPLEMENTED;
 	}
@@ -121,80 +89,66 @@ namespace el1::dev::gpio::native
 		EL_NOT_IMPLEMENTED;
 	}
 
+	ETrigger TNativeGpioPin::Trigger() const
+	{
+		return this->trigger;
+	}
+
+	void TNativeGpioPin::Trigger(const ETrigger new_trigger)
+	{
+		if(this->trigger == new_trigger)
+			return;
+
+		Configure(this->mode, new_trigger, this->pull, this->debounce_us);
+	}
+
 	EPull TNativeGpioPin::Pull() const
 	{
-		return EPull::DISABLED;
+		return this->pull;
 	}
 
 	void TNativeGpioPin::Pull(const EPull new_pull)
 	{
-		EL_ERROR(new_pull != EPull::DISABLED, TNotImplementedException);
+		if(this->pull == new_pull)
+			return;
+
+		Configure(this->mode, this->trigger, new_pull, this->debounce_us);
 	}
 
-	TNativeGpioPin::TNativeGpioPin(const unsigned id) : id(id), mode(EMode::INPUT), trigger(ETrigger::DISABLED), state(Directory() + "value", TAccess::RW), on_input_trigger({.read = false, .write = false, .other = true}, state.Handle())
+	TNativeGpioPin::TNativeGpioPin(TNativeGpioController* const controller, const usys_t index) : controller(controller), on_input_trigger({ .read = true, .write = false, .other = false }), mode(EMode::INPUT), trigger(ETrigger::DISABLED), pull(EPull::DISABLED), debounce_us(0)
 	{
+		struct gpio_v2_line_request request = {};
+		request.offsets[0] = index;
+		strncpy(request.consumer, "el1", GPIO_MAX_NAME_SIZE);
+		request.config.flags = GPIO_V2_LINE_FLAG_INPUT | GPIO_V2_LINE_FLAG_BIAS_DISABLED | GPIO_V2_LINE_FLAG_EVENT_CLOCK_HTE;
+		request.config.num_attrs = 0;
+		request.num_lines = 1;
+		request.event_buffer_size = 16;
+		EL_SYSERR(ioctl(controller->io.Handle(), GPIO_V2_GET_LINE_IOCTL, &request));
+		EL_ERROR(request.fd == -1, TLogicException);
+		on_input_trigger.Handle(request.fd);
+		EL_SYSERR(fcntl(request.fd, F_SETFD, EL_SYSERR(fcntl(request.fd, F_GETFD)) | FD_CLOEXEC));
+		EL_SYSERR(fcntl(request.fd, F_SETFL, EL_SYSERR(fcntl(request.fd, F_GETFL)) | O_NONBLOCK));
 	}
 
 	TNativeGpioPin::~TNativeGpioPin()
 	{
-		controller->UnexportPin(id);
+		if(on_input_trigger.Handle() != -1)
+			close(on_input_trigger.Handle());
 	}
 
-	void TNativeGpioController::ExportPin(const unsigned id)
-	{
-		try
-		{
-			TFile _export(TString(SYSFS_GPIO_BASE) + "/export", TAccess::WO);
+	/**********************************************************************************/
 
-			char buffer[16] = {};
-			const int len = snprintf(buffer, sizeof(buffer), "%d", base + id);
-			_export.Write((const byte_t*)buffer, len);
-		}
-		catch(const IException& e)
-		{
-			EL_FORWARD(e, TException, TString::Format("while exporting/claiming GPIO #%d", id));
-		}
+	std::unique_ptr<IPin> TNativeGpioController::ClaimPin(const usys_t index)
+	{
+		return New<TNativeGpioPin, IPin>(this, index);
 	}
 
-	void TNativeGpioController::UnexportPin(const unsigned id)
+	TNativeGpioController::TNativeGpioController(TFile _io) : io(std::move(_io))
 	{
-		try
-		{
-			TFile _unexport(TString(SYSFS_GPIO_BASE) + "/unexport", TAccess::WO);
-
-			char buffer[16] = {};
-			const int len = snprintf(buffer, sizeof(buffer), "%d", base + id);
-			_unexport.Write((const byte_t*)buffer, len);
-		}
-		catch(const IException& e)
-		{
-			EL_FORWARD(e, TException, TString::Format("while unexporting/releasing GPIO #%d", id));
-		}
-	}
-
-	std::unique_ptr<IPin> TNativeGpioController::ClaimPin(const usys_t id)
-	{
-		ExportPin(id);
-		try
-		{
-			return std::unique_ptr<IPin>(new TNativeGpioPin(id));
-		}
-		catch(...)
-		{
-			try { UnexportPin(id); } catch(...) {}
-			throw;
-		}
-	}
-
-	TNativeGpioController* TNativeGpioController::Instance()
-	{
-		if(controller == nullptr)
-			controller = std::unique_ptr<TNativeGpioController>(new TNativeGpioController());
-		return controller.get();
-	}
-
-	TNativeGpioController::TNativeGpioController() : base(0)
-	{
+		struct gpiochip_info info = {};
+		EL_SYSERR(ioctl(io.Handle(), GPIO_GET_CHIPINFO_IOCTL, &info));
+		n_pins = info.lines;
 	}
 }
 

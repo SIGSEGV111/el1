@@ -251,7 +251,7 @@ namespace el1::system::cmdline
 
 	TString TPathArgument::DefaultValue() const
 	{
-		return var->IsEmpty() ? TString() : TString(*var);
+		return var->IsEmpty() ? TString() : var->operator TString();
 	}
 
 	TString TPathArgument::ExpectedType() const

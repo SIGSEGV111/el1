@@ -60,7 +60,7 @@ namespace el1::debug
 		});
 	}
 
-	TString HexdumpStr(const void* const data, const usys_t n_bytes, const usys_t line_length, const char* context)
+	TString HexdumpStr(const void* const data, const usys_t n_bytes, const usys_t line_length, const char* const context)
 	{
 		TString str;
 		Hexdump(data, n_bytes, line_length, context, [&](const char* const line) {

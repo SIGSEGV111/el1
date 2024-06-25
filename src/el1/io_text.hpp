@@ -5,7 +5,6 @@
 #include "io_types.hpp"
 #include "io_stream.hpp"
 #include "io_collection_list.hpp"
-#include "io_collection_map.hpp"
 #include "io_text_encoding.hpp"
 
 namespace el1::io::text

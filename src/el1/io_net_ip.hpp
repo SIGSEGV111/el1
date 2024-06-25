@@ -32,6 +32,9 @@ namespace el1::io::net::ip
 			struct { u64_t u64[2]; };	// big endian
 		};
 
+		bool IsLoopback() const EL_GETTER;
+		u8_t MatchingPrefixLength(const ipaddr_t& rhs) const EL_GETTER;
+
 		int Compare(const ipaddr_t& rhs) const EL_GETTER;
 		inline bool operator>(const ipaddr_t& rhs) const { return Compare(rhs) > 0; }
 		inline bool operator<(const ipaddr_t& rhs) const { return Compare(rhs) < 0; }
@@ -46,7 +49,6 @@ namespace el1::io::net::ip
 		ipaddr_t& operator&=(const ipaddr_t& rhs);
 		ipaddr_t operator|(const ipaddr_t& rhs) const EL_GETTER;
 		ipaddr_t operator&(const ipaddr_t& rhs) const EL_GETTER;
-
 
 		u32_t& IPv4();
 		const u32_t& IPv4() const;
@@ -92,6 +94,7 @@ namespace el1::io::net::ip
 		port_t port;
 	};
 
+	io::collection::list::TList<ipaddr_t> EnumMyIpAddresses();
 	io::collection::list::TList<ipaddr_t> ResolveHostname(const text::string::TString&);
 
 	class TTcpClient : public stream::ISink<byte_t>, public stream::ISource<byte_t>

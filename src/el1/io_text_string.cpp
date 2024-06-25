@@ -903,7 +903,7 @@ namespace el1::io::text::string
 		return NEG1;
 	}
 
-	void TString::Trim(const bool start, const bool end, const array_t<const TUTF32> trim_chars)
+	TString& TString::Trim(const bool start, const bool end, const array_t<const TUTF32> trim_chars)
 	{
 		usys_t s = 0;
 		usys_t e = 0;
@@ -915,6 +915,7 @@ namespace el1::io::text::string
 			for(; e < Length() && trim_chars.Contains(chars[Length() - e - 1]); e++);
 
 		chars.Cut(s, e);
+		return *this;
 	}
 
 	void TString::ReplaceAt(const ssys_t pos, const usys_t length, const TString& substitute)

@@ -19,7 +19,16 @@
    fun:calloc
    fun:gss_acquire_cred_from
    fun:gss_acquire_cred
-   obj:/usr/lib64/libpq.so.5.16
-   obj:/usr/lib64/libpq.so.5.16
-   fun:PQconnectPoll
+}
+
+{
+   pthread_create_tls
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   fun:calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls
+   fun:allocate_stack
+   fun:pthread_create@@GLIBC_2.34
 }

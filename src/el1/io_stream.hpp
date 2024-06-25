@@ -159,8 +159,24 @@ namespace el1::io::stream
 		virtual void Flush() {} // flushes any output buffers
 	};
 
+	template<typename TPipe, typename TOut, bool is_copy_constructible>
+	struct TPipeSource
+	{
+	};
+
+	template<typename TPipe, typename TOut>
+	struct TPipeSource<TPipe, TOut, true> : public ISource<TOut>
+	{
+		usys_t Read(TOut* const arr_items, const usys_t n_items_max) override EL_WARN_UNUSED_RESULT;
+	};
+
+	template<typename TPipe, typename TOut>
+	struct TPipeSource<TPipe, TOut, false>
+	{
+	};
+
 	template<typename TPipe, typename _TOut>
-	struct IPipe : public ISource<_TOut>
+	struct IPipe : public TPipeSource<TPipe, _TOut, std::is_copy_constructible_v<_TOut> >
 	{
 		using TOut = _TOut;
 
@@ -197,8 +213,6 @@ namespace el1::io::stream
 		iosize_t Count();
 		const TOut& First();
 		io::collection::list::TList<TOut> Collect();
-
-		usys_t Read(TOut* const arr_items, const usys_t n_items_max) override EL_WARN_UNUSED_RESULT;
 	};
 
 	template<typename T>
@@ -586,7 +600,7 @@ namespace el1::io::stream
 	/**********************************************/
 
 	template<typename TPipe, typename TOut>
-	usys_t IPipe<TPipe, TOut>::Read(TOut* const arr_items, const usys_t n_items_max)
+	usys_t TPipeSource<TPipe, TOut, true>::Read(TOut* const arr_items, const usys_t n_items_max)
 	{
 		TPipe* source = static_cast<TPipe*>(this);
 		for(usys_t i = 0; i < n_items_max; i++)

@@ -154,6 +154,8 @@ namespace el1::system::task
 			{
 				for(const IWaitable* waitable : fiber->blocked_by)
 				{
+					if(waitable == nullptr)
+						continue;
 					const THandleWaitable* const handle_waitable = waitable->HandleWaitable();
 					if(handle_waitable != nullptr)
 					{

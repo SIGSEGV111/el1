@@ -360,7 +360,7 @@ namespace el1::io::net::http
 	THttpServer::THttpServer(TTcpServer* const tcp_server, request_handler_t handler) :
 		tcp_server(tcp_server),
 		handler(handler),
-		fiber(TFunction(this, &THttpServer::FiberMain), true)
+		fiber(TFunction<void>(this, &THttpServer::FiberMain), true)
 	{
 		IF_DEBUG_PRINTF("THttpServer constructor\n");
 	}

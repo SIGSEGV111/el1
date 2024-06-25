@@ -357,6 +357,7 @@ namespace el1::system::task
 			EFiberState state;
 			EStackAllocator stack_allocator;
 			bool shutdown;
+			unsigned block_shutdown;
 			context_registers_t registers;
 			__cxxabiv1::__cxa_eh_globals eh_state;
 
@@ -372,6 +373,20 @@ namespace el1::system::task
 			static void KernelWaitForMany(const TList<TFiber*>& fibers);
 
 		public:
+			class TShutdownWaitable : public IWaitable
+			{
+				private:
+					TFiber* fiber;
+
+				public:
+					bool IsReady() const final override;
+
+					TShutdownWaitable(const TShutdownWaitable&);
+					TShutdownWaitable(TShutdownWaitable&&);
+					TShutdownWaitable(TFiber* const fiber);
+					~TShutdownWaitable();
+			};
+
 			static bool DEBUG; // do NOT change after fibers were created
 			static EStackAllocator DEFAULT_STACK_ALLOCATOR;
 			static usys_t FIBER_DEFAULT_STACK_SIZE_BYTES;
@@ -384,6 +399,8 @@ namespace el1::system::task
 
 			TFiber(); // won't start fiber
 			TFiber(TFunction<void> main_func, const bool autostart = true, const usys_t sz_stack = FIBER_DEFAULT_STACK_SIZE_BYTES, void* const p_stack = nullptr);
+
+			TShutdownWaitable OnShutdown() EL_GETTER { return TShutdownWaitable(this); }
 
 			// returns the amount of free stack space in bytes for this fiber
 			// naturally this might be off by a few-bytes for the function call itself if the calling fiber is inquiring on its own stack
@@ -436,6 +453,10 @@ namespace el1::system::task
 
 			// requests the fiber to gracefully shutdown
 			bool Shutdown() final override;
+			bool WantShutdown() const { return shutdown; }
+
+			// if set to true, shutdown_t will not be delivered until it is set to false again
+			void BlockShutdown(const bool);
 
 			static void Sleep(const TTime time, const EClock clock = EClock::MONOTONIC);
 
