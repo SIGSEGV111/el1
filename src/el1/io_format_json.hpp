@@ -97,7 +97,6 @@ namespace el1::io::format::json
 			TJsonValue& operator[](const ssys_t index) { return Array()[index]; }
 			const TJsonValue& operator[](const ssys_t index) const EL_GETTER { return Array()[index]; }
 
-			const TJsonValue& operator()(const char* const key) const EL_GETTER;
 			const TJsonValue& operator()(const TString& key) const EL_GETTER;
 
 			#if (__SIZEOF_SIZE_T__ != __SIZEOF_INT__)	// ssys_t vs. int
@@ -123,23 +122,25 @@ namespace el1::io::format::json
 			explicit operator const double&() const { return Number(); }
 
 			bool IsString() const { return Type() == EType::STRING; }
-			TString& String() EL_GETTER;
-			const TString& String() const EL_GETTER;
-			const TString& String(const TString& _default) const EL_GETTER;
-			operator TString&() { return String(); }
-			operator const TString&() const { return String(); }
+			TString& String();
+			const TString& String() const;
+			const TString& String(const TString& _default) const;
+			explicit operator TString&() { return String(); }
+			explicit operator const TString&() const { return String(); }
 
 			bool IsArray() const { return Type() == EType::ARRAY; }
 			TJsonArray& Array() EL_GETTER;
 			const array_t<const TJsonValue>& Array() const EL_GETTER;
-			operator TJsonArray&() { return Array(); }
-			operator array_t<const TJsonValue>() const { return Array(); }
+			const array_t<const TJsonValue>& Array(const array_t<const TJsonValue>& _default) const EL_GETTER;
+			explicit operator TJsonArray&() { return Array(); }
+			explicit operator array_t<const TJsonValue>() const { return Array(); }
 
 			bool IsMap() const { return Type() == EType::MAP; }
 			TJsonMap& Map() EL_GETTER;
 			const TConstJsonMap& Map() const EL_GETTER;
-			operator TJsonMap&() { return Map(); }
-			operator const TConstJsonMap&() const { return Map(); }
+			const TConstJsonMap& Map(const TConstJsonMap& _default) const EL_GETTER;
+			explicit operator TJsonMap&() { return Map(); }
+			explicit operator const TConstJsonMap&() const { return Map(); }
 
 			TJsonValue& operator=(const TJsonValue& rhs);
 			TJsonValue& operator=(TJsonValue&& rhs);

@@ -256,6 +256,11 @@ namespace el1::io::format::json
 		return const_cast<TJsonValue*>(this)->Map();
 	}
 
+	const TConstJsonMap& TJsonValue::Map(const TConstJsonMap& _default) const
+	{
+		return IsMap() ? (const TConstJsonMap&)const_cast<TJsonValue*>(this)->Map() : _default;
+	}
+
 	////////////////////////////////////////////////////////////////////
 
 	TJsonValue& TJsonValue::operator=(const TJsonValue& rhs)
@@ -613,11 +618,6 @@ namespace el1::io::format::json
 		);
 	}
 
-	const TJsonValue& TJsonValue::operator()(const char* const key) const
-	{
-		return (IsMap() && Map().Contains(key)) ? Map()[key] : NULLVALUE;
-	}
-
 	const TJsonValue& TJsonValue::operator()(const TString& key) const
 	{
 		return (IsMap() && Map().Contains(key)) ? Map()[key] : NULLVALUE;
@@ -640,7 +640,7 @@ namespace el1::io::format::json
 	const TJsonValue TJsonValue::TRUE = TJsonValue(true);
 	const TJsonValue TJsonValue::FALSE = TJsonValue(false);
 	const TJsonValue TJsonValue::ZERO = TJsonValue(0.0);
-	const TJsonValue TJsonValue::EMPTY_STRING = TJsonValue(L"");
+	const TJsonValue TJsonValue::EMPTY_STRING = TJsonValue(TString());
 	const TJsonValue TJsonValue::EMPTY_ARRAY = TJsonValue(TJsonArray());
 	const TJsonValue TJsonValue::EMPTY_MAP = TJsonValue(TJsonMap());
 }
