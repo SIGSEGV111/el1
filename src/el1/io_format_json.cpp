@@ -238,6 +238,11 @@ namespace el1::io::format::json
 		return const_cast<TJsonValue*>(this)->Array();
 	}
 
+	const array_t<const TJsonValue>& TJsonValue::Array(const array_t<const TJsonValue>& _default) const
+	{
+		return IsArray() ? (const array_t<const TJsonValue>&)const_cast<TJsonValue*>(this)->Array() : _default;
+	}
+
 	////////////////////////////////////////////////////////////////////
 
 	TJsonMap& TJsonValue::Map()

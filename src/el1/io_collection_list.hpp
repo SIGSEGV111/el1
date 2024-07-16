@@ -174,7 +174,7 @@ namespace el1::io::collection::list
 	template<typename T>
 	struct TList_Insert_Impl<T, false>
 	{
-		T* MoveInsert(const ssys_t index, const array_t<T> array);
+		T* MoveInsert(const ssys_t index, array_t<T> array);
 		T* MoveInsert(const ssys_t index, T* arr_items_insert, const usys_t n_items_insert);
 		T& MoveInsert(const ssys_t index, T&& item);
 
@@ -512,7 +512,7 @@ namespace el1::io::collection::list
 	/*****************************************************************************/
 
 	template<typename T>
-	T* TList_Insert_Impl<T, false>::MoveInsert(const ssys_t index, const array_t<T> array)
+	T* TList_Insert_Impl<T, false>::MoveInsert(const ssys_t index, array_t<T> array)
 	{
 		if(array.Count() > 0)
 			return MoveInsert(index, &array[0], array.Count());
