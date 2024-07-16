@@ -267,6 +267,15 @@ namespace el1::io::net::ip
 		}
 
 		freeaddrinfo(res);
+
+		for(usys_t i = 0; i < addrs.Count(); i++)
+			for(usys_t j = i + 1; j < addrs.Count(); j++)
+				if(addrs[i] == addrs[j])
+				{
+					addrs.Remove(j);
+					j--;
+				}
+
 		return addrs;
 	}
 

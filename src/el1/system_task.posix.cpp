@@ -557,7 +557,7 @@ namespace el1::system::task
 		else
 		{
 			// parent
-			h_proc = EL_SYSERR(pidfd_open(pid, PIDFD_NONBLOCK));
+			h_proc = EL_SYSERR(pidfd_open(pid, PIDFD_NONBLOCK));	// FIXME: linux only!
 			on_terminate.Handle(h_proc);
 		}
 	}

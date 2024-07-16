@@ -768,10 +768,11 @@ namespace el1::system::task
 
 	TProcess::~TProcess()
 	{
-		if(TaskState() != ETaskState::NOT_CREATED)
+		if(pid != -1)
 		{
 			try
 			{
+				const process_id_t pid = this->pid;
 				Shutdown();
 				Resume();
 				int status;
@@ -883,7 +884,7 @@ namespace el1::system::task
 		TString s = TString::Format("%q", exe.ToString());
 		for(auto& a : args)
 			s += TString::Format(" %q", a);
-		return TString::Format("subprocess %d (%s) terminated with exit-code %d; stderr output:\n%s", pid, s, exit_code, stderr);
+		return TString::Format("subprocess%s (%s) terminated with exit-code %d; stderr output:\n%s", pid == -1 ? TString() : TString::Format(" %d", pid), s, exit_code, stderr);
 	}
 
 	IException* TProcess::TNonZeroExitException::Clone() const

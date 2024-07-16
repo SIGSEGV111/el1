@@ -22,6 +22,34 @@ namespace el1::system::task
 	static EL_THREADLOCAL TThread* thread_self = nullptr;
 	static THandle fd_signal;
 
+	static TString GetStatusLine(const pid_t thread_pid, io::text::string::TString key)
+	{
+		using namespace io::text::encoding::utf8;
+		key += ':';
+		return EL_ANNOTATE_ERROR(TFile(TString::Format("/proc/%d/status", thread_pid)), TException, "unable to read status file from procfs").Pipe()
+			.Transform(TUTF8Decoder())
+			.Transform(TLineReader())
+			.Filter([&](const TString& line){ return line.BeginsWith(key); })
+			.First()
+			.SplitKV(':')
+			.value
+			.Trim();
+	}
+
+	static TString GetStatusLine(io::text::string::TString key)
+	{
+		using namespace io::text::encoding::utf8;
+		key += ':';
+		return EL_ANNOTATE_ERROR(TFile("/proc/self/status"), TException, "unable to read own status file from procfs").Pipe()
+			.Transform(TUTF8Decoder())
+			.Transform(TLineReader())
+			.Filter([&](const TString& line){ return line.BeginsWith(key); })
+			.First()
+			.SplitKV(':')
+			.value
+			.Trim();
+	}
+
 	TThread* TThread::Self()
 	{
 		return thread_self;
@@ -33,6 +61,9 @@ namespace el1::system::task
 		{
 			thread_self = this;
 
+			// get pid of tracer program (if any)
+			const auto tracer_pid = GetStatusLine("TracerPid").ToInteger();
+
 			sigset_t ss;
 			sigfillset(&ss);
 			EL_SYSERR(sigdelset(&ss, SIGILL));
@@ -41,10 +72,17 @@ namespace el1::system::task
 			EL_SYSERR(sigdelset(&ss, SIGBUS));
 			EL_SYSERR(sigdelset(&ss, SIGFPE));
 			EL_SYSERR(sigdelset(&ss, SIGSEGV));
-			EL_SYSERR(sigdelset(&ss, SIGCHLD));
-			fd_signal = EL_SYSERR(signalfd(-1, &ss, SFD_CLOEXEC|SFD_NONBLOCK));
+			if(tracer_pid != 0) // if debugger is attached we do not capture SIGINT
+				EL_SYSERR(sigdelset(&ss, SIGINT));
+
+			 // SIGCHLD must be blocked in order to create zombie children, which is expected in TProcess::TaskState()
 			EL_SYSERR(sigprocmask(SIG_SETMASK, &ss, nullptr));
 			EL_PTHREAD_ERROR(pthread_sigmask(SIG_SETMASK, &ss, nullptr));
+
+			EL_SYSERR(sigdelset(&ss, SIGCHLD));
+			fd_signal = EL_SYSERR(signalfd(-1, &ss, SFD_CLOEXEC|SFD_NONBLOCK));
+
+			// EL_SYSERR(signal(SIGCHLD, SIG_IGN));
 		}
 	};
 
@@ -68,21 +106,12 @@ namespace el1::system::task
 	ETaskState TThread::TaskState() const
 	{
 		using namespace io::text::string;
-		using namespace io::text::encoding::utf8;
 		const TMutexAutoLock lock(&mutex);
 
 		if(ChildState() != EChildState::ALIVE)
 			return ETaskState::NOT_CREATED;
 
-		TString status = EL_ANNOTATE_ERROR(TFile(TString::Format("/proc/%d/status", thread_pid)), TException, "unable to read task state from procfs").Pipe()
-			.Transform(TUTF8Decoder())
-			.Transform(TLineReader())
-			.Filter([](const TString& line){ return line.BeginsWith("State:"); })
-			.First()
-			.SplitKV(':')
-			.value;
-
-		status.Trim();
+		const TString status = GetStatusLine(thread_pid, "State");
 		switch(status[0].code)
 		{
 			case 'R': return ETaskState::RUNNING;
