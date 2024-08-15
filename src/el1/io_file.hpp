@@ -429,6 +429,28 @@ namespace el1::io::file
 
 			TFile(TFile&&) = default;
 			~TFile();
+
+			/**
+			* @brief Reads UTF8 encoded text from a file specified by the path.
+			*
+			* This static method reads the content of a UTF8 encoded text file into a TString object.
+			* The method can optionally trim whitespace from the beginning and end of
+			* the text and limit the amount of data read.
+			*
+			* @param path A TPath object representing the file path to read from.
+			*
+			* @param trim A boolean flag indicating whether to trim whitespace from
+			*             the read text. Defaults to true.
+			*
+			* @param n_chars_max Sets the maximum number of characters (not bytes!) to be read from the file.
+			*                    The default is 1024. If the file is larger than this, only the
+			*                    first n_chars_max characters will be read. The limit is applied before
+			*                    the whitespace is trimmed, hence it counts against the limit.
+			*
+			* @return Returns a TString containing the text read from the file. If the file
+			*         cannot be read, an exception is thrown.
+			*/
+			static TString ReadText(const TPath& path, const bool trim = true, const usys_t n_chars_max = 1024U);
 	};
 
 	class TMapping : public array_t<byte_t>

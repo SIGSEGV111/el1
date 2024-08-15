@@ -318,6 +318,14 @@ namespace el1::io::file
 
 	/************************************************************************/
 
+	TString TFile::ReadText(const TPath& path, const bool trim, const usys_t n_chars_max)
+	{
+		TString s = TFile(path).Pipe().Transform(text::encoding::utf8::TUTF8Decoder()).Limit(n_chars_max).Collect();
+		if(trim)
+			s.Trim();
+		return s;
+	}
+
 	// void TFile::Offset(const siosize_t position, const ESeekOrigin origin)
 	// {
 	// 	switch(origin)

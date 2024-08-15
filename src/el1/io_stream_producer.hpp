@@ -63,4 +63,7 @@ namespace el1::io::stream::producer
 	{
 		return TProducerPipe<T>(producer);
 	}
+
+	template<typename T>
+	using FProducer = util::function::TFunction<void, ISink<T>&>;
 }

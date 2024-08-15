@@ -1031,6 +1031,53 @@ namespace el1::io::text::string
 		return list;
 	}
 
+	TList<TString> TString::Split(const array_t<const TUTF32> split_chars, const usys_t n_max, const bool skip_empty) const
+	{
+		usys_t start = 0;
+		TList<TString> list;
+
+		for(usys_t i = 0; i < this->Length() && list.Count() + 1 < n_max; i++)
+		{
+			if(split_chars.Contains(this->chars[i]))
+			{
+				if(!(skip_empty && start == i))
+					list.Append(this->SliceBE(start, i));
+
+				start = i + 1;
+			}
+		}
+
+		if(!(skip_empty && start == this->Length()))
+			list.Append(this->SliceBE(start, this->Length()));
+
+		return list;
+	}
+
+	TList<TString> TString::BlockFormat(const unsigned n_line_len) const
+	{
+		TList<TString> lines;
+		auto words = Split(WHITESPACE_CHARS, NEG1, true);
+		TString current_line;
+		for(auto word : words)
+		{
+			if(current_line.Length() + word.Length() <= n_line_len)
+			{
+				if(current_line.Length() > 0)
+					current_line += " ";
+				current_line += word;
+				word.chars.Clear();
+			}
+			else
+			{
+				lines.MoveAppend(std::move(current_line));
+				current_line = std::move(word);
+			}
+		}
+		if(current_line.Length() > 0)
+			lines.MoveAppend(std::move(current_line));
+		return lines;
+	}
+
 	kv_pair_tt<TString,TString> TString::SplitKV(const TString& delimiter) const
 	{
 		const usys_t idx = Find(delimiter);

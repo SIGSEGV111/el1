@@ -66,8 +66,11 @@ namespace el1::io::text::string
 
 			TList<TString> Split(const TString& delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			TList<TString> Split(const TUTF32 delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
+			TList<TString> Split(const array_t<const TUTF32> split_chars, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			kv_pair_tt<TString,TString> SplitKV(const TString& delimiter) const;
 			kv_pair_tt<TString,TString> SplitKV(const TUTF32 delimiter = '=') const;
+
+			TList<TString> BlockFormat(const unsigned n_line_len) const EL_GETTER;
 
 			TString& Pad(const TUTF32 pad_sign, const usys_t min_length, const EPlacement placement);
 			TString& Reverse();

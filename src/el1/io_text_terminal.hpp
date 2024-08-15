@@ -4,6 +4,8 @@
 #include "io_types.hpp"
 #include "io_text_string.hpp"
 #include "io_stream.hpp"
+#include "math.hpp"
+#include <utility>
 
 namespace el1::io::text::terminal
 {
@@ -27,20 +29,22 @@ namespace el1::io::text::terminal
 		virtual ITerminal& operator<<(const string::TString& str) = 0;
 		virtual string::TString TextColorCode(rgba8_t rgb) const = 0;
 		virtual string::TString BackgroundColorCode(rgba8_t rgb) const = 0;
+		virtual math::vector_t<u16_t, 2> WindowSize() const = 0;
 
 		template<typename ... R>
-		void Print(string::TString format, const R& ... r)
+		void Print(string::TString format, R&& ... r)
 		{
-			(*this)<<string::TString::Format(std::move(format), r ...);
+			(*this)<<string::TString::Format(std::move(format), std::forward<R>(r) ...);
 		}
-	};
-
-	class TXterm : public ITerminal
-	{
 	};
 
 	class TNoTerminal : public ITerminal
 	{
+		public:
+			ITerminal& operator<<(const string::TString& str) final override;
+			string::TString TextColorCode(rgba8_t rgb) const final override;
+			string::TString BackgroundColorCode(rgba8_t rgb) const final override;
+			math::vector_t<u16_t, 2> WindowSize() const final override;
 	};
 
 	// the "terminal" is a human facing text interface

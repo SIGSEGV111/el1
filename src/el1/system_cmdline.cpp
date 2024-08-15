@@ -1,6 +1,7 @@
 #include "system_cmdline.hpp"
 #include "system_task.hpp"
 #include "io_collection_map.hpp"
+#include "io_text_terminal.hpp"
 #include <iostream>
 
 namespace el1::system::cmdline
@@ -58,7 +59,7 @@ namespace el1::system::cmdline
 		EL_ERROR(shorthand == '-', TInvalidArgumentException, "shorthand", "the shorthand cannot be the '-' sign, since \"--\" is used as argument list terminator");
 	}
 
-	static bool ParseBool(TString& argv)
+	static bool ParseBool(TString argv)
 	{
 		argv.ToLower();
 
@@ -73,7 +74,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TFlagArgument::ParseValue(TString& argv, const TParserState& state)
+	void TFlagArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		*var = ParseBool(argv);
 	}
@@ -95,7 +96,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TBooleanArgument::ParseValue(TString& argv, const TParserState& state)
+	void TBooleanArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		*var = ParseBool(argv);
 	}
@@ -116,7 +117,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TStringArgument::ParseValue(TString& argv, const TParserState& state)
+	void TStringArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		*var = argv;
 	}
@@ -137,7 +138,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TIntegerArgument::ParseValue(TString& argv, const TParserState& state)
+	void TIntegerArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		*var = argv.ToInteger();
 	}
@@ -158,7 +159,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TFloatArgument::ParseValue(TString& argv, const TParserState& state)
+	void TFloatArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		*var = argv.ToDouble();
 	}
@@ -179,7 +180,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TArrayArgument::ParseValue(TString& argv, const TParserState& state)
+	void TArrayArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		*var = argv.Split(delimiter);
 	}
@@ -236,7 +237,7 @@ namespace el1::system::cmdline
 		EL_THROW(TLogicException);
 	}
 
-	void TPathArgument::ParseValue(TString& argv, const TParserState& state)
+	void TPathArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		*var = argv;
 		var->MakeAbsolute();
@@ -332,7 +333,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void THelpArgument::ParseValue(TString& argv, const TParserState& state)
+	void THelpArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		if(ParseBool(argv))
 		{
@@ -407,7 +408,9 @@ namespace el1::system::cmdline
 				line += def->optional ? ']' : '}';
 
 				if(multi_line)
+				{
 					lines.MoveAppend(std::move(line));
+				}
 				else
 				{
 					usage += ' ';
@@ -417,23 +420,43 @@ namespace el1::system::cmdline
 
 		if(multi_line)
 		{
-			const usys_t n_max_len = lines.Pipe().Aggregate([](usys_t& max, const TString& line){ max = el1::util::Max(max, line.Length()); }, (usys_t)0);
+			const usys_t n_longest_line = lines.Pipe().Aggregate([](usys_t& max, const TString& line){ max = el1::util::Max(max, line.Length()); }, (usys_t)0);
+
+			const u16_t wnd_width = io::text::terminal::term.WindowSize()[0];
 
 			for(usys_t i = 0; i < lines.Count(); i++)
 			{
-				const TString& line = lines[i];
+				const TString& current_line = lines[i];
 				const IArgument* def = defs[i];
 
-				usage += "\n    ";
-				usage += line;
+				usage += "\n  ";
+				usage += current_line;
 
 				if(def->help.Length() > 0)
 				{
-					const unsigned n_align_add = n_max_len - line.Length();
-					usage += ' ';
-					for(usys_t i = 0; i < n_align_add; i++)
-						usage += ' ';
-					usage += def->help;
+					const unsigned n_align_add = n_longest_line - current_line.Length() + 1;
+					const unsigned block_offset = 2 + current_line.Length() + n_align_add;
+					usage += TString::Padded(' ', n_align_add);
+
+					if(wnd_width > block_offset + 1)
+					{
+						auto block_lines = def->help.BlockFormat(wnd_width - block_offset - 1);
+						usage += block_lines[0];
+
+						for(usys_t j = 1; j < block_lines.Count(); j++)
+						{
+							usage += '\n';
+							usage += TString::Padded(' ', block_offset);
+							usage += block_lines[j];
+						}
+
+						if(block_lines.Count() > 1)
+							usage += '\n';
+					}
+					else
+					{
+						usage += def->help;
+					}
 				}
 			}
 		}
@@ -539,8 +562,20 @@ namespace el1::system::cmdline
 			def->assigned = 1;
 		}
 
-		for(const IArgument* def : state.defs)
+		for(IArgument* def : state.defs)
+		{
+			if(def->assigned == 0 && def->env.Length() != 0)
+			{
+				const TString* const env_value = state.env.Get(def->env);
+				if(env_value != nullptr)
+				{
+					EL_ANNOTATE_ERROR(def->ParseValue(*env_value, state), TException, TString::Format("unable to parse value %q from environment variable %q for option %q", *env_value, def->env, def->name));
+					def->assigned = 1;
+				}
+			}
+
 			EL_ERROR(def->assigned == 0 && def->optional == 0, TException, TString::Format("option %q is not optional but was not specified", def->name.Length() > 0 ? def->name : TString() += def->shorthand));
+		}
 
 		return state.args.Count();
 	}
