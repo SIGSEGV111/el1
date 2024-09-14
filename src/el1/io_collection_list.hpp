@@ -321,6 +321,42 @@ namespace el1::io::collection::list
 		constexpr TListSink(TList<T>* list, const usys_t n_items_prealloc = util::Max<iosize_t>(1, 4096U / sizeof(T))) : list(list), n_items_prealloc(n_items_prealloc) {}
 	};
 
+	template<typename T>
+	struct TArraySource : stream::ISource<T>
+	{
+		const array_t<const T> array;
+		usys_t pos;
+
+		usys_t Remaining() const EL_GETTER
+		{
+			return array.Count() - pos;
+		}
+
+		usys_t Read(T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
+		{
+			const usys_t n = util::Min(Remaining(), n_items_max);
+			for(usys_t i = 0; i < n; i++)
+				arr_items[i] = array[pos++];
+			return n;
+		}
+
+		iosize_t WriteOut(stream::ISink<T>& sink, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true) final override
+		{
+			const iosize_t n_want = util::Min(Remaining(), n_items_max);
+			const iosize_t n_wrote = sink.Write(&array[pos], n_want);
+			pos += n_wrote;
+			return n_wrote;
+		}
+
+		void Discard(const usys_t n_items) final override
+		{
+			EL_ERROR(Remaining() < n_items, stream::TStreamDryException);
+			pos += n_items;
+		}
+
+		TArraySource(const array_t<const T> array) : array(array), pos(0) {}
+	};
+
 	/*****************************************************************************/
 
 	template<typename T>
@@ -951,9 +987,9 @@ namespace el1::io::collection::list
 namespace el1::io::stream
 {
 	template<typename TStream, typename TOut>
-	collection::list::TList<TOut> IPipe<TStream, TOut>::Collect()
+	collection::list::TList<TOut> IPipe<TStream, TOut>::Collect(const usys_t n_prealloc)
 	{
-		collection::list::TList<TOut> list;
+		collection::list::TList<TOut> list(n_prealloc);
 		TStream* source = static_cast<TStream*>(this);
 
 		for(const TOut* item = source->NextItem(); item != nullptr; item = source->NextItem())

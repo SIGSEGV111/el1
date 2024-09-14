@@ -48,6 +48,8 @@ namespace el1::io::file
 		static const TAccess WO;	// read=false; write=true;  execute=false
 		static const TAccess RW;	// read=true;  write=true;  execute=false
 		static const TAccess RX;	// read=true;  write=false; execute=true
+
+		int FileOpenFlags() const EL_GETTER;
 	};
 
 	enum class EObjectType : u8_t

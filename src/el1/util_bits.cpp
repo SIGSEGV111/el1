@@ -40,14 +40,6 @@ namespace el1::util::bits
 		return (usys_t)lrint(ceil(hz_clock * time.ConvertToF(system::time::EUnit::SECONDS)));
 	}
 
-	usys_t BitsToFullBytes(const usys_t n_bits)
-	{
-		usys_t n_bytes = n_bits / 8U;
-		if(n_bytes * 8 < n_bits)
-			n_bytes++;
-		return n_bytes;
-	}
-
 	unsigned CountOneBits(u8_t  in)
 	{
 		return __builtin_popcount(in);

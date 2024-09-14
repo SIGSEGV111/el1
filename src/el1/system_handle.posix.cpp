@@ -34,7 +34,7 @@ namespace el1::system::handle
 	THandle& THandle::operator=(const THandle& rhs)
 	{
 		this->Close();
-		this->handle = EL_SYSERR(::dup3(rhs.handle, -1, FD_CLOEXEC));
+		this->handle = EL_SYSERR(::fcntl(rhs.handle, F_DUPFD_CLOEXEC, 3));
 		return *this;
 	}
 

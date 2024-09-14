@@ -74,6 +74,35 @@ namespace el1::system::cmdline
 
 	/************************************/
 
+	void TShowVersionArgument::ParseValue(const TString& argv, const TParserState& state)
+	{
+		if(ParseBool(argv))
+		{
+			std::cerr<<proginfo;
+			throw shutdown_t();
+		}
+	}
+
+	TString TShowVersionArgument::DefaultValue() const
+	{
+		return "false";
+	}
+
+	TString TShowVersionArgument::ExpectedType() const
+	{
+		return "boolean";
+	}
+
+	TShowVersionArgument::TShowVersionArgument(const TUTF32 shorthand, TString name, const char* const proginfo) : IArgument(shorthand, name, TString(), true, false, "Show copyright and version information and exit.", EArgumentType::FLAG), proginfo(proginfo)
+	{
+	}
+
+	TShowVersionArgument::TShowVersionArgument(const char* const proginfo) : TShowVersionArgument('V', "version", proginfo)
+	{
+	}
+
+	/************************************/
+
 	void TFlagArgument::ParseValue(const TString& argv, const TParserState& state)
 	{
 		*var = ParseBool(argv);
@@ -352,7 +381,7 @@ namespace el1::system::cmdline
 		return "boolean";
 	}
 
-	THelpArgument::THelpArgument(TString program_description, TString website_url, TString bugtracker_url, TString scm_url, const TUTF32 shorthand) : IArgument(shorthand, "help", "", true, false, "shows the command-line help text", EArgumentType::FLAG)
+	THelpArgument::THelpArgument(TString program_description, TString website_url, TString bugtracker_url, TString scm_url, const TUTF32 shorthand) : IArgument(shorthand, "help", "", true, false, "Show the command-line help text and exit.", EArgumentType::FLAG)
 	{
 	}
 
@@ -422,7 +451,7 @@ namespace el1::system::cmdline
 		{
 			const usys_t n_longest_line = lines.Pipe().Aggregate([](usys_t& max, const TString& line){ max = el1::util::Max(max, line.Length()); }, (usys_t)0);
 
-			const u16_t wnd_width = io::text::terminal::term.WindowSize()[0];
+			const u16_t wnd_width = [](){ try { return io::text::terminal::term.WindowSize()[0]; } catch(...) { return (u16_t)65535; } }();
 
 			for(usys_t i = 0; i < lines.Count(); i++)
 			{

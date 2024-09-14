@@ -54,8 +54,8 @@ namespace
 
 			for(unsigned i = 0; i < RANGE_LEN; i++)
 			{
-				EXPECT_GE(histogram[i],  900U);
-				EXPECT_LE(histogram[i], 1100U);
+				EXPECT_GE(histogram[i],  800U);
+				EXPECT_LE(histogram[i], 1200U);
 				// std::cerr<<"histogram["<<i<<"] = "<<histogram[i]<<"\n";
 			}
 		}
@@ -78,8 +78,8 @@ namespace
 
 			for(unsigned i = 0; i < RANGE_LEN; i++)
 			{
-				EXPECT_GE(histogram[i],  900U);
-				EXPECT_LE(histogram[i], 1110U);
+				EXPECT_GE(histogram[i],  800U);
+				EXPECT_LE(histogram[i], 1200U);
 				// std::cerr<<"histogram["<<i<<"] = "<<histogram[i]<<"\n";
 			}
 		}

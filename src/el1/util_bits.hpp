@@ -37,7 +37,7 @@ namespace el1::util::bits
 	usys_t TimeToBits(const double hz_clock, const system::time::TTime time);
 
 	// returns the amount of bytes required to store a given number of bits
-	usys_t BitsToFullBytes(const usys_t n_bits);
+	constexpr usys_t BitsToFullBytes(const usys_t n_bits) { return (n_bits + 7) / 8; }
 
 	// Picks and packs bits based on a pattern from a input value.
 	// If at any given positioon the pattern contains a 1 the matching bit in the value will be copied.
@@ -102,5 +102,74 @@ namespace el1::util::bits
 			in >>= 1;
 		}
 		return out;
+	}
+
+	/*****************************************/
+
+	template<typename T>
+	constexpr T FillBitMask(const unsigned n_bits)
+	{
+		return ((T)1 << n_bits) - (T)1;
+	}
+
+	template<unsigned n_bytes>
+	static inline void FastCopyBytes(void* const _dst, const void* const _src);
+
+	template<>
+	inline void FastCopyBytes<1>(void* const dst, const void* const src)
+	{
+		*reinterpret_cast<u8_t*>(dst) = *reinterpret_cast<const u8_t*>(src);
+	}
+
+	template<>
+	inline void FastCopyBytes<2>(void* const dst, const void* const src)
+	{
+		*reinterpret_cast<u16_t*>(dst) = *reinterpret_cast<const u16_t*>(src);
+	}
+
+	template<>
+	inline void FastCopyBytes<3>(void* const dst, const void* const src)
+	{
+		*reinterpret_cast<u16_t*>(dst) = *reinterpret_cast<const u16_t*>(src);
+		*(reinterpret_cast<u8_t*>(dst) + 2) = *(reinterpret_cast<const u8_t*>(src) + 2);
+	}
+
+	template<>
+	inline void FastCopyBytes<4>(void* const dst, const void* const src)
+	{
+		*reinterpret_cast<u32_t*>(dst) = *reinterpret_cast<const u32_t*>(src);
+	}
+
+	/**
+	* @brief Interprets a buffer as a packed array of integers of the specified bit size.
+	*
+	* @tparam bits_per_integer Number of bits used for each integer in the array.
+	* @tparam T Type of the integers being extracted, defaults to u32_t.
+	* @param array Pointer to the byte array interpreted as packed integers.
+	* @param sz_array_bytes Size of the array in bytes.
+	* @param idx Index of the integer to retrieve from the array.
+	* @return The integer extracted from the specified index in the array.
+	* @throws TIndexOutOfBoundsException If the calculated byte index exceeds the array size.
+	*
+	* @note This function assumes that the machine is little-endian.
+	*/
+	template<unsigned bits_per_integer, typename T = u32_t>
+	T GetBitField(const byte_t* const array, const usys_t sz_array_bytes, const usys_t idx)
+	{
+		constexpr unsigned n_bytes = BitsToFullBytes(bits_per_integer);
+		constexpr T mask = FillBitMask<T>(bits_per_integer);
+		const usys_t idx_bit = idx * bits_per_integer;
+		const usys_t idx_byte = idx_bit / 8;
+		const unsigned n_shift = idx_bit - (idx_byte * 8);
+		EL_ERROR(idx_byte + n_bytes + ((n_shift + bits_per_integer > 8) ? 1 : 0) > sz_array_bytes, TIndexOutOfBoundsException, 0, sz_array_bytes - 1, idx_byte + n_bytes);
+
+		T integer = 0;
+		if(n_shift + bits_per_integer > 8)
+			FastCopyBytes<n_bytes + 1>(&integer, array + idx_byte);
+		else
+			FastCopyBytes<n_bytes>(&integer, array + idx_byte);
+		integer >>= n_shift;
+		integer &= mask;
+		return integer;
 	}
 }

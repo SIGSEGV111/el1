@@ -132,7 +132,7 @@ namespace el1::io::stream
 	TKernelStream::TKernelStream(THandle handle) : handle(std::move(handle)), w_input({.read = true, .write = false, .other = false}, this->handle), w_output({.read = false, .write = true, .other = false}, this->handle)
 	{
 		const int flags = EL_SYSERR(fcntl(this->handle, F_GETFL));
-		EL_SYSERR(fcntl(this->handle, F_SETFL, flags | O_NONBLOCK));
+		EL_SYSERR(fcntl(this->handle, F_SETFL, flags | O_NONBLOCK));	// FIXME: this is a problem when applied to stdio!
 	}
 
 	TKernelStream::TKernelStream(const file::TPath& path) : handle(EL_ANNOTATE_ERROR(EL_SYSERR(open(path, O_RDWR|O_CLOEXEC|O_NOCTTY|O_NONBLOCK)), TException, TString::Format("while opening file %q", path.ToString())), true), w_input({.read = true, .write = false, .other = false}, this->handle), w_output({.read = false, .write = true, .other = false}, this->handle)

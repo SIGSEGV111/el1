@@ -13,6 +13,12 @@ namespace el1::util
 	using namespace io::types;
 
 	template<typename T>
+	static T Abs(const T v)
+	{
+		return v < 0 ? -v : v;
+	}
+
+	template<typename T>
 	constexpr T Max(const T a)
 	{
 		return a;
@@ -137,5 +143,15 @@ namespace el1::util
 	ssys_t BinarySearch(L lambda, const usys_t n_items)
 	{
 		return BinarySearch(lambda, 0, n_items - 1);
+	}
+
+	template<typename T>
+	T* Coalesce(T* const a, T* const b) {
+		return a ? a : b;
+	}
+
+	template<typename T, typename... Ts>
+	T* Coalesce(T* first, Ts*... rest) {
+		return first ? first : Coalesce(rest...);
 	}
 }

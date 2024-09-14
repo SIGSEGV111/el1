@@ -5,13 +5,20 @@
 #include "io_types.hpp"
 #include "error.hpp"
 #include "def.hpp"
-#include "io_text.hpp"
 
 namespace el1::io::text::string
 {
 	using namespace io::types;
 	using namespace io::text::encoding;
 	using namespace io::collection::list;
+
+	enum class EPlacement : u8_t
+	{
+		NONE,
+		START,
+		MID,
+		END,
+	};
 
 	struct symbol_map_t
 	{

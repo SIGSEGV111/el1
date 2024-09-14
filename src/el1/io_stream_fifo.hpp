@@ -13,7 +13,7 @@ namespace el1::io::stream::fifo
 	// it needs to know the two fibers operating the FIFO in order to optimize switching
 	// and to correctly monitor the fibers and thus provide waitables (if required)
 	template<typename T, u32_t N_ITEMS = util::Max<u32_t>(2, 256U / sizeof(T))>
-	class TFifo : public ISink<T>, public ISource<T>
+	class TFifo : public ISink<T>, public IBufferedSource<T>
 	{
 		protected:
 			struct TInputWaitable : system::waitable::IWaitable
@@ -42,7 +42,7 @@ namespace el1::io::stream::fifo
 			// returns an array of items ready to be read from the fifo
 			// this function does not mark these items as read and thus does not free up space for the producer
 			// use Discard() or Read() for this purpose
-			collection::list::array_t<T> Peek()
+			collection::list::array_t<T> Peek() final override
 			{
 				if(Remaining() == 0 && fib_consumer != fib_producer && fib_producer != nullptr && fib_consumer != nullptr && fib_producer->IsAlive())
 					fib_producer->SwitchTo();
@@ -55,7 +55,7 @@ namespace el1::io::stream::fifo
 
 			// discards the next n items from the fifo
 			// essentially freeing the space for new items
-			void Discard(const usys_t n_discard)
+			void Discard(const usys_t n_discard) final override
 			{
 				const usys_t n_remaining = Remaining();
 				EL_ERROR(n_discard > n_remaining, TInvalidArgumentException, "n_discard", "n_discard cannot be larger than Remaining()");

@@ -53,6 +53,20 @@ namespace el1::system::cmdline
 			u32_t assigned : 1;
 	};
 
+	class TShowVersionArgument : public IArgument
+	{
+		protected:
+			const char* const proginfo;
+
+			void ParseValue(const TString& value, const TParserState& state) final override;
+			TString DefaultValue() const final override EL_GETTER;
+			TString ExpectedType() const final override EL_GETTER;
+
+		public:
+			TShowVersionArgument(const TUTF32 shorthand, TString name, const char* const proginfo);
+			TShowVersionArgument(const char* const proginfo);
+	};
+
 	class TFlagArgument : public IArgument
 	{
 		protected:

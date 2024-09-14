@@ -79,7 +79,7 @@ namespace el1::dev::i2c::native
 	TDevice::TDevice(TBus* const bus, const u8_t address, const ESpeedClass sc) : stream(bus->device), bus(bus), address(address), sc(sc)
 	{
 		this->bus->claimed_addresses.Add(this->address, this);
-		EL_SYSERR(ioctl(stream.Handle(), I2C_SLAVE, this->address));
+		EL_SYSERR(ioctl(stream.handle, I2C_SLAVE, this->address));
 	}
 
 	TDevice::~TDevice()

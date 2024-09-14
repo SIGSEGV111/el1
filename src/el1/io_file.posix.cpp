@@ -14,6 +14,18 @@ namespace el1::io::file
 	const char* const TPath::PARENT_DIR = "..";
 	const char* const TPath::CURRENT_DIR = ".";
 
+	int TAccess::FileOpenFlags() const
+	{
+		if(read && write)
+			return O_RDWR;
+		else if(read)
+			return O_RDONLY;
+		else if(write)
+			return O_WRONLY;
+		else
+			return 0;
+	}
+
 	static bool IsSameInode(const THandle& h1, const THandle& h2)
 	{
 		struct stat st1 = {};

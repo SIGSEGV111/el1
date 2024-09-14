@@ -28,7 +28,7 @@ namespace el1::io::collection::list
 	class array_t;
 }
 
-namespace io::file
+namespace el1::io::file
 {
 	class TPath;
 }
@@ -87,8 +87,187 @@ namespace el1::io::stream
 
 	/**********************************************/
 
+	struct IStream
+	{
+		virtual ~IStream() {}
+
+		/**
+		* Retrieves the handle of the operating system object associated with the stream, if any.
+		* @return The handle to the operating system object or system::handle::INVALID_HANDLE if not applicable.
+		*/
+		virtual system::handle::handle_t Handle() { return system::handle::INVALID_HANDLE; }
+
+		/**
+		* Closes the stream, indicating that no more data will be read or written.
+		*/
+		virtual void Close() {}
+	};
+
 	template<typename T>
-	struct IBufferedSource
+	struct ISource : IStream
+	{
+		/**
+		* Reads data from the source into the provided array.
+		* This function should only return 0 if the source is either dry or blocked.
+		* To determine if the source is blocked, use OnInputReady().
+		* If OnInputReady() returns a waitable object, the source is blocked and the caller should use WaitFor().
+		* If it returns nullptr, the source is dry and will not produce any more data.
+		*
+		* @param arr_items The array to store read items.
+		* @param n_items_max The maximum number of items to read.
+		* @return The number of items read.
+		*/
+		virtual usys_t Read(T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT = 0;
+
+		/**
+		* Checks if the source is ready to provide more input data.
+		* @return A waitable object if the source is blocked, or nullptr if the source is dry.
+		*/
+		virtual const system::waitable::IWaitable* OnInputReady() const { return nullptr; }
+
+		/**
+		* Directly writes data from the source to a sink, potentially avoiding copying data into a temporary buffer.
+		*
+		* @param sink The sink to which data should be written.
+		* @param n_items_max The maximum number of items to write. Defaults to -1 (as much as possible, but not blocking).
+		* @param allow_recursion Whether the implementation is allowed to call ReadIn() on the sink instead.
+		* @return The number of items written.
+		*/
+		virtual iosize_t WriteOut(ISink<T>& sink, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true);
+
+		/**
+		* Similar to Read(), but blocks until the specified number of items have been read, the source runs dry, or a timeout occurs.
+		*
+		* @param arr_items The array to store read items.
+		* @param n_items_max The maximum number of items to read.
+		* @param timeout The maximum time to wait. Defaults to -1 (no timeout).
+		* @param absolute_time Whether the timeout is an absolute time. Defaults to false.
+		* @return The number of items read.
+		*/
+		virtual usys_t BlockingRead(T* const arr_items, const usys_t n_items_max, system::time::TTime timeout = -1, const bool absolute_time = false) EL_WARN_UNUSED_RESULT;
+
+		/**
+		* Blocks until exactly the specified number of items have been read.
+		* Throws an exception if the source fails to provide the requested amount of items.
+		*
+		* @param arr_items The array to store read items.
+		* @param n_items The exact number of items to read.
+		*/
+		virtual void ReadAll(T* const arr_items, const usys_t n_items);
+
+		/**
+		* Blocks until exactly the specified number of items have been read into the provided array.
+		* Throws an exception if the source fails to provide the requested amount of items.
+		*
+		* @param arr_items The array to store read items.
+		*/
+		void ReadAll(io::collection::list::array_t<T> arr_items) { this->ReadAll(arr_items.ItemPtr(0), arr_items.Count()); }
+
+		/**
+		* Closes the input side of a full-duplex connection.
+		* Returns false if closing the input side is not possible.
+		*
+		* @return True if the input was successfully closed, false otherwise.
+		*/
+		virtual bool CloseInput() EL_WARN_UNUSED_RESULT { return false; }
+
+		/**
+		* Discards the specified number of items from the source.
+		*
+		* @param n_items The number of items to discard.
+		*/
+		virtual void Discard(const usys_t n_items)
+		{
+			usys_t n_read = 0;
+			const usys_t n_batch = util::Max<usys_t>(1, 512 / sizeof(T));
+			T buffer[n_batch];
+
+			while (n_read < n_items)
+			{
+				const usys_t n_remaining = n_items - n_read;
+				const usys_t n_now = util::Min(n_remaining, n_batch);
+				ReadAll(buffer, n_now);
+				n_read += n_now;
+			}
+		}
+
+		TSourcePipe<T> Pipe();
+	};
+
+	template<typename T>
+	struct ISink : IStream
+	{
+		/**
+		* Writes data to the sink from the provided array.
+		* Basic semantics follow that of ISource::Read().
+		*
+		* @param arr_items The array containing items to write.
+		* @param n_items_max The maximum number of items to write.
+		* @return The number of items written.
+		*/
+		virtual usys_t Write(const T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT = 0;
+
+		/**
+		* Checks if the sink is ready to accept more output data.
+		*
+		* @return A waitable object if the sink is blocked, or nullptr if the sink is ready.
+		*/
+		virtual const system::waitable::IWaitable* OnOutputReady() const { return nullptr; }
+
+		/**
+		* Directly reads data from a source into the sink, potentially avoiding copying data into a temporary buffer.
+		*
+		* @param source The source from which data should be read.
+		* @param n_items_max The maximum number of items to read. Defaults to -1 (all items).
+		* @param allow_recursion Whether the implementation is allowed to call WriteOut() on the source instead.
+		* @return The number of items read.
+		*/
+		virtual iosize_t ReadIn(ISource<T>& source, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true);
+
+		/**
+		* Blocks until the specified number of items have been written, the sink becomes full, or a timeout occurs.
+		*
+		* @param arr_items The array containing items to write.
+		* @param n_items_max The maximum number of items to write.
+		* @param timeout The maximum time to wait. Defaults to -1 (no timeout).
+		* @param absolute_time Whether the timeout is an absolute time. Defaults to false.
+		* @return The number of items written.
+		*/
+		usys_t BlockingWrite(const T* const arr_items, const usys_t n_items_max, system::time::TTime timeout = -1, const bool absolute_time = false) EL_WARN_UNUSED_RESULT;
+
+		/**
+		* Blocks until exactly the specified number of items have been written.
+		* Throws an exception if the sink fails to accept the requested amount of items.
+		*
+		* @param arr_items The array containing items to write.
+		* @param n_items The exact number of items to write.
+		*/
+		virtual void WriteAll(const T* const arr_items, const usys_t n_items);
+
+		/**
+		* Blocks until exactly the specified number of items have been written from the provided array.
+		* Throws an exception if the sink fails to accept the requested amount of items.
+		*
+		* @param arr_items The array containing items to write.
+		*/
+		void WriteAll(io::collection::list::array_t<const T> arr_items) { this->WriteAll(arr_items.ItemPtr(0), arr_items.Count()); }
+
+		/**
+		* Closes the output side of a full-duplex connection.
+		* Returns false if closing the output side is not possible.
+		*
+		* @return True if the output was successfully closed, false otherwise.
+		*/
+		virtual bool CloseOutput() EL_WARN_UNUSED_RESULT { return false; }
+
+		/**
+		* Flushes any output buffers, ensuring all data is written.
+		*/
+		virtual void Flush() {}
+	};
+
+	template<typename T>
+	struct IBufferedSource : ISource<T>
 	{
 		// returns a preview of the available items in the source directly from its internal buffers
 		// use Discard() or Read() to remove the items from the source when you no longer need them
@@ -97,67 +276,8 @@ namespace el1::io::stream
 		virtual collection::list::array_t<T> Peek() = 0;
 	};
 
-	struct IStream
-	{
-		virtual ~IStream() {}
-
-		// if the stream is directly connected to an operating system object the stream can decide to to return the handle for the object
-		virtual system::handle::handle_t Handle() { return system::handle::INVALID_HANDLE; }
-
-		// closes the stream indicating that the consumer does not want to read or write any more data
-		virtual void Close() {}
-	};
-
-	template<typename T>
-	struct ISource : IStream
-	{
-		// Read() must only return 0 if the source is either dry or blocked
-		// if OnInputReady() returns a waitable then the source is blocked and the caller should WaitFor()
-		// if it returns nullptr, then the source is dry and will not produce new data any more
-
-		// essentially you should call Read() repeatedly until it returns 0
-		// once that happens check OnInputReady()
-		// if it returns nullptr then your are done - the source is dry (has no more data now, will not have any more data in the future)
-		// if it returns a waitable then use that to call WaitFor()
-		// after the WaitFor() the source *should* have new data to be Read()
-		// but if it doesn't then just repeat the process anyways
-		// WaitFor() can return without actually waiting under some rare circumstances, but it will eventually actually wait
-		virtual usys_t Read(T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT = 0;
-		virtual const system::waitable::IWaitable* OnInputReady() const { return nullptr; }
-
-		// instructs the source to directly write the data to a sink - potentially avoiding to copy the data into a temporary buffer
-		virtual iosize_t WriteOut(ISink<T>& sink, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true);
-
-		// similar to Read() but blocks until n_items_max have been read
-		// it will read less items if the source runs dry or timeout expires
-		// you can use OnInputReady() to check if the source ran dry
-		virtual usys_t BlockingRead(T* const arr_items, const usys_t n_items_max, system::time::TTime timeout = -1, const bool absolute_time = false) EL_WARN_UNUSED_RESULT;
-
-		// similar to BlockingRead() but blocks until exactly n_items have been read
-		// throws an exception if the source fails to provide the requested amount of items
-		virtual void ReadAll(T* const arr_items, const usys_t n_items);
-		void ReadAll(io::collection::list::array_t<T> arr_items) { this->ReadAll(arr_items.ItemPtr(0), arr_items.Count()); }
-
-		// closes only the input side of a full duplex connection - returns false if this is not possible
-		virtual bool CloseInput() EL_WARN_UNUSED_RESULT { return false; }
-
-		TSourcePipe<T> Pipe();
-	};
-
-	template<typename T>
-	struct ISink : IStream
-	{
-		// see the description of ISource above - the ISink works just the same
-		virtual usys_t Write(const T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT = 0;
-		virtual const system::waitable::IWaitable* OnOutputReady() const { return nullptr; }
-		virtual iosize_t ReadIn(ISource<T>& source, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true);
-		usys_t BlockingWrite(const T* const arr_items, const usys_t n_items_max, system::time::TTime timeout = -1, const bool absolute_time = false) EL_WARN_UNUSED_RESULT;
-		virtual void WriteAll(const T* const arr_items, const usys_t n_items);
-		void WriteAll(io::collection::list::array_t<const T> arr_items) { this->WriteAll(arr_items.ItemPtr(0), arr_items.Count()); }
-
-		virtual bool CloseOutput() EL_WARN_UNUSED_RESULT { return false; }
-		virtual void Flush() {} // flushes any output buffers
-	};
+	using IBinarySink = ISink<byte_t>;
+	using IBinarySource = ISource<byte_t>;
 
 	template<typename TPipe, typename TOut, bool is_copy_constructible>
 	struct TPipeSource
@@ -212,7 +332,7 @@ namespace el1::io::stream
 		usys_t AppendTo(collection::list::TList<TOut>& list);
 		iosize_t Count();
 		const TOut& First();
-		io::collection::list::TList<TOut> Collect();
+		io::collection::list::TList<TOut> Collect(const usys_t n_prealloc = 0);
 	};
 
 	template<typename T>
@@ -252,13 +372,14 @@ namespace el1::io::stream
 
 	class TKernelStream : public ISink<byte_t>, public ISource<byte_t>
 	{
-		protected:
+		public:
 			system::handle::THandle handle;
+
+		protected:
 			system::waitable::THandleWaitable w_input;
 			system::waitable::THandleWaitable w_output;
 
 		public:
-			system::handle::handle_t Handle() final override { return this->handle; }
 
 			usys_t Read(byte_t* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT;
 			const system::waitable::THandleWaitable* OnInputReady() const final override;

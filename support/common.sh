@@ -18,6 +18,7 @@ if "$CXX" --version | grep -qF "clang"; then
 		-lm
 		$(pkg-config --libs libpq)
 		$(pkg-config --libs krb5)
+		$(pkg-config --libs zlib)
 		-fuse-ld=lld
 	)
 else
@@ -57,6 +58,7 @@ COMPILE_OPTIONS=(
 	-Wno-unused-const-variable
 	$(pkg-config --cflags libpq)
 	$(pkg-config --cflags krb5)
+	$(pkg-config --cflags zlib)
 )
 
 GTEST_OPTIONS=()

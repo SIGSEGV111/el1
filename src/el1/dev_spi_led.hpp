@@ -52,7 +52,7 @@ namespace el1::dev::spi::led
 	{
 		public:
 			using color_t = io::graphics::color::rgbf_t;
-			using index_t = math::vector_t<s16_t, 2>;
+			using index_t = math::vector::vector_t<s16_t, 2>;
 
 		protected:
 			io::collection::list::array_t<TSpiLed> leds;

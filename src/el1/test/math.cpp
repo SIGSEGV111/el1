@@ -1,8 +1,13 @@
 #include <gtest/gtest.h>
 #include <el1/math.hpp>
+#include <el1/math_vector.hpp>
+#include <el1/math_matrix.hpp>
 
 namespace el1::math
 {
+	using namespace math::vector;
+	using namespace math::matrix;
+
 	TEST(math_vector, DefaultConstructor) {
 		vector_t<int, 3> v;
 		EXPECT_EQ(v[0], 0);
@@ -137,5 +142,232 @@ namespace el1::math
 		EXPECT_DOUBLE_EQ(v2[0], 1.0);
 		EXPECT_DOUBLE_EQ(v2[1], 2.0);
 		EXPECT_DOUBLE_EQ(v2[2], 3.0);
+	}
+
+
+	/*******************************************************************/
+
+	// Test for element access operator
+	TEST(math_matrix, ElementAccess)
+	{
+		matrix_t<int, 2, 2> m;
+		m(0, 0) = 1;
+		m(0, 1) = 2;
+		m(1, 0) = 3;
+		m(1, 1) = 4;
+
+		EXPECT_EQ(m(0, 0), 1);
+		EXPECT_EQ(m(0, 1), 2);
+		EXPECT_EQ(m(1, 0), 3);
+		EXPECT_EQ(m(1, 1), 4);
+	}
+
+	// Test for matrix addition
+	TEST(math_matrix, Addition)
+	{
+		matrix_t<int, 2, 2> m1;
+		matrix_t<int, 2, 2> m2;
+
+		m1(0, 0) = 1; m1(0, 1) = 2;
+		m1(1, 0) = 3; m1(1, 1) = 4;
+
+		m2(0, 0) = 5; m2(0, 1) = 6;
+		m2(1, 0) = 7; m2(1, 1) = 8;
+
+		matrix_t<int, 2, 2> m3 = m1 + m2;
+
+		EXPECT_EQ(m3(0, 0), 6);
+		EXPECT_EQ(m3(0, 1), 8);
+		EXPECT_EQ(m3(1, 0), 10);
+		EXPECT_EQ(m3(1, 1), 12);
+	}
+
+	// Test for matrix subtraction
+	TEST(math_matrix, Subtraction)
+	{
+		matrix_t<int, 2, 2> m1;
+		matrix_t<int, 2, 2> m2;
+
+		m1(0, 0) = 10; m1(0, 1) = 20;
+		m1(1, 0) = 30; m1(1, 1) = 40;
+
+		m2(0, 0) = 5; m2(0, 1) = 10;
+		m2(1, 0) = 15; m2(1, 1) = 20;
+
+		matrix_t<int, 2, 2> m3 = m1 - m2;
+
+		EXPECT_EQ(m3(0, 0), 5);
+		EXPECT_EQ(m3(0, 1), 10);
+		EXPECT_EQ(m3(1, 0), 15);
+		EXPECT_EQ(m3(1, 1), 20);
+	}
+
+	// Test for scalar multiplication
+	TEST(math_matrix, ScalarMultiplication)
+	{
+		matrix_t<int, 2, 2> m;
+		m(0, 0) = 1; m(0, 1) = 2;
+		m(1, 0) = 3; m(1, 1) = 4;
+
+		matrix_t<int, 2, 2> m2 = m * 2;
+
+		EXPECT_EQ(m2(0, 0), 2);
+		EXPECT_EQ(m2(0, 1), 4);
+		EXPECT_EQ(m2(1, 0), 6);
+		EXPECT_EQ(m2(1, 1), 8);
+	}
+
+	// Test for matrix transpose
+	TEST(math_matrix, Transpose)
+	{
+		matrix_t<int, 2, 3> m;
+		m(0, 0) = 1; m(0, 1) = 2; m(0, 2) = 3;
+		m(1, 0) = 4; m(1, 1) = 5; m(1, 2) = 6;
+
+		matrix_t<int, 3, 2> t = m.Transpose();
+
+		EXPECT_EQ(t(0, 0), 1);
+		EXPECT_EQ(t(1, 0), 2);
+		EXPECT_EQ(t(2, 0), 3);
+		EXPECT_EQ(t(0, 1), 4);
+		EXPECT_EQ(t(1, 1), 5);
+		EXPECT_EQ(t(2, 1), 6);
+	}
+
+	// Test for matrix-vector multiplication
+	TEST(math_matrix, MatrixVectorMultiplication)
+	{
+		matrix_t<int, 2, 3> m;
+		m(0, 0) = 1; m(0, 1) = 2; m(0, 2) = 3;
+		m(1, 0) = 4; m(1, 1) = 5; m(1, 2) = 6;
+
+		vector_t<int, 3> v;
+		v[0] = 1; v[1] = 2; v[2] = 3;
+
+		vector_t<int, 2> result = m * v;
+
+		EXPECT_EQ(result[0], 14);  // 1*1 + 2*2 + 3*3 = 14
+		EXPECT_EQ(result[1], 32);  // 4*1 + 5*2 + 6*3 = 32
+	}
+
+	// Test for matrix multiplication
+	TEST(math_matrix, MatrixMultiplication)
+	{
+		matrix_t<int, 2, 3> m1;
+		matrix_t<int, 3, 2> m2;
+
+		// Fill m1 with 1, 2, 3 in first row and 4, 5, 6 in second row
+		m1(0, 0) = 1; m1(0, 1) = 2; m1(0, 2) = 3;
+		m1(1, 0) = 4; m1(1, 1) = 5; m1(1, 2) = 6;
+
+		// Fill m2 with 7, 8 in first column, 9, 10 in second column, 11, 12 in third column
+		m2(0, 0) = 7;  m2(0, 1) = 8;
+		m2(1, 0) = 9;  m2(1, 1) = 10;
+		m2(2, 0) = 11; m2(2, 1) = 12;
+
+		matrix_t<int, 2, 2> result = m1 * m2;
+
+		EXPECT_EQ(result(0, 0), 58);  // 1*7 + 2*9 + 3*11 = 58
+		EXPECT_EQ(result(0, 1), 64);  // 1*8 + 2*10 + 3*12 = 64
+		EXPECT_EQ(result(1, 0), 139); // 4*7 + 5*9 + 6*11 = 139
+		EXPECT_EQ(result(1, 1), 154); // 4*8 + 5*10 + 6*12 = 154
+	}
+
+	// Test for translation matrix creation
+	TEST(math_matrix, CreateTranslationMatrix)
+	{
+		vector_t<int, 2> v;
+		v[0] = 2;
+		v[1] = 3;
+
+		matrix_t<int, 3, 3> m = CreateTranslationMatrix(v);
+
+		EXPECT_EQ(m(0, 0), 1);
+		EXPECT_EQ(m(1, 1), 1);
+		EXPECT_EQ(m(2, 2), 1);
+		EXPECT_EQ(m(0, 2), 2);
+		EXPECT_EQ(m(1, 2), 3);
+		EXPECT_EQ(m(2, 0), 0);
+		EXPECT_EQ(m(2, 1), 0);
+	}
+
+	TEST(math_matrix, CreateScalingMatrix)
+	{
+		vector_t<int, 2> v;
+		v[0] = 2;
+		v[1] = 3;
+
+		matrix_t<int, 3, 3> m = CreateScalingMatrix(v);
+
+		EXPECT_EQ(m(0, 0), 2);
+		EXPECT_EQ(m(0, 1), 0);
+		EXPECT_EQ(m(0, 2), 0);
+		EXPECT_EQ(m(1, 0), 0);
+		EXPECT_EQ(m(1, 1), 3);
+		EXPECT_EQ(m(1, 2), 0);
+		EXPECT_EQ(m(2, 0), 0);
+		EXPECT_EQ(m(2, 1), 0);
+		EXPECT_EQ(m(2, 2), 1);
+	}
+
+	// Test for translation matrix creation
+	TEST(math_matrix, Idenity)
+	{
+		auto m = matrix_t<int, 3, 3>::Identity();
+
+		EXPECT_EQ(m(0, 0), 1);
+		EXPECT_EQ(m(0, 1), 0);
+		EXPECT_EQ(m(0, 2), 0);
+		EXPECT_EQ(m(1, 0), 0);
+		EXPECT_EQ(m(1, 1), 1);
+		EXPECT_EQ(m(1, 2), 0);
+		EXPECT_EQ(m(2, 0), 0);
+		EXPECT_EQ(m(2, 1), 0);
+		EXPECT_EQ(m(2, 2), 1);
+	}
+
+	TEST(math_matrix, CreateMirrorMatrix)
+	{
+		{
+			matrix_t<int, 3, 3> m = CreateMirrorMatrix<int>(false, false);
+
+			EXPECT_EQ(m(0, 0), 1);
+			EXPECT_EQ(m(0, 1), 0);
+			EXPECT_EQ(m(0, 2), 0);
+			EXPECT_EQ(m(1, 0), 0);
+			EXPECT_EQ(m(1, 1), 1);
+			EXPECT_EQ(m(1, 2), 0);
+			EXPECT_EQ(m(2, 0), 0);
+			EXPECT_EQ(m(2, 1), 0);
+			EXPECT_EQ(m(2, 2), 1);
+		}
+
+		{
+			matrix_t<int, 3, 3> m = CreateMirrorMatrix<int>(true, false);
+
+			EXPECT_EQ(m(0, 0), 1);
+			EXPECT_EQ(m(0, 1), 0);
+			EXPECT_EQ(m(0, 2), 0);
+			EXPECT_EQ(m(1, 0), 0);
+			EXPECT_EQ(m(1, 1), -1);
+			EXPECT_EQ(m(1, 2), 0);
+			EXPECT_EQ(m(2, 0), 0);
+			EXPECT_EQ(m(2, 1), 0);
+			EXPECT_EQ(m(2, 2), 1);
+		}
+
+		{
+			matrix_t<int, 3, 3> m = CreateMirrorMatrix<int>(false, true);
+
+			EXPECT_EQ(m(0, 0), -1);
+			EXPECT_EQ(m(0, 1), 0);
+			EXPECT_EQ(m(0, 2), 0);
+			EXPECT_EQ(m(1, 0), 0);
+			EXPECT_EQ(m(1, 1), 1);
+			EXPECT_EQ(m(1, 2), 0);
+			EXPECT_EQ(m(2, 0), 0);
+			EXPECT_EQ(m(2, 1), 0);
+			EXPECT_EQ(m(2, 2), 1);
+		}
 	}
 }

@@ -52,8 +52,8 @@ namespace el1::dev::spi::led::neopixel
 	template<unsigned idx_red, unsigned idx_green, unsigned idx_blue>
 	void TNeoPixel<idx_red, idx_green, idx_blue>::Color(const color_t new_color)
 	{
-		cc[idx_red] = new_color.red;
-		cc[idx_green] = new_color.green;
-		cc[idx_blue] = new_color.blue;
+		cc[idx_red] = new_color[0];
+		cc[idx_green] = new_color[1];
+		cc[idx_blue] = new_color[2];
 	}
 }

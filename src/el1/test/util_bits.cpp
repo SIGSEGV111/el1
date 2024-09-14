@@ -122,4 +122,79 @@ namespace
 		const u16_t re = 0b10000011;
 		EXPECT_EQ(CollateBits16(in, pa), re);
 	}
+
+	TEST(system_bits, FastCopyBytes)
+	{
+		const u32_t src = 0x12345678U;
+		{
+			u32_t dst = 0;
+			FastCopyBytes<1>(&dst, &src);
+			EXPECT_EQ(dst, 0x78U);
+		}
+
+		{
+			u32_t dst = 0;
+			FastCopyBytes<2>(&dst, &src);
+			EXPECT_EQ(dst, 0x5678U);
+		}
+
+		{
+			u32_t dst = 0;
+			FastCopyBytes<3>(&dst, &src);
+			EXPECT_EQ(dst, 0x345678U);
+		}
+
+		{
+			u32_t dst = 0;
+			FastCopyBytes<4>(&dst, &src);
+			EXPECT_EQ(dst, 0x12345678U);
+		}
+	}
+
+	TEST(system_bits, BitsToFullBytes)
+	{
+		EXPECT_EQ(BitsToFullBytes(1), 1U);
+		EXPECT_EQ(BitsToFullBytes(3), 1U);
+		EXPECT_EQ(BitsToFullBytes(7), 1U);
+		EXPECT_EQ(BitsToFullBytes(8), 1U);
+		EXPECT_EQ(BitsToFullBytes(9), 2U);
+		EXPECT_EQ(BitsToFullBytes(15), 2U);
+		EXPECT_EQ(BitsToFullBytes(16), 2U);
+		EXPECT_EQ(BitsToFullBytes(17), 3U);
+	}
+
+	TEST(system_bits, FillBitMask)
+	{
+		EXPECT_EQ(FillBitMask<u32_t>(1), 0b00000001U);
+		EXPECT_EQ(FillBitMask<u32_t>(2), 0b00000011U);
+		EXPECT_EQ(FillBitMask<u32_t>(3), 0b00000111U);
+	}
+
+	TEST(system_bits, GetBitField)
+	{
+		const byte_t array[] = { 0xab, 0xff, 0x12 };
+		EXPECT_EQ(GetBitField<1>(array, sizeof(array), 0), 1U);
+		EXPECT_EQ(GetBitField<1>(array, sizeof(array), 1), 1U);
+		EXPECT_EQ(GetBitField<1>(array, sizeof(array), 2), 0U);
+		EXPECT_EQ(GetBitField<1>(array, sizeof(array), 3), 1U);
+		EXPECT_EQ(GetBitField<1>(array, sizeof(array), 4), 0U);
+
+		EXPECT_EQ(GetBitField<3>(array, sizeof(array), 0), 0xabU & 7);
+		EXPECT_EQ(GetBitField<3>(array, sizeof(array), 1), (0xabU >> 3) & 7);
+		EXPECT_EQ(GetBitField<3>(array, sizeof(array), 2), (0x12ffabU >> 6) & 7);
+		EXPECT_EQ(GetBitField<3>(array, sizeof(array), 3), (0x12ffabU >> 9) & 7);
+
+		EXPECT_EQ(GetBitField<4>(array, sizeof(array), 0), 0x0bU);
+		EXPECT_EQ(GetBitField<4>(array, sizeof(array), 1), 0x0aU);
+		EXPECT_EQ(GetBitField<4>(array, sizeof(array), 2), 0x0fU);
+		EXPECT_EQ(GetBitField<4>(array, sizeof(array), 3), 0x0fU);
+		EXPECT_EQ(GetBitField<4>(array, sizeof(array), 4), 0x02U);
+		EXPECT_EQ(GetBitField<4>(array, sizeof(array), 5), 0x01U);
+
+		EXPECT_EQ(GetBitField<8>(array, sizeof(array), 0), 0xabU);
+		EXPECT_EQ(GetBitField<8>(array, sizeof(array), 1), 0xffU);
+		EXPECT_EQ(GetBitField<8>(array, sizeof(array), 2), 0x12U);
+
+		EXPECT_EQ(GetBitField<16>(array, sizeof(array), 0), 0xffabU);
+	}
 }

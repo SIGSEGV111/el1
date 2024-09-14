@@ -6,45 +6,54 @@
 #include "io_stream.hpp"
 #include "io_collection_list.hpp"
 #include "io_text_encoding.hpp"
+#include "io_text_string.hpp"
 
 namespace el1::io::text
 {
 	using namespace io::types;
 
-	namespace string
+	struct ITextWriter
 	{
-		class TString;
-	}
+		virtual ITextWriter& operator<<(const string::TNumberFormatter* const) = 0;
+		virtual ITextWriter& operator<<(const s8_t value) = 0;
+		virtual ITextWriter& operator<<(const u8_t value) = 0;
+		virtual ITextWriter& operator<<(const s16_t value) = 0;
+		virtual ITextWriter& operator<<(const u16_t value) = 0;
+		virtual ITextWriter& operator<<(const s32_t value) = 0;
+		virtual ITextWriter& operator<<(const u32_t value) = 0;
+		virtual ITextWriter& operator<<(const s64_t value) = 0;
+		virtual ITextWriter& operator<<(const u64_t value) = 0;
+		virtual ITextWriter& operator<<(const double value) = 0;
+		virtual ITextWriter& operator<<(const string::TString&) = 0;
+		virtual ITextWriter& operator<<(const char* const) = 0;
 
-	enum class EPlacement : u8_t
-	{
-		NONE,
-		START,
-		MID,
-		END,
+		inline ITextWriter& Print(const string::TString& s) { return (*this)<<s; }
+		inline ITextWriter& Print(const char* const s)      { return (*this)<<s; }
+
+		template<typename ... A>
+		ITextWriter& Print(const string::TString& format, A&& ... a)
+		{
+			return (*this)<<string::TString::Format(format, a...);
+		}
 	};
 
-	template<typename T>
-	class TCStrPipe : public stream::IPipe<TCStrPipe<T>, T>
+	struct TStreamTextWriter : ITextWriter
 	{
-		protected:
-			const T* cstr;
-			const T* const end;
+		stream::IBinarySink* const sink;
+		const string::TNumberFormatter* nf;
 
-		public:
-			using TOut = T;
-			using TIn = void;
-
-			const TOut* NextItem() final override
-			{
-				if(cstr < end && *cstr != '\0')
-					return cstr++;
-				else
-					return nullptr;
-			}
-
-			TCStrPipe(const T* const cstr, const usys_t n_max_chars = NEG1) : cstr(cstr), end(n_max_chars == NEG1 ? (const T*)NEG1 : cstr + n_max_chars) {}
-
-			TCStrPipe(const io::collection::list::array_t<const T> array) : cstr(array.ItemPtr(0)), end(array.ItemPtr(0) + array.Count()) {}
+		ITextWriter& operator<<(const string::TNumberFormatter* const new_nf) final override;
+		ITextWriter& operator<<(const s8_t value) final override;
+		ITextWriter& operator<<(const u8_t value) final override;
+		ITextWriter& operator<<(const s16_t value) final override;
+		ITextWriter& operator<<(const u16_t value) final override;
+		ITextWriter& operator<<(const s32_t value) final override;
+		ITextWriter& operator<<(const u32_t value) final override;
+		ITextWriter& operator<<(const s64_t value) final override;
+		ITextWriter& operator<<(const u64_t value) final override;
+		ITextWriter& operator<<(const double value) final override;
+		ITextWriter& operator<<(const string::TString& s) final override;
+		ITextWriter& operator<<(const char* const s) final override;
+		TStreamTextWriter(stream::IBinarySink* const sink);
 	};
 }
