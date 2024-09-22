@@ -715,4 +715,63 @@ namespace
 			EXPECT_FALSE(a.BeginsWith("hello world "));
 		}
 	}
+
+	// TEST(io_text_string, TString_Parse)
+	// {
+	// 	const TString str = "%test17.8$";
+ //
+	// 	{
+	// 		double d;
+	// 		auto l = str.Parse("%%test%d$", d);
+	// 		EXPECT_EQ(d, 17.8);
+	// 		EXPECT_EQ(l, str.Length());
+	// 	}
+ //
+	// 	{
+	// 		double d;
+	// 		TString s;
+	// 		auto l = str.Parse("%%%s%d$", s, d);
+	// 		EXPECT_EQ(s, "test");
+	// 		EXPECT_EQ(d, 17.8);
+	// 		EXPECT_EQ(l, str.Length());
+	// 	}
+ //
+	// 	{
+	// 		double d;
+	// 		TString s;
+	// 		auto l = str.Parse("%%%s%d", s, d);
+	// 		EXPECT_EQ(s, "test");
+	// 		EXPECT_EQ(d, 17.8);
+	// 		EXPECT_EQ(l, str.Length() - 1);
+	// 	}
+ //
+	// 	{
+	// 		s32_t x,y;
+	// 		TString s;
+	// 		auto l = str.Parse("%%%s%d.%d$", s, x, y);
+	// 		EXPECT_EQ(s, "test");
+	// 		EXPECT_EQ(x, 17);
+	// 		EXPECT_EQ(y, 8);
+	// 		EXPECT_EQ(l, str.Length());
+	// 	}
+ //
+	// 	{
+	// 		int x,y;
+ //
+	// 		// unterminated '%'
+	// 		EXPECT_THROW(str.Parse("%test%d$", x), TException);
+ //
+	// 		// format doesn't match string
+	// 		EXPECT_THROW(str.Parse("%tesT%d$", x), TException);
+ //
+	// 		// format doesn't match string
+	// 		EXPECT_THROW(str.Parse("%test%dX", x), TException);
+ //
+	// 		// too few arguments
+	// 		EXPECT_THROW(str.Parse("%%test%d.%d$", x), TException);
+ //
+	// 		// too many arguments
+	// 		EXPECT_THROW(str.Parse("%%test17.8$", x, y), TException);
+	// 	}
+	// }
 }

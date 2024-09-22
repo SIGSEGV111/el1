@@ -4,6 +4,7 @@
 
 namespace el1::dev::gcode
 {
+	using namespace io::collection::list;
 	using namespace io::graphics::plotter;
 	using namespace io::text;
 
@@ -29,4 +30,21 @@ namespace el1::dev::gcode
 	* @param spmm Steps per millimeter. Used to generate reliable single step moves in combination with G4 (dwell) commands.
 	*/
 	void GenerateForLaserEngraver(const TJob& job, ITextWriter& tw, const float fr_min, const float fr_max, const float fr_travel, const float fr_min_grbl = 120.0f, const float fr_max_grbl = 1200.0f, const float laser_scale = 1.0f, const float spmm = 80.0f);
+
+	/**
+	* @brief Generates G-code for a GRBL-powered laser engraver using a constant feed rate.
+	*
+	* In this version, a fixed feed rate is used throughout the engraving process, and the laser power is varied
+	* based on the color intensity of the image to control the burn depth. All color values are converted to
+	* grayscale (`v=(r+g+b)/3`), and the alpha channel is ignored. No tool change commands are issued.
+	* The plotter commands must use TColorChangeCommands, as TToolChangeCommands are not supported.
+	*
+	* By default, laser power values range from 0.0 to 1.0, but this can be adjusted using the `laser_scale` parameter.
+	*
+	* @param job The plotter job containing the series of plotter commands to be executed.
+	* @param tw The output stream for writing the generated G-code.
+	* @param feedrate The fixed feed rate to be used for all movements.
+	* @param laser_scale A scaling factor to adjust the laser power output to a spindle speed value (S).
+	*/
+	void GenerateForLaserEngraver(const TJob& job, ITextWriter& tw, const float feedrate, const float laser_scale = 1.0f);
 }

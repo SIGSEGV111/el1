@@ -44,7 +44,7 @@ namespace el1::dev::i2c::mpu6050
 		HIGH
 	};
 
-	using v3f_t = math::vector::vector_t<float, 3>;
+	using v3f_t = math::vector::TVector<float, 3>;
 
 	struct data_t
 	{

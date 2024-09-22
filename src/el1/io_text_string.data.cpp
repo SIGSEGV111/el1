@@ -742,4 +742,18 @@ namespace el1::io::text::string
 	};
 
 	const array_t<const TUTF32> CONTROL_CHARS(__CONTROL_CHARs, sizeof(__CONTROL_CHARs) / sizeof(__CONTROL_CHARs[0]));
+
+	static const TUTF32 __OCTAL_SYMBOLS[] = { '0', '1', '2', '3', '4', '5', '6', '7' };
+	static const TUTF32 __DECIMAL_SYMBOLS[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
+	static const TUTF32 __HEXADECIMAL_SYMBOLS_UC[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
+	static const TUTF32 __HEXADECIMAL_SYMBOLS_LC[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+	static const TUTF32 __BINARY_SYMBOLS[] = { '0', '1' };
+	static const TUTF32 __ASCII_QUOTE_SYMBOLS[] = { '\'', '\"' };
+
+	const array_t<const TUTF32> OCTAL_SYMBOLS(__OCTAL_SYMBOLS, sizeof(__OCTAL_SYMBOLS) / sizeof(__OCTAL_SYMBOLS[0]));
+	const array_t<const TUTF32> DECIMAL_SYMBOLS(__DECIMAL_SYMBOLS, sizeof(__DECIMAL_SYMBOLS) / sizeof(__DECIMAL_SYMBOLS[0]));
+	const array_t<const TUTF32> HEXADECIMAL_SYMBOLS_UC(__HEXADECIMAL_SYMBOLS_UC, sizeof(__HEXADECIMAL_SYMBOLS_UC) / sizeof(__HEXADECIMAL_SYMBOLS_UC[0]));
+	const array_t<const TUTF32> HEXADECIMAL_SYMBOLS_LC(__HEXADECIMAL_SYMBOLS_LC, sizeof(__HEXADECIMAL_SYMBOLS_LC) / sizeof(__HEXADECIMAL_SYMBOLS_LC[0]));
+	const array_t<const TUTF32> BINARY_SYMBOLS(__BINARY_SYMBOLS, sizeof(__BINARY_SYMBOLS) / sizeof(__BINARY_SYMBOLS[0]));
+	const array_t<const TUTF32> ASCII_QUOTE_SYMBOLS(__ASCII_QUOTE_SYMBOLS, sizeof(__ASCII_QUOTE_SYMBOLS) / sizeof(__ASCII_QUOTE_SYMBOLS[0]));
 }

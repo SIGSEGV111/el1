@@ -9,7 +9,7 @@ namespace el1::math::matrix
 	using namespace math::vector;
 
 	template<typename T, unsigned rows, unsigned cols>
-	struct matrix_t
+	struct TMatrix
 	{
 		T m[rows][cols];
 
@@ -34,49 +34,49 @@ namespace el1::math::matrix
 		* @param rhs The right-hand side matrix to add.
 		* @return Reference to this matrix after addition.
 		*/
-		constexpr matrix_t& operator+=(const matrix_t& rhs);
+		constexpr TMatrix& operator+=(const TMatrix& rhs);
 
 		/**
 		* @brief Subtracts another matrix from this matrix.
 		* @param rhs The right-hand side matrix to subtract.
 		* @return Reference to this matrix after subtraction.
 		*/
-		constexpr matrix_t& operator-=(const matrix_t& rhs);
+		constexpr TMatrix& operator-=(const TMatrix& rhs);
 
 		/**
 		* @brief Multiplies this matrix by a scalar.
 		* @param rhs The scalar value to multiply.
 		* @return Reference to this matrix after multiplication.
 		*/
-		constexpr matrix_t& operator*=(const T rhs);
+		constexpr TMatrix& operator*=(const T rhs);
 
 		/**
 		* @brief Adds two matrices.
 		* @param rhs The right-hand side matrix to add.
 		* @return A new matrix resulting from the addition.
 		*/
-		constexpr matrix_t operator+(const matrix_t& rhs) const;
+		constexpr TMatrix operator+(const TMatrix& rhs) const;
 
 		/**
 		* @brief Subtracts two matrices.
 		* @param rhs The right-hand side matrix to subtract.
 		* @return A new matrix resulting from the subtraction.
 		*/
-		constexpr matrix_t operator-(const matrix_t& rhs) const;
+		constexpr TMatrix operator-(const TMatrix& rhs) const;
 
 		/**
 		* @brief Multiplies a matrix by a scalar.
 		* @param rhs The scalar value to multiply.
 		* @return A new matrix resulting from the multiplication.
 		*/
-		constexpr matrix_t operator*(const T rhs) const;
+		constexpr TMatrix operator*(const T rhs) const;
 
 		/**
 		* @brief Multiplies this matrix with a vector.
 		* @param vec The vector to multiply.
 		* @return A new vector resulting from the multiplication.
 		*/
-		constexpr vector_t<T, rows> operator*(const vector_t<T, cols>& vec) const;
+		constexpr TVector<T, rows> operator*(const TVector<T, cols>& vec) const;
 
 		/**
 		* @brief Multiplies two matrices.
@@ -84,29 +84,36 @@ namespace el1::math::matrix
 		* @return A new matrix resulting from the multiplication.
 		*/
 		template<unsigned new_cols>
-		constexpr matrix_t<T, rows, new_cols> operator*(const matrix_t<T, cols, new_cols>& rhs) const;
+		constexpr TMatrix<T, rows, new_cols> operator*(const TMatrix<T, cols, new_cols>& rhs) const;
 
 		/**
 		* @brief Transposes the matrix (rows become columns and vice versa).
 		* @return A new transposed matrix.
 		*/
-		constexpr matrix_t<T, cols, rows> Transpose() const;
+		constexpr TMatrix<T, cols, rows> Transpose() const;
 
 		/**
 		* @brief Creates a identity matrix
 		* @return A new idenity matrix.
 		*/
-		static constexpr matrix_t Identity() EL_GETTER;
+		static constexpr TMatrix Identity() EL_GETTER;
 
-		matrix_t() = default;
-		matrix_t(const matrix_t&) = default;
-		matrix_t& operator=(const matrix_t&) = default;
+		TMatrix() = default;
+		TMatrix(const TMatrix&) = default;
+		TMatrix& operator=(const TMatrix&) = default;
 	};
 
+	using m33_t = TMatrix<double,3,3>;
+	using m44_t = TMatrix<double,4,4>;
+
+	extern template struct TMatrix<double,3,3>;
+
+	/*******************************************************************/
+
 	template<typename T, unsigned n>
-	matrix_t<T, n + 1, n + 1> CreateTranslationMatrix(const vector_t<T,n>& v)
+	TMatrix<T, n + 1, n + 1> CreateTranslationMatrix(const TVector<T,n>& v)
 	{
-		matrix_t<T, n + 1, n + 1> m;
+		TMatrix<T, n + 1, n + 1> m;
 		for(unsigned r = 0; r < n + 1; r++)
 		{
 			for(unsigned c = 0; c < n; c++)
@@ -131,7 +138,7 @@ namespace el1::math::matrix
 	auto CreateMirrorMatrix(A ... a)
 	{
 		constexpr unsigned n = sizeof...(a) + 1;
-		matrix_t<T, n, n> m;
+		TMatrix<T, n, n> m;
 
 		for(unsigned r = 0; r < n; r++)
 			for(unsigned c = 0; c < n; c++)
@@ -143,10 +150,10 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned n>
-	auto CreateScalingMatrix(const vector_t<T,n>& v)
+	auto CreateScalingMatrix(const TVector<T,n>& v)
 	{
 		constexpr unsigned s = n + 1;
-		matrix_t<T, s, s> m;
+		TMatrix<T, s, s> m;
 
 		for(unsigned r = 0; r < s; r++)
 			for(unsigned c = 0; c < s; c++)
@@ -174,19 +181,19 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr T& matrix_t<T, rows, cols>::operator()(const unsigned row, const unsigned col)
+	constexpr T& TMatrix<T, rows, cols>::operator()(const unsigned row, const unsigned col)
 	{
 		return m[row][col];
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr const T& matrix_t<T, rows, cols>::operator()(const unsigned row, const unsigned col) const
+	constexpr const T& TMatrix<T, rows, cols>::operator()(const unsigned row, const unsigned col) const
 	{
 		return m[row][col];
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr matrix_t<T, rows, cols>& matrix_t<T, rows, cols>::operator+=(const matrix_t& rhs)
+	constexpr TMatrix<T, rows, cols>& TMatrix<T, rows, cols>::operator+=(const TMatrix& rhs)
 	{
 		for (unsigned i = 0; i < rows; ++i)
 		{
@@ -199,7 +206,7 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr matrix_t<T, rows, cols>& matrix_t<T, rows, cols>::operator-=(const matrix_t& rhs)
+	constexpr TMatrix<T, rows, cols>& TMatrix<T, rows, cols>::operator-=(const TMatrix& rhs)
 	{
 		for (unsigned i = 0; i < rows; ++i)
 		{
@@ -212,7 +219,7 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr matrix_t<T, rows, cols>& matrix_t<T, rows, cols>::operator*=(const T rhs)
+	constexpr TMatrix<T, rows, cols>& TMatrix<T, rows, cols>::operator*=(const T rhs)
 	{
 		for (unsigned i = 0; i < rows; ++i)
 		{
@@ -225,9 +232,9 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr matrix_t<T, rows, cols> matrix_t<T, rows, cols>::operator+(const matrix_t& rhs) const
+	constexpr TMatrix<T, rows, cols> TMatrix<T, rows, cols>::operator+(const TMatrix& rhs) const
 	{
-		matrix_t result;
+		TMatrix result;
 		for (unsigned i = 0; i < rows; ++i)
 		{
 			for (unsigned j = 0; j < cols; ++j)
@@ -239,9 +246,9 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr matrix_t<T, rows, cols> matrix_t<T, rows, cols>::operator-(const matrix_t& rhs) const
+	constexpr TMatrix<T, rows, cols> TMatrix<T, rows, cols>::operator-(const TMatrix& rhs) const
 	{
-		matrix_t result;
+		TMatrix result;
 		for (unsigned i = 0; i < rows; ++i)
 		{
 			for (unsigned j = 0; j < cols; ++j)
@@ -253,9 +260,9 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr matrix_t<T, rows, cols> matrix_t<T, rows, cols>::operator*(const T rhs) const
+	constexpr TMatrix<T, rows, cols> TMatrix<T, rows, cols>::operator*(const T rhs) const
 	{
-		matrix_t result;
+		TMatrix result;
 		for (unsigned i = 0; i < rows; ++i)
 		{
 			for (unsigned j = 0; j < cols; ++j)
@@ -267,9 +274,9 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr vector_t<T, rows> matrix_t<T, rows, cols>::operator*(const vector_t<T, cols>& vec) const
+	constexpr TVector<T, rows> TMatrix<T, rows, cols>::operator*(const TVector<T, cols>& vec) const
 	{
-		vector_t<T, rows> result;
+		TVector<T, rows> result;
 		for (unsigned i = 0; i < rows; ++i)
 		{
 			result[i] = 0;
@@ -283,9 +290,9 @@ namespace el1::math::matrix
 
 	template<typename T, unsigned rows, unsigned cols>
 	template<unsigned new_cols>
-	constexpr matrix_t<T, rows, new_cols> matrix_t<T, rows, cols>::operator*(const matrix_t<T, cols, new_cols>& rhs) const
+	constexpr TMatrix<T, rows, new_cols> TMatrix<T, rows, cols>::operator*(const TMatrix<T, cols, new_cols>& rhs) const
 	{
-		matrix_t<T, rows, new_cols> result;
+		TMatrix<T, rows, new_cols> result;
 		for (unsigned i = 0; i < rows; ++i)
 		{
 			for (unsigned j = 0; j < new_cols; ++j)
@@ -301,9 +308,9 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr matrix_t<T, cols, rows> matrix_t<T, rows, cols>::Transpose() const
+	constexpr TMatrix<T, cols, rows> TMatrix<T, rows, cols>::Transpose() const
 	{
-		matrix_t<T, cols, rows> result;
+		TMatrix<T, cols, rows> result;
 		for (unsigned i = 0; i < rows; ++i)
 		{
 			for (unsigned j = 0; j < cols; ++j)
@@ -315,9 +322,9 @@ namespace el1::math::matrix
 	}
 
 	template<typename T, unsigned rows, unsigned cols>
-	constexpr matrix_t<T, rows, cols> matrix_t<T, rows, cols>::Identity()
+	constexpr TMatrix<T, rows, cols> TMatrix<T, rows, cols>::Identity()
 	{
-		matrix_t<T, rows, cols> result;
+		TMatrix<T, rows, cols> result;
 		for (unsigned i = 0; i < rows; ++i)
 		{
 			for (unsigned j = 0; j < cols; ++j)

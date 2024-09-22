@@ -25,8 +25,14 @@ namespace el1::io::text::string
 		TUTF32 arr[2];
 	};
 
+	extern const array_t<const TUTF32> OCTAL_SYMBOLS;
+	extern const array_t<const TUTF32> DECIMAL_SYMBOLS;
+	extern const array_t<const TUTF32> HEXADECIMAL_SYMBOLS_UC;
+	extern const array_t<const TUTF32> HEXADECIMAL_SYMBOLS_LC;
+	extern const array_t<const TUTF32> BINARY_SYMBOLS;
 	extern const array_t<const TUTF32> CONTROL_CHARS;
 	extern const array_t<const TUTF32> WHITESPACE_CHARS;
+	extern const array_t<const TUTF32> ASCII_QUOTE_SYMBOLS;
 	extern const array_t<const symbol_map_t> MAP_LETTER_CASE;	// [0] = lower; [1] = upper
 
 	class TString
@@ -54,12 +60,31 @@ namespace el1::io::text::string
 				return out;
 			}
 
+			/**
+			* Parses the string using the specified format and variable arguments.
+			*
+			* @param format The format string specifying how to parse the input.
+			* @return The number of characters consumed during parsing.
+			* @throws IException if any of the placeholders cannot be parsed.
+			*
+			* Supported parsers:
+			* - %c : single character
+			* - %s : string (non-greedy)
+			* - %d : decimal integer or float (depending on variable type)
+			* - %x : hexadecimal integer or float
+			* - %o : octal integer or float
+			* - %b : boolean (supports multiple representations like "yes", "no", "true", "false", etc., case insensitive)
+			*/
+			template<typename ... A>
+			usys_t Parse(const TString& format, A& ... a) const;
+
 			static TString Join(array_t<const TString> list, const TString& delimiter);
 
 			bool Contains(const TString& needle) const;
 			bool Contains(const TUTF32 needle) const;
 			usys_t Find(const TString& needle, const ssys_t start = 0, const bool reverse = false) const;
 			usys_t Find(const TUTF32 needle, const ssys_t start = 0, const bool reverse = false) const;
+			usys_t FindFirst(const array_t<const TUTF32>& charset, const ssys_t start = 0, const bool reverse = false) const;
 			TString& Trim(const bool start = true, const bool end = true, const array_t<const TUTF32> trim_chars = WHITESPACE_CHARS);
 			void ReplaceAt(const ssys_t pos, const usys_t length, const TString& substitute);
 			usys_t Replace(const TString& needle, const TString& substitute, const ssys_t start = 0, const bool reverse = false, const usys_t n_max_replacements = NEG1);
@@ -93,6 +118,8 @@ namespace el1::io::text::string
 
 			TString Lower() const EL_GETTER;
 			TString Upper() const EL_GETTER;
+
+			TString ExtractSequence(const array_t<const TUTF32> charset, const ssys_t start = 0, usys_t max_length = NEG1) const EL_GETTER;
 
 			static TString Padded(const TUTF32 pad_sign, const usys_t length);
 
@@ -254,7 +281,7 @@ namespace el1::io::text::string
 			unsigned n_max_length;
 			TUTF32 pad_sign;
 			EPlacement align;
-			const TList< TUTF32>* quote_symbols;
+			const array_t<const TUTF32>* quote_symbols;
 			TUTF32 escape_symbol;
 		};
 
@@ -279,7 +306,7 @@ namespace el1::io::text::string
 	{
 		struct config_t
 		{
-			const TList< TUTF32>* symbols;
+			const array_t<const TUTF32>* symbols;
 			TString prefix;
 			TString suffix;
 			EPlacement sign_placement;
@@ -326,7 +353,7 @@ namespace el1::io::text::string
 
 	struct TRawDataFormatter : IFormatter
 	{
-		const TList< TUTF32>* symbols;
+		const array_t<const TUTF32>* symbols;
 
 		const char* FormatName() const final override;
 		TString Format(const char* const value) const final override;

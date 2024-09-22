@@ -2,15 +2,16 @@
 
 namespace el1::io::graphics::plotter
 {
-	static v2f_t PixelToMm(const float dpmm, const pos2i_t px)
+	static v2d_t PixelToMm(const float dpmm, const pos2i_t px)
 	{
-		return (v2f_t)px * dpmm;
+		return (v2d_t)px * (1.0f / dpmm);
 	}
 
 	u32_t TPalette::Select(const pixel_t& color) const
 	{
+		EL_ERROR(tools.Count() >= 4294967295UL, TLogicException);
 		float best_dist = tools[0].Distance(color);
-		u32_t select = 0;
+		usys_t select = 0;
 
 		for(usys_t i = 1; i < tools.Count(); i++)
 		{
@@ -22,7 +23,15 @@ namespace el1::io::graphics::plotter
 			}
 		}
 
-		return select;
+		return (u32_t)select;
+	}
+
+	static void AddColorChangeCmd(TJob& job, const TPalette* const palette, const pixel_t& color)
+	{
+		if(palette)
+			job.AddCmd<TToolChangeCommand>(palette->Select(color));
+		else
+			job.AddCmd<TColorChangeCommand>(color);
 	}
 
 	static TJob FromRasterImage(const TRasterImage& image, const float dpmm, const TPalette* const palette)
@@ -35,59 +44,56 @@ namespace el1::io::graphics::plotter
 		pos2i_t prev_sp = scan_pos;
 		pixel_t current_color = image[scan_pos];
 		const float stroke_width = 1.0f / dpmm;
-		bool pen = false;
+		bool pen_down = false;
 
-		job.commands.MoveAppend(New<TPenCommand, IPlotterCommand>(TPenCommand::EDirection::UP, stroke_width));
-		job.commands.MoveAppend(palette ? New<TToolChangeCommand, IPlotterCommand>(palette->Select(current_color)) : New<TColorChangeCommand, IPlotterCommand>(current_color));
-		job.commands.MoveAppend(New<TGotoCommand, IPlotterCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE));
+		job.AddCmd<TPenCommand>(TPenCommand::EDirection::UP, stroke_width);
+		AddColorChangeCmd(job, palette, current_color);
+		job.AddCmd<TGotoCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE);
 
 		for(; scan_pos[1] < size[1]; scan_pos[1]++)
 		{
-			if(pen)
+			// new line, if we are drawing, we need to move the pen up one line without drawing
+			if(pen_down)
 			{
-				job.commands.MoveAppend(New<TGotoCommand, IPlotterCommand>(PixelToMm(dpmm, prev_sp), ECoordinateType::ABSOLUTE));
-				job.commands.MoveAppend(New<TPenCommand, IPlotterCommand>(TPenCommand::EDirection::UP, stroke_width));
-				job.commands.MoveAppend(New<TGotoCommand, IPlotterCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE));
-				job.commands.MoveAppend(New<TPenCommand, IPlotterCommand>(TPenCommand::EDirection::DOWN, stroke_width));
+				job.AddCmd<TGotoCommand>(PixelToMm(dpmm, prev_sp), ECoordinateType::ABSOLUTE);
+				job.AddCmd<TPenCommand>(TPenCommand::EDirection::UP, stroke_width);
+				job.AddCmd<TGotoCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE);
+				job.AddCmd<TPenCommand>(TPenCommand::EDirection::DOWN, stroke_width);
 				pen_pos = scan_pos;
 			}
 
-			if(!pen && current_color[3] < 1.0f)
-			{
-				job.commands.MoveAppend(New<TPenCommand, IPlotterCommand>(TPenCommand::EDirection::DOWN, stroke_width));
-				pen = true;
-			}
+			// if(!pen_down && current_color.Alpha() < 1.0f)
+			// {
+			// 	job.AddCmd<TPenCommand>(TPenCommand::EDirection::DOWN, stroke_width);
+			// 	pen_down = true;
+			// }
 
 			for(; scan_pos[0] < size[0] && scan_pos[0] >= 0; scan_pos[0] += dir)
 			{
 				const pixel_t& new_color = image[scan_pos];
 				if(new_color != current_color)
 				{
-					if(pen_pos != prev_sp && pen)
+					if(pen_down)
 					{
-						job.commands.MoveAppend(New<TGotoCommand, IPlotterCommand>(PixelToMm(dpmm, prev_sp), ECoordinateType::ABSOLUTE));
-						pen_pos = prev_sp;
-					}
+						if(pen_pos != prev_sp)
+						{
+							job.AddCmd<TGotoCommand>(PixelToMm(dpmm, prev_sp), ECoordinateType::ABSOLUTE);
+							pen_pos = prev_sp;
+						}
 
-					if(pen)
-					{
-						job.commands.MoveAppend(New<TPenCommand, IPlotterCommand>(TPenCommand::EDirection::UP, stroke_width));
-						pen = false;
+						job.AddCmd<TPenCommand>(TPenCommand::EDirection::UP, stroke_width);
+						pen_down = false;
 					}
 
 					current_color = new_color;
-					if(current_color[3] < 1.0f)
+					if(current_color.Alpha() < 1.0f)
 					{
-						job.commands.MoveAppend(palette ? New<TToolChangeCommand, IPlotterCommand>(palette->Select(current_color)) : New<TColorChangeCommand, IPlotterCommand>(current_color));
-
-						job.commands.MoveAppend(New<TGotoCommand, IPlotterCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE));
+						AddColorChangeCmd(job, palette, current_color);
+						job.AddCmd<TGotoCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE);
 						pen_pos = scan_pos;
 
-						if(!pen)
-						{
-							job.commands.MoveAppend(New<TPenCommand, IPlotterCommand>(TPenCommand::EDirection::DOWN, stroke_width));
-							pen = true;
-						}
+						job.AddCmd<TPenCommand>(TPenCommand::EDirection::DOWN, stroke_width * (1.0f - current_color.Alpha()));
+						pen_down = true;
 					}
 				}
 
@@ -99,13 +105,13 @@ namespace el1::io::graphics::plotter
 			else if(scan_pos[0] < 0)
 				scan_pos[0] = 0;
 
-			if(scan_pos != pen_pos)
-			{
-				job.commands.MoveAppend(New<TGotoCommand, IPlotterCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE));
-				pen_pos = scan_pos;
-			}
-
 			dir *= -1;
+
+			// if(scan_pos != pen_pos)
+			// {
+			// 	job.AddCmd<TGotoCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE);
+			// 	pen_pos = scan_pos;
+			// }
 		}
 
 		return job;

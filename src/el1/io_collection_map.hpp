@@ -87,6 +87,9 @@ namespace el1::io::collection::map
 			TValue& Add(TKey key, TValue&& value);
 			TValue& Add(kv_pair_t&& pair);
 
+			TSortedMap& operator=(TSortedMap&& other) = default;
+			TSortedMap& operator=(TSortedMap& other) = default;
+
 			TSortedMap(TSortedMap&& other) = default;
 			TSortedMap(const TSortedMap& other) = default;
 			TSortedMap(sorter_function_t sorter = &StdSorter<TKey>);
@@ -119,6 +122,9 @@ namespace el1::io::collection::map
 
 			// removes the specified key (along with its value) from the map; return false if the key did not exist; true otherwise
 			bool Remove(const TKey& key);
+
+			TSortedMap& operator=(TSortedMap&& other) = default;
+			TSortedMap& operator=(TSortedMap& other) = default;
 
 			TSortedMap(TSortedMap&& other) = default;
 			TSortedMap(const TSortedMap& other) = default;

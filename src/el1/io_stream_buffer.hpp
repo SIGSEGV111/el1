@@ -12,7 +12,7 @@ namespace el1::io::stream::buffer
 	class TWriteThroughBuffer : public ISink<T>
 	{
 		protected:
-			using TFifo = fifo::TFifo<T, util::Max<u32_t>(2, 4U*4096U / sizeof(T)>;
+			using TFifo = fifo::TFifo<T, util::Max<u32_t>(2, 4U*4096U / sizeof(T))>;
 			ISink<T>* const sink;
 			std::unique_ptr<TFifo> fifo;
 			system::task::TFiber fib_flusher;
@@ -21,16 +21,22 @@ namespace el1::io::stream::buffer
 			{
 				for(;;)
 				{
-					while(fifo->WriteOut(sink, fifo->Remaining()));
+					while(fifo->WriteOut(*sink, fifo->Remaining()));
 
 					auto w_fifo_ready = fifo->OnInputReady();
 					if(w_fifo_ready == nullptr)
+					{
+						while(fifo->WriteOut(*sink, fifo->Remaining()));
 						break;
+					}
 					w_fifo_ready->WaitFor();
 
 					auto w_sink_ready = sink->OnOutputReady();
 					if(w_sink_ready == nullptr)
+					{
+						while(fifo->WriteOut(*sink, fifo->Remaining()));
 						break;
+					}
 					w_sink_ready->WaitFor();
 				}
 			}

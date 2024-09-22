@@ -164,6 +164,13 @@ namespace el1::io::collection::list
 			constexpr array_t(const array_t&) = default;
 			constexpr array_t(array_t&& other) = default;
 			~array_t() = default;
+
+			template<typename ... A>
+			static array_t Build(A&& ... a)
+			{
+				static const T arr[] = { std::move(a) ... };
+				return array_t(arr, sizeof(arr) / sizeof(T));
+			}
 	};
 
 	/*****************************************************************************/

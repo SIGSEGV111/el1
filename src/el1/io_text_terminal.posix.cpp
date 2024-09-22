@@ -52,7 +52,7 @@ namespace el1::io::text::terminal
 		return string::TString();
 	}
 
-	math::vector::vector_t<u16_t, 2> TNoTerminal::WindowSize() const
+	math::vector::TVector<u16_t, 2> TNoTerminal::WindowSize() const
 	{
 		struct winsize size;
 		EL_SYSERR(ioctl(1, TIOCGWINSZ, &size));

@@ -9,7 +9,7 @@ namespace el1::math
 	using namespace math::matrix;
 
 	TEST(math_vector, DefaultConstructor) {
-		vector_t<int, 3> v;
+		TVector<int, 3> v;
 		EXPECT_EQ(v[0], 0);
 		EXPECT_EQ(v[1], 0);
 		EXPECT_EQ(v[2], 0);
@@ -17,14 +17,14 @@ namespace el1::math
 
 	TEST(math_vector, ArrayConstructor) {
 		int arr[3] = {1, 2, 3};
-		vector_t<int, 3> v(arr);
+		TVector<int, 3> v(arr);
 		EXPECT_EQ(v[0], 1);
 		EXPECT_EQ(v[1], 2);
 		EXPECT_EQ(v[2], 3);
 	}
 
 	TEST(math_vector, VariadicConstructor) {
-		vector_t<int, 3> v(4, 5, 6);
+		TVector<int, 3> v(4, 5, 6);
 		EXPECT_EQ(v[0], 4);
 		EXPECT_EQ(v[1], 5);
 		EXPECT_EQ(v[2], 6);
@@ -32,7 +32,7 @@ namespace el1::math
 
 	// Element access tests
 	TEST(math_vector, ElementAccessNonConst) {
-		vector_t<int, 3> v(7, 8, 9);
+		TVector<int, 3> v(7, 8, 9);
 		EXPECT_EQ(v[0], 7);
 		EXPECT_EQ(v[1], 8);
 		EXPECT_EQ(v[2], 9);
@@ -42,7 +42,7 @@ namespace el1::math
 	}
 
 	TEST(math_vector, ElementAccessConst) {
-		const vector_t<int, 3> v(7, 8, 9);
+		const TVector<int, 3> v(7, 8, 9);
 		EXPECT_EQ(v[0], 7);
 		EXPECT_EQ(v[1], 8);
 		EXPECT_EQ(v[2], 9);
@@ -50,9 +50,9 @@ namespace el1::math
 
 	// Arithmetic operation tests
 	TEST(math_vector, VectorAddition) {
-		vector_t<int, 3> v1(1, 2, 3);
-		vector_t<int, 3> v2(4, 5, 6);
-		vector_t<int, 3> v3 = v1 + v2;
+		TVector<int, 3> v1(1, 2, 3);
+		TVector<int, 3> v2(4, 5, 6);
+		TVector<int, 3> v3 = v1 + v2;
 
 		EXPECT_EQ(v3[0], 5);
 		EXPECT_EQ(v3[1], 7);
@@ -60,9 +60,9 @@ namespace el1::math
 	}
 
 	TEST(math_vector, VectorSubtraction) {
-		vector_t<int, 3> v1(5, 6, 7);
-		vector_t<int, 3> v2(1, 2, 3);
-		vector_t<int, 3> v3 = v1 - v2;
+		TVector<int, 3> v1(5, 6, 7);
+		TVector<int, 3> v2(1, 2, 3);
+		TVector<int, 3> v3 = v1 - v2;
 
 		EXPECT_EQ(v3[0], 4);
 		EXPECT_EQ(v3[1], 4);
@@ -70,8 +70,8 @@ namespace el1::math
 	}
 
 	TEST(math_vector, VectorMultiplicationByScalar) {
-		vector_t<int, 3> v(1, 2, 3);
-		vector_t<int, 3> v2 = v * 2;
+		TVector<int, 3> v(1, 2, 3);
+		TVector<int, 3> v2 = v * 2;
 
 		EXPECT_EQ(v2[0], 2);
 		EXPECT_EQ(v2[1], 4);
@@ -79,8 +79,8 @@ namespace el1::math
 	}
 
 	TEST(math_vector, VectorDivisionByScalar) {
-		vector_t<int, 3> v(2, 4, 6);
-		vector_t<int, 3> v2 = v / 2;
+		TVector<int, 3> v(2, 4, 6);
+		TVector<int, 3> v2 = v / 2;
 
 		EXPECT_EQ(v2[0], 1);
 		EXPECT_EQ(v2[1], 2);
@@ -89,37 +89,37 @@ namespace el1::math
 
 	// Comparison operation tests
 	TEST(math_vector, AllBigger) {
-		vector_t<int, 3> v1(5, 6, 7);
-		vector_t<int, 3> v2(1, 2, 3);
+		TVector<int, 3> v1(5, 6, 7);
+		TVector<int, 3> v2(1, 2, 3);
 		EXPECT_TRUE(v1.AllBigger(v2));
 		EXPECT_FALSE(v2.AllBigger(v1));
 	}
 
 	TEST(math_vector, AllLess) {
-		vector_t<int, 3> v1(1, 2, 3);
-		vector_t<int, 3> v2(5, 6, 7);
+		TVector<int, 3> v1(1, 2, 3);
+		TVector<int, 3> v2(5, 6, 7);
 		EXPECT_TRUE(v1.AllLess(v2));
 		EXPECT_FALSE(v2.AllLess(v1));
 	}
 
 	TEST(math_vector, AllBiggerEqual) {
-		vector_t<int, 3> v1(5, 6, 7);
-		vector_t<int, 3> v2(5, 5, 7);
+		TVector<int, 3> v1(5, 6, 7);
+		TVector<int, 3> v2(5, 5, 7);
 		EXPECT_TRUE(v1.AllBiggerEqual(v2));
 		EXPECT_FALSE(v2.AllBiggerEqual(v1));
 	}
 
 	TEST(math_vector, AllLessEqual) {
-		vector_t<int, 3> v1(1, 2, 3);
-		vector_t<int, 3> v2(1, 3, 3);
+		TVector<int, 3> v1(1, 2, 3);
+		TVector<int, 3> v2(1, 3, 3);
 		EXPECT_TRUE(v1.AllLessEqual(v2));
 		EXPECT_FALSE(v2.AllLessEqual(v1));
 	}
 
 	TEST(math_vector, Equality) {
-		vector_t<int, 3> v1(1, 2, 3);
-		vector_t<int, 3> v2(1, 2, 3);
-		vector_t<int, 3> v3(3, 2, 1);
+		TVector<int, 3> v1(1, 2, 3);
+		TVector<int, 3> v2(1, 2, 3);
+		TVector<int, 3> v3(3, 2, 1);
 
 		EXPECT_TRUE(v1 == v2);
 		EXPECT_FALSE(v1 == v3);
@@ -127,17 +127,17 @@ namespace el1::math
 
 	// Utility function tests
 	TEST(math_vector, Space) {
-		vector_t<int, 2> v1(3, 4);
+		TVector<int, 2> v1(3, 4);
 		EXPECT_EQ(v1.Space(), 12);
 
-		vector_t<int, 3> v2(2, 3, 4);
+		TVector<int, 3> v2(2, 3, 4);
 		EXPECT_EQ(v2.Space(), 24);
 	}
 
 	// Type conversion tests
 	TEST(math_vector, TypeConversion) {
-		vector_t<int, 3> v1(1, 2, 3);
-		vector_t<double, 3> v2 = (vector_t<double, 3>)v1;
+		TVector<int, 3> v1(1, 2, 3);
+		TVector<double, 3> v2 = (TVector<double, 3>)v1;
 
 		EXPECT_DOUBLE_EQ(v2[0], 1.0);
 		EXPECT_DOUBLE_EQ(v2[1], 2.0);
@@ -150,7 +150,7 @@ namespace el1::math
 	// Test for element access operator
 	TEST(math_matrix, ElementAccess)
 	{
-		matrix_t<int, 2, 2> m;
+		TMatrix<int, 2, 2> m;
 		m(0, 0) = 1;
 		m(0, 1) = 2;
 		m(1, 0) = 3;
@@ -165,8 +165,8 @@ namespace el1::math
 	// Test for matrix addition
 	TEST(math_matrix, Addition)
 	{
-		matrix_t<int, 2, 2> m1;
-		matrix_t<int, 2, 2> m2;
+		TMatrix<int, 2, 2> m1;
+		TMatrix<int, 2, 2> m2;
 
 		m1(0, 0) = 1; m1(0, 1) = 2;
 		m1(1, 0) = 3; m1(1, 1) = 4;
@@ -174,7 +174,7 @@ namespace el1::math
 		m2(0, 0) = 5; m2(0, 1) = 6;
 		m2(1, 0) = 7; m2(1, 1) = 8;
 
-		matrix_t<int, 2, 2> m3 = m1 + m2;
+		TMatrix<int, 2, 2> m3 = m1 + m2;
 
 		EXPECT_EQ(m3(0, 0), 6);
 		EXPECT_EQ(m3(0, 1), 8);
@@ -185,8 +185,8 @@ namespace el1::math
 	// Test for matrix subtraction
 	TEST(math_matrix, Subtraction)
 	{
-		matrix_t<int, 2, 2> m1;
-		matrix_t<int, 2, 2> m2;
+		TMatrix<int, 2, 2> m1;
+		TMatrix<int, 2, 2> m2;
 
 		m1(0, 0) = 10; m1(0, 1) = 20;
 		m1(1, 0) = 30; m1(1, 1) = 40;
@@ -194,7 +194,7 @@ namespace el1::math
 		m2(0, 0) = 5; m2(0, 1) = 10;
 		m2(1, 0) = 15; m2(1, 1) = 20;
 
-		matrix_t<int, 2, 2> m3 = m1 - m2;
+		TMatrix<int, 2, 2> m3 = m1 - m2;
 
 		EXPECT_EQ(m3(0, 0), 5);
 		EXPECT_EQ(m3(0, 1), 10);
@@ -205,11 +205,11 @@ namespace el1::math
 	// Test for scalar multiplication
 	TEST(math_matrix, ScalarMultiplication)
 	{
-		matrix_t<int, 2, 2> m;
+		TMatrix<int, 2, 2> m;
 		m(0, 0) = 1; m(0, 1) = 2;
 		m(1, 0) = 3; m(1, 1) = 4;
 
-		matrix_t<int, 2, 2> m2 = m * 2;
+		TMatrix<int, 2, 2> m2 = m * 2;
 
 		EXPECT_EQ(m2(0, 0), 2);
 		EXPECT_EQ(m2(0, 1), 4);
@@ -220,11 +220,11 @@ namespace el1::math
 	// Test for matrix transpose
 	TEST(math_matrix, Transpose)
 	{
-		matrix_t<int, 2, 3> m;
+		TMatrix<int, 2, 3> m;
 		m(0, 0) = 1; m(0, 1) = 2; m(0, 2) = 3;
 		m(1, 0) = 4; m(1, 1) = 5; m(1, 2) = 6;
 
-		matrix_t<int, 3, 2> t = m.Transpose();
+		TMatrix<int, 3, 2> t = m.Transpose();
 
 		EXPECT_EQ(t(0, 0), 1);
 		EXPECT_EQ(t(1, 0), 2);
@@ -237,14 +237,14 @@ namespace el1::math
 	// Test for matrix-vector multiplication
 	TEST(math_matrix, MatrixVectorMultiplication)
 	{
-		matrix_t<int, 2, 3> m;
+		TMatrix<int, 2, 3> m;
 		m(0, 0) = 1; m(0, 1) = 2; m(0, 2) = 3;
 		m(1, 0) = 4; m(1, 1) = 5; m(1, 2) = 6;
 
-		vector_t<int, 3> v;
+		TVector<int, 3> v;
 		v[0] = 1; v[1] = 2; v[2] = 3;
 
-		vector_t<int, 2> result = m * v;
+		TVector<int, 2> result = m * v;
 
 		EXPECT_EQ(result[0], 14);  // 1*1 + 2*2 + 3*3 = 14
 		EXPECT_EQ(result[1], 32);  // 4*1 + 5*2 + 6*3 = 32
@@ -253,8 +253,8 @@ namespace el1::math
 	// Test for matrix multiplication
 	TEST(math_matrix, MatrixMultiplication)
 	{
-		matrix_t<int, 2, 3> m1;
-		matrix_t<int, 3, 2> m2;
+		TMatrix<int, 2, 3> m1;
+		TMatrix<int, 3, 2> m2;
 
 		// Fill m1 with 1, 2, 3 in first row and 4, 5, 6 in second row
 		m1(0, 0) = 1; m1(0, 1) = 2; m1(0, 2) = 3;
@@ -265,7 +265,7 @@ namespace el1::math
 		m2(1, 0) = 9;  m2(1, 1) = 10;
 		m2(2, 0) = 11; m2(2, 1) = 12;
 
-		matrix_t<int, 2, 2> result = m1 * m2;
+		TMatrix<int, 2, 2> result = m1 * m2;
 
 		EXPECT_EQ(result(0, 0), 58);  // 1*7 + 2*9 + 3*11 = 58
 		EXPECT_EQ(result(0, 1), 64);  // 1*8 + 2*10 + 3*12 = 64
@@ -276,11 +276,11 @@ namespace el1::math
 	// Test for translation matrix creation
 	TEST(math_matrix, CreateTranslationMatrix)
 	{
-		vector_t<int, 2> v;
+		TVector<int, 2> v;
 		v[0] = 2;
 		v[1] = 3;
 
-		matrix_t<int, 3, 3> m = CreateTranslationMatrix(v);
+		TMatrix<int, 3, 3> m = CreateTranslationMatrix(v);
 
 		EXPECT_EQ(m(0, 0), 1);
 		EXPECT_EQ(m(1, 1), 1);
@@ -293,11 +293,11 @@ namespace el1::math
 
 	TEST(math_matrix, CreateScalingMatrix)
 	{
-		vector_t<int, 2> v;
+		TVector<int, 2> v;
 		v[0] = 2;
 		v[1] = 3;
 
-		matrix_t<int, 3, 3> m = CreateScalingMatrix(v);
+		TMatrix<int, 3, 3> m = CreateScalingMatrix(v);
 
 		EXPECT_EQ(m(0, 0), 2);
 		EXPECT_EQ(m(0, 1), 0);
@@ -313,7 +313,7 @@ namespace el1::math
 	// Test for translation matrix creation
 	TEST(math_matrix, Idenity)
 	{
-		auto m = matrix_t<int, 3, 3>::Identity();
+		auto m = TMatrix<int, 3, 3>::Identity();
 
 		EXPECT_EQ(m(0, 0), 1);
 		EXPECT_EQ(m(0, 1), 0);
@@ -329,7 +329,7 @@ namespace el1::math
 	TEST(math_matrix, CreateMirrorMatrix)
 	{
 		{
-			matrix_t<int, 3, 3> m = CreateMirrorMatrix<int>(false, false);
+			TMatrix<int, 3, 3> m = CreateMirrorMatrix<int>(false, false);
 
 			EXPECT_EQ(m(0, 0), 1);
 			EXPECT_EQ(m(0, 1), 0);
@@ -343,7 +343,7 @@ namespace el1::math
 		}
 
 		{
-			matrix_t<int, 3, 3> m = CreateMirrorMatrix<int>(true, false);
+			TMatrix<int, 3, 3> m = CreateMirrorMatrix<int>(true, false);
 
 			EXPECT_EQ(m(0, 0), 1);
 			EXPECT_EQ(m(0, 1), 0);
@@ -357,7 +357,7 @@ namespace el1::math
 		}
 
 		{
-			matrix_t<int, 3, 3> m = CreateMirrorMatrix<int>(false, true);
+			TMatrix<int, 3, 3> m = CreateMirrorMatrix<int>(false, true);
 
 			EXPECT_EQ(m(0, 0), -1);
 			EXPECT_EQ(m(0, 1), 0);

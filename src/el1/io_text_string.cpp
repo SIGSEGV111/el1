@@ -65,12 +65,6 @@ namespace el1::io::text::string
 
 	/******************************************/
 
-	static const TList< TUTF32> OCTAL_SYMBOLS = { '0', '1', '2', '3', '4', '5', '6', '7' };
-	static const TList< TUTF32> DECIMAL_SYMBOLS = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
-	static const TList< TUTF32> HEXADECIMAL_SYMBOLS_UC = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-	static const TList< TUTF32> HEXADECIMAL_SYMBOLS_LC = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
-	static const TList< TUTF32> BINARY_SYMBOLS = { '0', '1' };
-
 	const TNumberFormatter* TNumberFormatter::DEFAULT_OCTAL = &TNumberFormatter::PLAIN_OCTAL;
 	const TNumberFormatter* TNumberFormatter::DEFAULT_DECIMAL = &TNumberFormatter::PLAIN_DECIMAL_US_EN;
 	const TNumberFormatter* TNumberFormatter::DEFAULT_HEXADECIMAL = &TNumberFormatter::PLAIN_HEXADECIMAL_LOWER_US_EN;
@@ -349,11 +343,6 @@ namespace el1::io::text::string
 	}
 
 	/******************************************/
-
-	static const TList< TUTF32> ASCII_QUOTE_SYMBOLS = {
-		'\'',
-		'\"',
-	};
 
 	const TStringFormatter TStringFormatter::PLAIN({
 		.prefix = "",
@@ -752,6 +741,23 @@ namespace el1::io::text::string
 		return true;
 	}
 
+	TString TString::ExtractSequence(const array_t<const TUTF32> charset, const ssys_t _start, usys_t max_length) const
+	{
+		TString seq;
+		const usys_t start = chars.AbsoluteIndex(_start, false);
+		const usys_t end = max_length == NEG1 ? chars.Count() : util::Min(chars.Count(), start + max_length);
+
+		for(usys_t i = start; i < end; i++)
+		{
+			const TUTF32 chr = chars[i];
+			if(!charset.Contains(chr))
+				break;
+			seq += chr;
+		}
+
+		return seq;
+	}
+
 	bool TString::operator==(const TString& rhs) const
 	{
 		if(this == &rhs) return true;
@@ -900,6 +906,24 @@ namespace el1::io::text::string
 					return i;
 		}
 
+		return NEG1;
+	}
+
+	usys_t TString::FindFirst(const array_t<const TUTF32>& charset, const ssys_t _start, const bool reverse) const
+	{
+		const usys_t start = chars.AbsoluteIndex(_start, false);
+		if(reverse)
+		{
+			for(ssys_t i = start; i >= 0; i--)
+				if(charset.Contains(chars[i]))
+					return i;
+		}
+		else
+		{
+			for(usys_t i = start; i < chars.Count(); i++)
+				if(charset.Contains(chars[i]))
+					return i;
+		}
 		return NEG1;
 	}
 

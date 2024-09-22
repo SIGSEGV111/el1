@@ -157,4 +157,14 @@ namespace el1::io::graphics::image
 	{
 		EL_ERROR(size.Space() != pixels.Count(), TInvalidArgumentException, "pixels", "pixels count does not match size");
 	}
+
+	void TVectorImage::Invert()
+	{
+		EL_NOT_IMPLEMENTED;
+	}
+
+	TRasterImage TVectorImage::Render(const float dpmm)
+	{
+		EL_NOT_IMPLEMENTED;
+	}
 }

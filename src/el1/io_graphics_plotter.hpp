@@ -35,10 +35,10 @@ namespace el1::io::graphics::plotter
 	 */
 	struct TGotoCommand : IPlotterCommand
 	{
-		v2f_t endpoint;
+		v2d_t endpoint;
 		ECoordinateType ctype;
 
-		constexpr TGotoCommand(const v2f_t endpoint, const ECoordinateType ctype)
+		constexpr TGotoCommand(const v2d_t endpoint, const ECoordinateType ctype)
 			: endpoint(endpoint), ctype(ctype) {}
 	};
 
@@ -120,6 +120,15 @@ namespace el1::io::graphics::plotter
 	};
 
 	/**
+	 * @brief Command to introduce a pause in the plotter job.
+	 *        The machine will stop and execution needs to be manually resumed by the operator.
+	 */
+	struct TPauseCommand : IPlotterCommand
+	{
+		constexpr TPauseCommand() {}
+	};
+
+	/**
 	 * @brief Class for managing a color-to-tool mapping (palette).
 	 *        Used for selecting the closest matching tool for a given color.
 	 */
@@ -142,6 +151,12 @@ namespace el1::io::graphics::plotter
 	struct TJob
 	{
 		TList<std::unique_ptr<IPlotterCommand>> commands;
+
+		template<typename C, typename ... A>
+		inline void AddCmd(A&& ... a)
+		{
+			commands.MoveAppend(New<C, IPlotterCommand>(a ...));
+		}
 
 		/**
 		 * @brief Creates a plotter job from an image.

@@ -96,6 +96,36 @@ namespace el1::io::stream::fifo
 				return n_written;
 			}
 
+			iosize_t WriteOut(ISink<T>& sink, const iosize_t _n_items_max = (iosize_t)-1, const bool allow_recursion = true) final override
+			{
+				iosize_t n_read = 0;
+				const usys_t n_items_max = util::Min<usys_t>(Remaining(), _n_items_max);
+
+				while(n_read < n_items_max)
+				{
+					const usys_t n_batch_max = idx_read < idx_write ? idx_write - idx_read : N_ITEMS - idx_read;
+					const usys_t n_remaining = n_items_max - n_read;
+					const usys_t n_now = util::Min(n_batch_max, n_remaining);
+					const usys_t n_written = sink.Write(arr_items_fifo + idx_read, n_now);
+
+					EL_ERROR(n_written > n_now, TLogicException);
+					n_read += n_written;
+					idx_read += n_written;
+					if(idx_read >= N_ITEMS)
+						idx_read = 0;
+
+					if(n_written == 0)
+					{
+						auto w = sink.OnOutputReady();
+						if(w == nullptr)
+							break;
+						w->WaitFor();
+					}
+				}
+
+				return n_read;
+			}
+
 			usys_t Read(T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
 			{
 				usys_t n_read = 0;

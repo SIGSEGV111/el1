@@ -29,7 +29,7 @@ namespace el1::io::text::terminal
 		virtual ITerminal& operator<<(const string::TString& str) = 0;
 		virtual string::TString TextColorCode(rgba8_t rgb) const = 0;
 		virtual string::TString BackgroundColorCode(rgba8_t rgb) const = 0;
-		virtual math::vector::vector_t<u16_t, 2> WindowSize() const = 0;
+		virtual math::vector::TVector<u16_t, 2> WindowSize() const = 0;
 
 		template<typename ... R>
 		void Print(string::TString format, R&& ... r)
@@ -44,7 +44,7 @@ namespace el1::io::text::terminal
 			ITerminal& operator<<(const string::TString& str) final override;
 			string::TString TextColorCode(rgba8_t rgb) const final override;
 			string::TString BackgroundColorCode(rgba8_t rgb) const final override;
-			math::vector::vector_t<u16_t, 2> WindowSize() const final override;
+			math::vector::TVector<u16_t, 2> WindowSize() const final override;
 	};
 
 	// the "terminal" is a human facing text interface

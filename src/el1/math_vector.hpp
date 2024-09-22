@@ -8,7 +8,7 @@
 namespace el1::math::vector
 {
 	template<typename T, unsigned n_dim>
-	struct vector_t
+	struct TVector
 	{
 		T v[n_dim];
 
@@ -31,108 +31,113 @@ namespace el1::math::vector
 		* @param rhs The right-hand side vector to add.
 		* @return Reference to this vector after addition.
 		*/
-		constexpr vector_t& operator+=(const vector_t& rhs);
+		constexpr TVector& operator+=(const TVector& rhs);
 
 		/**
 		* @brief Subtracts another vector from this vector.
 		* @param rhs The right-hand side vector to subtract.
 		* @return Reference to this vector after subtraction.
 		*/
-		constexpr vector_t& operator-=(const vector_t& rhs);
+		constexpr TVector& operator-=(const TVector& rhs);
 
 		/**
 		* @brief Multiplies this vector by a scalar.
 		* @param rhs The scalar value to multiply.
 		* @return Reference to this vector after multiplication.
 		*/
-		constexpr vector_t& operator*=(const T rhs);
+		constexpr TVector& operator*=(const T rhs);
 
 		/**
 		* @brief Divides this vector by a scalar.
 		* @param rhs The scalar value to divide by.
 		* @return Reference to this vector after division.
 		*/
-		constexpr vector_t& operator/=(const T rhs);
+		constexpr TVector& operator/=(const T rhs);
 
-		/**
-		* @brief Divides this vector by a scalar.
-		* @param rhs The scalar value to divide by.
-		* @return Reference to this vector after division.
-		*/
-		constexpr vector_t& operator%=(const T rhs);
+		template<typename U = T>
+		typename std::enable_if<std::is_integral<U>::value, TVector<T, n_dim>&>::type
+		operator%=(const T rhs) {
+			for(unsigned i = 0; i < n_dim; i++)
+				v[i] %= rhs;
+			return *this;
+		}
+
+		// This version will be enabled for floating-point types
+		template<typename U = T>
+		typename std::enable_if<std::is_floating_point<U>::value, TVector<T, n_dim>&>::type
+		operator%=(const T rhs) {
+			for(unsigned i = 0; i < n_dim; i++)
+				v[i] = std::fmod(v[i], rhs); // Use fmod for floating types
+			return *this;
+		}
 
 		/**
 		* @brief Adds two vectors.
 		* @param rhs The right-hand side vector to add.
 		* @return A new vector resulting from the addition.
 		*/
-		constexpr vector_t operator+(const vector_t& rhs) const;
+		constexpr TVector operator+(const TVector& rhs) const;
 
 		/**
 		* @brief Subtracts two vectors.
 		* @param rhs The right-hand side vector to subtract.
 		* @return A new vector resulting from the subtraction.
 		*/
-		constexpr vector_t operator-(const vector_t& rhs) const;
+		constexpr TVector operator-(const TVector& rhs) const;
 
 		/**
 		* @brief Multiplies a vector by a scalar.
 		* @param rhs The scalar value to multiply.
 		* @return A new vector resulting from the multiplication.
 		*/
-		constexpr vector_t operator*(const T rhs) const;
+		constexpr TVector operator*(const T rhs) const;
 
 		/**
 		* @brief Divides a vector by a scalar.
 		* @param rhs The scalar value to divide by.
 		* @return A new vector resulting from the division.
 		*/
-		constexpr vector_t operator/(const T rhs) const;
+		constexpr TVector operator/(const T rhs) const;
 
-		/**
-		* @brief Divides a vector by a scalar.
-		* @param rhs The scalar value to divide by.
-		* @return A new vector resulting from the division.
-		*/
-		constexpr vector_t operator%(const T rhs) const;
+		constexpr TVector operator%(const T rhs) const;
 
 		/**
 		* @brief Checks if all components of this vector are greater than those of another vector.
 		* @param rhs The right-hand side vector to compare.
 		* @return True if all components of this vector are greater, false otherwise.
 		*/
-		constexpr bool AllBigger(const vector_t& rhs) const;
+		constexpr bool AllBigger(const TVector& rhs) const;
 
 		/**
 		* @brief Checks if all components of this vector are less than those of another vector.
 		* @param rhs The right-hand side vector to compare.
 		* @return True if all components of this vector are less, false otherwise.
 		*/
-		constexpr bool AllLess(const vector_t& rhs) const;
+		constexpr bool AllLess(const TVector& rhs) const;
 
 		/**
 		* @brief Checks if all components of this vector are greater than or equal to those of another vector.
 		* @param rhs The right-hand side vector to compare.
 		* @return True if all components of this vector are greater than or equal, false otherwise.
 		*/
-		constexpr bool AllBiggerEqual(const vector_t& rhs) const;
+		constexpr bool AllBiggerEqual(const TVector& rhs) const;
 
 		/**
 		* @brief Checks if all components of this vector are less than or equal to those of another vector.
 		* @param rhs The right-hand side vector to compare.
 		* @return True if all components of this vector are less than or equal, false otherwise.
 		*/
-		constexpr bool AllLessEqual(const vector_t& rhs) const;
+		constexpr bool AllLessEqual(const TVector& rhs) const;
 
 		/**
 		* @brief Checks if two vectors are equal.
 		* @param rhs The right-hand side vector to compare.
 		* @return True if all components of both vectors are equal, false otherwise.
 		*/
-		constexpr bool operator==(const vector_t& rhs) const;
+		constexpr bool operator==(const TVector& rhs) const;
 
-		vector_t& operator=(vector_t&&) = default;
-		vector_t& operator=(const vector_t&) = default;
+		TVector& operator=(TVector&&) = default;
+		TVector& operator=(const TVector&) = default;
 
 		/**
 		* @brief Computes the "space" defined by this vector, which is a generalization of area (2D) or volume (3D).
@@ -152,7 +157,7 @@ namespace el1::math::vector
 		* @return The computed distance.
 		*/
 		template<typename R = T>
-		constexpr R Distance(const vector_t& rhs) const EL_GETTER;
+		constexpr R Distance(const TVector& rhs) const EL_GETTER;
 
 		/**
 		* Calculates the element-wise absolute difference between this vector and another vector.
@@ -161,7 +166,7 @@ namespace el1::math::vector
 		* @return A new vector where each element i is the absolute value of the difference between
 		*         element i of this vector and element i of the vector rhs.
 		*/
-		constexpr vector_t AbsoluteDifference(const vector_t& rhs) const EL_GETTER;
+		constexpr TVector AbsoluteDifference(const TVector& rhs) const EL_GETTER;
 
 		/**
 		* @brief Conversion operator to a different vector type.
@@ -169,7 +174,7 @@ namespace el1::math::vector
 		* @return A new vector with elements converted to type A.
 		*/
 		template<typename A>
-		explicit operator vector_t<A, n_dim>() const;
+		explicit operator TVector<A, n_dim>() const;
 
 		/**
 		* @brief Constructor to initialize vector with an array.
@@ -177,7 +182,7 @@ namespace el1::math::vector
 		* @param vv The array of elements.
 		*/
 		template<typename TT>
-		constexpr vector_t(const TT (&vv)[n_dim]);
+		constexpr TVector(const TT (&vv)[n_dim]);
 
 		/**
 		* @brief Variadic template constructor to initialize vector with multiple arguments.
@@ -185,32 +190,37 @@ namespace el1::math::vector
 		* @param a The arguments used to initialize the vector.
 		*/
 		template <typename... A>
-		vector_t(A ... a);
+		TVector(A ... a);
 
-		vector_t();
-		vector_t(vector_t&&) = default;
-		vector_t(const vector_t&) = default;
+		TVector();
+		TVector(TVector&&) = default;
+		TVector(const TVector&) = default;
 
 		template<typename TT>
-		explicit vector_t(const vector_t<TT, n_dim>&);
+		explicit TVector(const TVector<TT, n_dim>&);
 	};
+
+	using v2d_t = TVector<double, 2>;
+	using v3d_t = TVector<double, 3>;
+
+	extern template struct TVector<double, 2>;
 
 	/*******************************************************************/
 
 	template<typename T, unsigned n_dim>
-	constexpr T& vector_t<T, n_dim>::operator[](const unsigned index)
+	constexpr T& TVector<T, n_dim>::operator[](const unsigned index)
 	{
 		return v[index];
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr const T& vector_t<T, n_dim>::operator[](const unsigned index) const
+	constexpr const T& TVector<T, n_dim>::operator[](const unsigned index) const
 	{
 		return v[index];
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim>& vector_t<T, n_dim>::operator+=(const vector_t& rhs)
+	constexpr TVector<T, n_dim>& TVector<T, n_dim>::operator+=(const TVector& rhs)
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			v[i] += rhs.v[i];
@@ -218,7 +228,7 @@ namespace el1::math::vector
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim>& vector_t<T, n_dim>::operator-=(const vector_t& rhs)
+	constexpr TVector<T, n_dim>& TVector<T, n_dim>::operator-=(const TVector& rhs)
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			v[i] -= rhs.v[i];
@@ -226,7 +236,7 @@ namespace el1::math::vector
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim>& vector_t<T, n_dim>::operator*=(const T rhs)
+	constexpr TVector<T, n_dim>& TVector<T, n_dim>::operator*=(const T rhs)
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			v[i] *= rhs;
@@ -234,63 +244,63 @@ namespace el1::math::vector
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim>& vector_t<T, n_dim>::operator/=(const T rhs)
+	constexpr TVector<T, n_dim>& TVector<T, n_dim>::operator/=(const T rhs)
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			v[i] /= rhs;
 		return *this;
 	}
 
-	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim>& vector_t<T, n_dim>::operator%=(const T rhs)
-	{
-		for(unsigned i = 0; i < n_dim; i++)
-			v[i] %= rhs;
-		return *this;
-	}
+	// template<typename T, unsigned n_dim>
+	// constexpr TVector<T, n_dim>& TVector<T, n_dim>::operator%=(const T rhs)
+	// {
+	// 	for(unsigned i = 0; i < n_dim; i++)
+	// 		v[i] %= rhs;
+	// 	return *this;
+	// }
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim> vector_t<T, n_dim>::operator+(const vector_t& rhs) const
+	constexpr TVector<T, n_dim> TVector<T, n_dim>::operator+(const TVector& rhs) const
 	{
-		vector_t r = *this;
+		TVector r = *this;
 		r += rhs;
 		return r;
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim> vector_t<T, n_dim>::operator-(const vector_t& rhs) const
+	constexpr TVector<T, n_dim> TVector<T, n_dim>::operator-(const TVector& rhs) const
 	{
-		vector_t r = *this;
+		TVector r = *this;
 		r -= rhs;
 		return r;
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim> vector_t<T, n_dim>::operator*(const T rhs) const
+	constexpr TVector<T, n_dim> TVector<T, n_dim>::operator*(const T rhs) const
 	{
-		vector_t r = *this;
+		TVector r = *this;
 		r *= rhs;
 		return r;
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim> vector_t<T, n_dim>::operator/(const T rhs) const
+	constexpr TVector<T, n_dim> TVector<T, n_dim>::operator/(const T rhs) const
 	{
-		vector_t r = *this;
+		TVector r = *this;
 		r /= rhs;
 		return r;
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim> vector_t<T, n_dim>::operator%(const T rhs) const
+	constexpr TVector<T, n_dim> TVector<T, n_dim>::operator%(const T rhs) const
 	{
-		vector_t r = *this;
+		TVector r = *this;
 		r %= rhs;
 		return r;
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr bool vector_t<T, n_dim>::AllBigger(const vector_t& rhs) const
+	constexpr bool TVector<T, n_dim>::AllBigger(const TVector& rhs) const
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			if(v[i] <= rhs[i])
@@ -299,7 +309,7 @@ namespace el1::math::vector
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr bool vector_t<T, n_dim>::AllLess(const vector_t& rhs) const
+	constexpr bool TVector<T, n_dim>::AllLess(const TVector& rhs) const
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			if(v[i] >= rhs[i])
@@ -308,7 +318,7 @@ namespace el1::math::vector
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr bool vector_t<T, n_dim>::AllBiggerEqual(const vector_t& rhs) const
+	constexpr bool TVector<T, n_dim>::AllBiggerEqual(const TVector& rhs) const
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			if(v[i] < rhs[i])
@@ -317,7 +327,7 @@ namespace el1::math::vector
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr bool vector_t<T, n_dim>::AllLessEqual(const vector_t& rhs) const
+	constexpr bool TVector<T, n_dim>::AllLessEqual(const TVector& rhs) const
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			if(v[i] > rhs[i])
@@ -326,7 +336,7 @@ namespace el1::math::vector
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr bool vector_t<T, n_dim>::operator==(const vector_t& rhs) const
+	constexpr bool TVector<T, n_dim>::operator==(const TVector& rhs) const
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			if(v[i] != rhs[i])
@@ -335,7 +345,7 @@ namespace el1::math::vector
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr T vector_t<T, n_dim>::Space() const
+	constexpr T TVector<T, n_dim>::Space() const
 	{
 		T s = v[0];
 		for(unsigned i = 1; i < n_dim; i++)
@@ -345,7 +355,7 @@ namespace el1::math::vector
 
 	template<typename T, unsigned n_dim>
 	template<typename R>
-	constexpr R vector_t<T, n_dim>::Magnitude() const
+	constexpr R TVector<T, n_dim>::Magnitude() const
 	{
 		R l = 0;
 		for(unsigned i = 0; i < n_dim; i++)
@@ -362,15 +372,15 @@ namespace el1::math::vector
 
 	template<typename T, unsigned n_dim>
 	template<typename R>
-	constexpr R vector_t<T, n_dim>::Distance(const vector_t<T, n_dim>& rhs) const
+	constexpr R TVector<T, n_dim>::Distance(const TVector<T, n_dim>& rhs) const
 	{
 		return (*this - rhs).template Magnitude<R>();
 	}
 
 	template<typename T, unsigned n_dim>
-	constexpr vector_t<T, n_dim> vector_t<T, n_dim>::AbsoluteDifference(const vector_t& rhs) const
+	constexpr TVector<T, n_dim> TVector<T, n_dim>::AbsoluteDifference(const TVector& rhs) const
 	{
-		vector_t dist;
+		TVector dist;
 		for(unsigned i = 0; i < n_dim; i++)
 			dist[i] = (v[i] >= rhs[i]) ? (v[i] - rhs[i]) : (rhs[i] - v[i]);
 		return dist;
@@ -378,9 +388,9 @@ namespace el1::math::vector
 
 	template<typename T, unsigned n_dim>
 	template<typename A>
-	vector_t<T, n_dim>::operator vector_t<A, n_dim>() const
+	TVector<T, n_dim>::operator TVector<A, n_dim>() const
 	{
-		vector_t<A, n_dim> r;
+		TVector<A, n_dim> r;
 		for(unsigned i = 0; i < n_dim; i++)
 			r[i] = v[i];
 		return r;
@@ -388,14 +398,14 @@ namespace el1::math::vector
 
 	template<typename T, unsigned n_dim>
 	template<typename TT>
-	constexpr vector_t<T, n_dim>::vector_t(const TT (&vv)[n_dim])
+	constexpr TVector<T, n_dim>::TVector(const TT (&vv)[n_dim])
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			v[i] = vv[i];
 	}
 
 	template<typename T, unsigned n_dim>
-	vector_t<T, n_dim>::vector_t()
+	TVector<T, n_dim>::TVector()
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			v[i] = 0;
@@ -403,14 +413,14 @@ namespace el1::math::vector
 
 	template<typename T, unsigned n_dim>
 	template <typename... A>
-	vector_t<T, n_dim>::vector_t(A ... a) : v{static_cast<T>(a)...}
+	TVector<T, n_dim>::TVector(A ... a) : v{static_cast<T>(a)...}
 	{
 		static_assert(sizeof...(A) == n_dim, "Constructor requires exactly n_dim arguments");
 	}
 
 	template<typename T, unsigned n_dim>
 	template<typename TT>
-	vector_t<T, n_dim>::vector_t(const vector_t<TT, n_dim>& r)
+	TVector<T, n_dim>::TVector(const TVector<TT, n_dim>& r)
 	{
 		for(unsigned i = 0; i < n_dim; i++)
 			v[i] = static_cast<TT>(r.v[i]);

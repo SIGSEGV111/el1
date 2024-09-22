@@ -5,6 +5,7 @@
 #include "io_graphics_color.hpp"
 #include "io_file.hpp"
 #include "math_matrix.hpp"
+#include "math_polygon.hpp"
 
 namespace el1::io::graphics::image
 {
@@ -12,18 +13,13 @@ namespace el1::io::graphics::image
 	using namespace io::stream;
 	using namespace io::collection::list;
 	using namespace io::graphics::color;
+	using namespace math::matrix;
+	using namespace math::vector;
+	using namespace math::polygon;
 
-	using size2i_t = math::vector::vector_t<u32_t, 2>;
-	using pos2i_t = math::vector::vector_t<s32_t, 2>;
-	using v2f_t = math::vector::vector_t<float, 2>;
-	using m33f_t = math::matrix::matrix_t<float, 3, 3>;
+	using size2i_t = math::vector::TVector<u32_t, 2>;
+	using pos2i_t = math::vector::TVector<s32_t, 2>;
 	using pixel_t = color::rgba_t<float>;
-
-	struct rect_t
-	{
-		v2f_t pos;
-		v2f_t size;
-	};
 
 	struct IImage;
 	class TRasterImage;
@@ -76,7 +72,7 @@ namespace el1::io::graphics::image
 		* @param position The position to render the shape in 2D space.
 		* @param rotation The rotation of the shape in degrees. Positive values rotate clockwise, negative values rotate counterclockwise.
 		*/
-		virtual void Render(TRasterImage& img, const m33f_t transformation) const = 0;
+		virtual void Render(TRasterImage& img, const m33_t& transformation) const = 0;
 
 		/**
 		* Calculates the axis-aligned bounding box of the shape.
@@ -84,7 +80,7 @@ namespace el1::io::graphics::image
 		* @param rotation The rotation of the shape (in degrees). Defaults to 0.0 (no rotation).
 		* @return The bounding box in 2D space.
 		*/
-		virtual rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const EL_GETTER = 0;
+		virtual rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const EL_GETTER = 0;
 
 		constexpr IShape(pixel_t color) : color(color) {}
 		virtual ~IShape() {}
@@ -95,7 +91,7 @@ namespace el1::io::graphics::image
 		float stroke_width;
 
 		// returns the vector to the endpoint
-		virtual v2f_t Endpoint() const EL_GETTER = 0;
+		virtual v2d_t Endpoint() const EL_GETTER = 0;
 
 		constexpr IShape1d(pixel_t color, float stroke_width) : IShape(color), stroke_width(stroke_width) {}
 	};
@@ -159,7 +155,7 @@ namespace el1::io::graphics::image
 
 		struct patch_t
 		{
-			m33f_t transformation;
+			m33_t transformation;
 			std::unique_ptr<IShape> shape;
 			EOp op;
 			EArea area;
@@ -167,8 +163,8 @@ namespace el1::io::graphics::image
 
 		TList<patch_t> patches;
 
-		void Render(TRasterImage& img, const m33f_t transformation) const final override;
-		rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const final override EL_GETTER;
+		void Render(TRasterImage& img, const m33_t& transformation) const final override;
+		rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const final override EL_GETTER;
 	};
 
 	/**
@@ -181,10 +177,10 @@ namespace el1::io::graphics::image
 		* Size of the ellipse, where width and height are represented.
 		* Negative values will flip the shape along the corresponding axis.
 		*/
-		v2f_t size;
+		v2d_t size;
 
-		void Render(TRasterImage& img, const m33f_t transformation) const final override;
-		rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const final override EL_GETTER;
+		void Render(TRasterImage& img, const m33_t& transformation) const final override;
+		rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const final override EL_GETTER;
 	};
 
 	/**
@@ -193,22 +189,20 @@ namespace el1::io::graphics::image
 	*/
 	struct TRectangle : IShape2d
 	{
-		v2f_t size;
+		v2d_t size;
 
-		void Render(TRasterImage& img, const m33f_t transformation) const final override;
-		rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const final override EL_GETTER;
+		void Render(TRasterImage& img, const m33_t& transformation) const final override;
+		rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const final override EL_GETTER;
 	};
 
 	/**
-	* Represents a triangle shape.
-	* The triangle is defined by three vertices in 2D space.
+	* Represents a polygon shape.
+	* The polygon is defined by a number of vertices in 2D space.
 	*/
-	class TTriangle : IShape2d
+	struct TPolygon : IShape2d, math::polygon::TPolygon
 	{
-		v2f_t vertices[3];
-
-		void Render(TRasterImage& img, const m33f_t transformation) const final override;
-		rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const final override EL_GETTER;
+		void Render(TRasterImage& img, const m33_t& transformation) const final override;
+		rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const final override EL_GETTER;
 	};
 
 	/**
@@ -216,11 +210,11 @@ namespace el1::io::graphics::image
 	*/
 	struct TLine : IShape1d
 	{
-		v2f_t endpoint;
+		v2d_t endpoint;
 
-		void Render(TRasterImage& img, const m33f_t transformation) const final override;
-		rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const final override EL_GETTER;
-		v2f_t Endpoint() const final override EL_GETTER;
+		void Render(TRasterImage& img, const m33_t& transformation) const final override;
+		rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const final override EL_GETTER;
+		v2d_t Endpoint() const final override EL_GETTER;
 	};
 
 	/**
@@ -236,36 +230,54 @@ namespace el1::io::graphics::image
 			COUNTER_CW
 		};
 
-		v2f_t center;
-		v2f_t endpoint;
+		v2d_t center;
+		v2d_t endpoint;
 		EDirection dir;
 
 		float Radius() const EL_GETTER { return center.Magnitude(); }
 		float Angle() const EL_GETTER;
 
-		void Render(TRasterImage& img, const m33f_t transformation) const final override;
-		rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const final override EL_GETTER;
-		v2f_t Endpoint() const final override EL_GETTER;
+		void Render(TRasterImage& img, const m33_t& transformation) const final override;
+		rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const final override EL_GETTER;
+		v2d_t Endpoint() const final override EL_GETTER;
 
-		constexpr TArc(pixel_t color, float stroke_width, v2f_t center, v2f_t endpoint, EDirection dir) : IShape1d(color, stroke_width), center(center), endpoint(endpoint), dir(dir) {}
+		constexpr TArc(pixel_t color, float stroke_width, v2d_t center, v2d_t endpoint, EDirection dir) : IShape1d(color, stroke_width), center(center), endpoint(endpoint), dir(dir) {}
 	};
 
 	struct TBezierCurve : IShape1d
 	{
-		TList<v2f_t> control_points;
+		TList<v2d_t> control_points;
 
-		void Render(TRasterImage& img, const m33f_t transformation) const final override;
-		rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const final override EL_GETTER;
-		v2f_t Endpoint() const final override EL_GETTER;
+		void Render(TRasterImage& img, const m33_t& transformation) const final override;
+		rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const final override EL_GETTER;
+		v2d_t Endpoint() const final override EL_GETTER;
 	};
 
 	struct TPath : IShape1d
 	{
 		TList<std::unique_ptr<IShape1d>> elements;
 
-		void Render(TRasterImage& img, const m33f_t transformation) const final override;
-		rect_t BoundingBox(const m33f_t transformation = m33f_t::Identity()) const final override EL_GETTER;
-		v2f_t Endpoint() const final override EL_GETTER;
+		void Render(TRasterImage& img, const m33_t& transformation) const final override;
+		rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const final override EL_GETTER;
+		v2d_t Endpoint() const final override EL_GETTER;
+	};
+
+	class TVectorImage : public IImage
+	{
+		public:
+			struct element_t
+			{
+				v2d_t pos;
+				std::unique_ptr<IShape> shape;
+			};
+
+			using shape_list_t = TList<element_t>;
+
+			shape_list_t shapes;
+			pixel_t background;
+
+			void Invert() final override;
+			TRasterImage Render(const float dpmm);
 	};
 
 	class TRasterImage : public IImage
@@ -290,7 +302,7 @@ namespace el1::io::graphics::image
 			u32_t Width() const EL_GETTER { return size[0]; }
 			u32_t Height() const EL_GETTER { return size[1]; }
 
-			void Draw(const v2f_t position, const float rotation, TAperture::EOp op, IShape& shape);
+			void Draw(const v2d_t position, const float rotation, TAperture::EOp op, IShape& shape);
 
 			void Invert() final override;
 
