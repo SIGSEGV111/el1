@@ -53,10 +53,6 @@ namespace el1::io::graphics::image
 		virtual ~IImage() {}
 	};
 
-	/**
-	* Base interface for shapes that can be rendered to a raster image.
-	* Each shape has a color and supports rendering and bounding box calculations.
-	*/
 	struct IShape
 	{
 		/**
