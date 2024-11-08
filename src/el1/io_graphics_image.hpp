@@ -69,15 +69,12 @@ namespace el1::io::graphics::image
 		* Renders the shape onto a raster image at the specified position and rotation.
 		*
 		* @param img The raster image where the shape will be rendered.
-		* @param position The position to render the shape in 2D space.
-		* @param rotation The rotation of the shape in degrees. Positive values rotate clockwise, negative values rotate counterclockwise.
 		*/
 		virtual void Render(TRasterImage& img, const m33_t& transformation) const = 0;
 
 		/**
 		* Calculates the axis-aligned bounding box of the shape.
 		*
-		* @param rotation The rotation of the shape (in degrees). Defaults to 0.0 (no rotation).
 		* @return The bounding box in 2D space.
 		*/
 		virtual rect_t BoundingBox(const m33_t& transformation = m33_t::Identity()) const EL_GETTER = 0;

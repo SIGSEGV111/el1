@@ -7,7 +7,7 @@ for cpp_file in "${CPP_FILES[@]}"; do
 done
 
 cat > Makefile <<EOF
-.PHONY: release dev libs clean verify Makefile gdb
+.PHONY: release dev libs clean verify Makefile gdb rpm
 
 release: gen/amalgam/libel1.so gen/amalgam/libel1.a gen/srclib/include/el1/el1.cpp
 
@@ -105,6 +105,18 @@ Makefile:
 
 clean:
 	rm --recursive --force -- gen
+
+ARCH := \$(shell uname -m)
+
+rpm: el1-static.\$(ARCH).rpm el1-lib.\$(ARCH).rpm el1-srclib.noarch.rpm
+
+el1-srclib.noarch.rpm: gen/srclib/include/el1/el1.cpp
+	easy-rpm.sh --name el1-srclib --outdir . --plain --arch noarch -- $^
+
+el1-static.\$(ARCH).rpm: gen/amalgam/libel1.a
+	easy-rpm.sh --name el1-srclib --outdir . --plain -- $^
+
+el1-lib.\$(ARCH).rpm: gen/std/libel1.so
 
 include $(printCppFiles .Makefile)
 EOF

@@ -68,15 +68,18 @@ namespace el1::io::text::string
 			* @throws IException if any of the placeholders cannot be parsed.
 			*
 			* Supported parsers:
-			* - %c : single character
-			* - %s : string (non-greedy)
-			* - %d : decimal integer or float (depending on variable type)
-			* - %x : hexadecimal integer or float
-			* - %o : octal integer or float
-			* - %b : boolean (supports multiple representations like "yes", "no", "true", "false", etc., case insensitive)
+			* - %c  : single character
+			* - %Xs : string (delimited by character X)
+			* - %d  : decimal integer or float (depending on variable type)
+			* - %x  : hexadecimal integer or float
+			* - %o  : octal integer or float
+			* - %b  : boolean (supports multiple representations like "yes", "no", "true", "false", etc., case insensitive)
 			*/
 			template<typename ... A>
-			usys_t Parse(const TString& format, A& ... a) const;
+			usys_t Parse(const TString& format, A& ... a) const
+			{
+				EL_NOT_IMPLEMENTED;
+			}
 
 			static TString Join(array_t<const TString> list, const TString& delimiter);
 

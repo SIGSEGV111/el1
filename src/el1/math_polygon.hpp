@@ -22,19 +22,19 @@ namespace el1::math::polygon
 	/**
 	* Determines the orientation of three points in a 2D plane.
 	*
-	* This function computes the orientation of an ordered triplet (p, q, r) of points in the
-	* plane using the cross product of vectors (p to q) and (p to r). The sign of the cross
+	* This function computes the orientation of an ordered triplet (a, mid, b) of points in the
+	* plane using the cross product of vectors (mid to a) and (mid to b). The sign of the cross
 	* product determines the general direction the points turn as they are traversed in order.
 	*
-	* @param p The first point in the triplet, serving as the reference.
-	* @param q The second point in the triplet, used to form the first vector with p.
-	* @param r The third point in the triplet, used to form the second vector with p.
+	* @param mid The middle point in the triplet.
+	* @param a The preceding point in the triplet, used to form the first vector with mid.
+	* @param b The following point in the triplet, used to form the second vector with mid.
 	* @return An integer representing the orientation of the triplet:
-	*         - 0 if the points are collinear,
-	*         - 1 if the points are in a clockwise turn,
-	*         - 2 if the points are in a counterclockwise turn.
+	*      0 if the points are collinear,
+	*     +1 if the points are in a clockwise turn,
+	*     -1 if the points are in a counterclockwise turn.
 	*/
-	int Orientation(const v2d_t &p, const v2d_t &q, const v2d_t &r);
+	int Orientation(const v2d_t &mid, const v2d_t &a, const v2d_t &b);
 
 	/**
 	 * @brief Class representing a polygon with a list of vertices.

@@ -2,11 +2,11 @@
 
 namespace el1::math::polygon
 {
-	int Orientation(const v2d_t &p, const v2d_t &q, const v2d_t &r)
+	int Orientation(const v2d_t &mid, const v2d_t &a, const v2d_t &b)
 	{
-		double val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1]);
+		const double val = (a[1] - mid[1]) * (b[0] - a[0]) - (a[0] - mid[0]) * (b[1] - a[1]);
 		if (val == 0) return 0;  // collinear
-		return (val > 0) ? 1 : 2; // clockwise or counterclockwise
+		return (val > 0) ? 1 : -1; // clockwise or counterclockwise
 	}
 
 	void TPolygon::Validate(const vertices_t& vertices)
