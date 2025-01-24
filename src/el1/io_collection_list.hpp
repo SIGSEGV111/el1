@@ -361,6 +361,7 @@ namespace el1::io::collection::list
 			pos += n_items;
 		}
 
+		TArraySource(const TArraySource&) = delete;
 		TArraySource(const array_t<const T> array) : array(array), pos(0) {}
 	};
 

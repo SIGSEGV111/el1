@@ -117,7 +117,7 @@ namespace el1::io::collection::map
 			TValue& Set(const TKey& key, TValue&& value);
 			TValue& Set(kv_pair_t&& pair);
 
-			// adds a _default value if the key does not exist yet, otherwise the existing value is returned
+			// adds a default value if the key does not exist yet, otherwise the existing value is returned
 			TValue& Get(const TKey& key, const TValue& _default);
 
 			// removes the specified key (along with its value) from the map; return false if the key did not exist; true otherwise

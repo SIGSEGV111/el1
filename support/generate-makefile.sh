@@ -9,9 +9,9 @@ done
 cat > Makefile <<EOF
 .PHONY: release dev libs clean verify Makefile gdb rpm
 
-release: gen/amalgam/libel1.so gen/amalgam/libel1.a gen/srclib/include/el1/el1.cpp
+release: gen/amalgam/libel1.so gen/amalgam/libel1.a gen/srclib
 
-libs: gen/std/libel1.so gen/std/libel1.a gen/amalgam/libel1.so gen/amalgam/libel1.a gen/srclib/include/el1/el1.cpp
+libs: gen/std/libel1.so gen/std/libel1.a gen/amalgam/libel1.so gen/amalgam/libel1.a gen/srclib
 
 dev: gen/srclib/link-test
 
@@ -29,7 +29,7 @@ gen/std/link-test-so: gen/std/libel1.so gen/std/include
 gen/std/link-test-a: gen/std/libel1.a gen/std/include
 	${CXX@Q} support/link-test.cpp gen/std/libel1.a -o gen/std/link-test-a ${EXE_OPTIONS[@]@Q} -I gen/std/include
 
-gen/amalgam/el1.o: gen/srclib/include/el1/el1.cpp
+gen/amalgam/el1.o: gen/srclib
 	mkdir -p gen/amalgam
 	${CXX@Q} gen/srclib/include/el1/el1.cpp -o gen/amalgam/el1.o -c ${COMPILE_OPTIONS[@]@Q} -I gen/srclib/include
 
@@ -46,10 +46,10 @@ gen/amalgam/link-test-so: gen/amalgam/libel1.so
 gen/amalgam/link-test-a: gen/amalgam/libel1.a
 	${CXX@Q} support/link-test.cpp gen/amalgam/libel1.a -o gen/amalgam/link-test-a ${EXE_OPTIONS[@]@Q} -I gen/amalgam/include
 
-gen/srclib/include/el1/el1.cpp: ${CPP_FILES[@]} ${HPP_FILES[@]} support/generate-srclib.sh
+gen/srclib: ${CPP_FILES[@]} ${HPP_FILES[@]} support/generate-srclib.sh
 	./support/generate-srclib.sh
 
-gen/srclib/link-test: gen/srclib/include/el1/el1.cpp
+gen/srclib/link-test: gen/srclib
 	${CXX@Q} support/link-test.cpp gen/srclib/include/el1/el1.cpp -o gen/srclib/link-test ${EXE_OPTIONS[@]@Q} -I gen/srclib/include
 
 gen/std/include: src/el1 support/generate-include-dir.sh ${HPP_FILES[@]}
@@ -64,7 +64,7 @@ gen/testdata: support/generate-testdata.sh \$(wildcard testdata/*)
 gen/gtest/lib/libgtest.a gen/gtest/lib/libgtest_main.a &: submodules/googletest
 	set -eu; export CXX=${CXX@Q}; export CC=${CC@Q}; mkdir -p gen/gtest; cd gen/gtest; cmake ../../submodules/googletest; make
 
-gen/srclib/gtests: gen/srclib/include/el1/el1.cpp \$(wildcard src/el1/test/*.cpp) gen/gtest/lib/libgtest.a gen/gtest/lib/libgtest_main.a
+gen/srclib/gtests: gen/srclib \$(wildcard src/el1/test/*.cpp) gen/gtest/lib/libgtest.a gen/gtest/lib/libgtest_main.a
 	${CXX@Q} src/el1/test/*.cpp gen/srclib/include/el1/el1.cpp gen/gtest/lib/libgtest.a gen/gtest/lib/libgtest_main.a -o gen/srclib/gtests ${EXE_OPTIONS[@]@Q} -I gen/srclib/include
 
 gen/std/gtests: gen/std/include gen/testdata gen/std/libel1.so \$(wildcard src/el1/test/*.cpp) gen/gtest/lib/libgtest.a gen/gtest/lib/libgtest_main.a
@@ -89,14 +89,6 @@ unit-tests: link-tests gen/std/gtests gen/amalgam/gtests gen/srclib/gtests
 
 verify: unit-tests
 
-install: gen/std/libel1.so gen/amalgam/libel1.a gen/srclib/include/el1/el1.cpp
-	rm -rf /usr/include/el1
-	cp -rv gen/srclib/include/el1 /usr/include/el1
-	chmod 0755 /usr/include/el1
-	chmod -R 0644 /usr/include/el1/*
-	test -d /usr/lib64 && cp gen/std/libel1.so /usr/lib64/ || cp gen/std/libel1.so /usr/lib/
-	test -d /usr/lib64 && cp gen/amalgam/libel1.a /usr/lib64/ || cp gen/amalgam/libel1.a /usr/lib/
-
 gdb: gen/srclib/gtests
 	gdb ./gen/srclib/gtests
 
@@ -106,18 +98,24 @@ Makefile:
 clean:
 	rm --recursive --force -- gen
 
-ARCH := \$(shell uname -m)
-
-rpm: el1-static.\$(ARCH).rpm el1-lib.\$(ARCH).rpm el1-srclib.noarch.rpm
-
-el1-srclib.noarch.rpm: gen/srclib/include/el1/el1.cpp
-	easy-rpm.sh --name el1-srclib --outdir . --plain --arch noarch -- $^
-
-el1-static.\$(ARCH).rpm: gen/amalgam/libel1.a
-	easy-rpm.sh --name el1-srclib --outdir . --plain -- $^
-
-el1-lib.\$(ARCH).rpm: gen/std/libel1.so
-
 include $(printCppFiles .Makefile)
+
+VERSION ?= *DEVELOPMENT SNAPSHOT*
+BIN_DIR ?= "\$(HOME)/bin"
+LIB_DIR ?= "\$(HOME)/lib"
+INCLUDE_DIR ?= "\$(HOME)/include"
+ARCH ?= \$(shell rpm --eval '%{_target_cpu}' || uname -m)
+
+rpm:
+	easy-rpm-multi.sh --spec el1.spec --outdir . --plain -v 1 -d -- .
+
+install: gen/srclib gen/amalgam/libel1.a gen/amalgam/libel1.so
+	mkdir -p "\$(INCLUDE_DIR)/el1" "\$(LIB_DIR)"
+	rm -rf -- "\$(INCLUDE_DIR)/el1" "\$(INCLUDE_DIR)/el1.tmp"
+	install -m 644 --directory -- gen/srclib/include/el1 "\$(INCLUDE_DIR)/el1.tmp"
+	mv -- "\$(INCLUDE_DIR)/el1.tmp" "\$(INCLUDE_DIR)/el1"
+	install -m 755 -- gen/amalgam/libel1.so "\$(LIB_DIR)/"
+	install -m 644 -- gen/amalgam/libel1.a  "\$(LIB_DIR)/"
+
 EOF
 wait

@@ -21,4 +21,11 @@ cp --reflink=auto "${HPP_FILES[@]}" gen/srclib.tmp/include/el1/
 	done
 ) > gen/srclib.tmp/include/el1/el1.cpp
 
+(
+	for f in "${HPP_FILES[@]}"; do
+		b="$(basename "$f")"
+		echo "#include \"$b\""
+	done
+) > gen/srclib.tmp/include/el1/el1.hpp
+
 mv gen/srclib.tmp gen/srclib

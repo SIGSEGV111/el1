@@ -202,6 +202,8 @@ namespace el1::io::net::http
 				request.url = request.url.SliceBE(0, pos_args);
 			}
 
+			request.url = UrlDecode(std::move(request.url));
+
 			arr_req.Clear();
 
 			// read header values
@@ -342,7 +344,7 @@ namespace el1::io::net::http
 			}
 			else
 			{
-				IF_DEBUG_PRINTF("accpted new client, spawning handler\n");
+				IF_DEBUG_PRINTF("accepted new client, spawning handler\n");
 				// start handler and handoff client
 				handlers.MoveAppend(std::unique_ptr<TFiber>(new TFiber([this, tcp_client = std::move(tcp_client), &cleanup_handlers](){
 					// TODO: add some kind of output buffer to prevent excessive amounts of small write()-syscalls
@@ -380,7 +382,7 @@ namespace el1::io::net::http
 				url.chars[i].code = TBCD::FromString(str, hex).ToUnsignedInt();
 				url.chars.Remove(i + 1, 2);
 			}
-		return url;
+		return url.chars.Pipe().Map([](TUTF32 chr){ return (byte_t)chr.code; }).Transform(TUTF8Decoder()).Collect();
 	}
 
 	TString UrlEncode(TString url)

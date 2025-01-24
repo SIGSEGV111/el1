@@ -8,5 +8,6 @@ examples/hx711/hx711
 examples/json-tolerant-parser/jtp
 examples/dcf77-gpio/dcf77-gpio
 examples/neopixel-spi-driver/neopixel-spi-driver
-/src/**/*.Makefile
-/Makefile
+src/**/*.Makefile
+Makefile
+*.rpm

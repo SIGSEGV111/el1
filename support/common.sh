@@ -50,6 +50,7 @@ COMPILE_OPTIONS=(
 	-Werror
 	-Wno-unused-parameter
 	-Wno-error=unused-function
+	-Wno-deprecated-declarations
 	-Wno-vla-cxx-extension
 	-Wno-unknown-warning-option
 	-Wno-gnu-array-member-paren-init

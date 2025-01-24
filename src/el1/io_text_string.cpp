@@ -8,7 +8,7 @@ namespace el1::io::text::string
 {
 	extern const array_t<const TUTF32> WHITESPACE_CHARS;
 
-	TString operator ""_U(const char* str, long unsigned int len) { return TString(str, len); }
+	TString operator ""_U(const char* str, size_t len) { return TString(str, len); }
 
 	TString TUndefineFormatException::Message() const
 	{

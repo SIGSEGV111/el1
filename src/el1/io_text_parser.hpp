@@ -334,7 +334,7 @@ namespace el1::io::text::parser
 		return TParser(ast::TCharListNode<1>(chr));
 	}
 
-	TParser<ast::TLiteralNode> operator""_P(const char* const str, unsigned long len);
+	TParser<ast::TLiteralNode> operator""_P(const char* const str, size_t len);
 
 	template<typename N>
 	constexpr auto Optional(TParser<N> parser)

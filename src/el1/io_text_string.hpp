@@ -161,7 +161,7 @@ namespace el1::io::text::string
 			TString& operator=(TString&&) = default;
 	};
 
-	TString operator ""_U(const char* str, long unsigned int len);
+	TString operator ""_U(const char* str, size_t len);
 
 	class TLineReader
 	{
