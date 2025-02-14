@@ -93,12 +93,7 @@ namespace el1::system::time
 			inline TTime() noexcept : sec(0), asec(0) {}
 			constexpr TTime(const int seconds) noexcept : sec(seconds), asec(0) {}
 			constexpr TTime(const unsigned seconds) noexcept : sec(seconds), asec(0) {}
-			constexpr TTime(double seconds) noexcept
-			{
-				this->sec = (s64_t)seconds;
-				seconds -= this->sec;
-				this->asec = (s64_t)(seconds * 1000000000000000000.0);
-			}
+			constexpr TTime(double seconds) noexcept : sec((s64_t)seconds), asec((s64_t)((seconds - sec) * 1000000000000000000.0)) {}
 
 			TTime(const s64_t seconds, const s64_t attoseconds) noexcept;
 

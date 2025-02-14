@@ -19,7 +19,9 @@ namespace el1::io::text::terminal
 		try
 		{
 			// try to open the FD again under a new independant FD ...
-			auto handle = OpenFile(io::text::string::TString::Format("/proc/self/fd/%d", fd), access);
+			char buffer[256];
+			snprintf(buffer, sizeof(buffer), "/proc/self/fd/%d", fd);
+			auto handle = OpenFile(buffer, access);
 			const off_t pos = lseek(fd, SEEK_CUR, 0);
 			if(pos > 0)
 				EL_SYSERR(lseek(handle, SEEK_SET, pos));

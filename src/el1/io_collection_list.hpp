@@ -347,7 +347,7 @@ namespace el1::io::collection::list
 			return n;
 		}
 
-		iosize_t WriteOut(stream::ISink<T>& sink, const iosize_t n_items_max = (iosize_t)-1, const bool allow_recursion = true) final override
+		iosize_t WriteOut(stream::ISink<T>& sink, const iosize_t n_items_max, const bool) final override
 		{
 			const iosize_t n_want = util::Min<iosize_t>(Remaining(), n_items_max);
 			const iosize_t n_wrote = sink.Write(&array[pos], n_want);

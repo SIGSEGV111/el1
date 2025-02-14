@@ -69,7 +69,7 @@ namespace el1::io::text::parser
 			const TUTF32 list[n];
 
 			template<typename ... A>
-			constexpr TCharListNode(A ... a) : list({a...}) {}
+			constexpr TCharListNode(A ... a) : list{a...} {}
 
 			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
 			{
@@ -106,7 +106,7 @@ namespace el1::io::text::parser
 		template<typename L, typename ... N>
 		struct TTranslateNode
 		{
-			using return_t = std::result_of<L(typename N::return_t ...)>::type;
+			using return_t = typename std::result_of<L(typename N::return_t ...)>::type;
 			L lambda;
 			std::tuple<N...> nodes;
 			constexpr TTranslateNode(L _lambda, std::tuple<N...> _nodes) : lambda(std::move(_lambda)), nodes(std::move(_nodes)) {}

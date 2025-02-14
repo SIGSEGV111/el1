@@ -135,6 +135,7 @@ namespace el1::math::vector
 		* @return True if all components of both vectors are equal, false otherwise.
 		*/
 		constexpr bool operator==(const TVector& rhs) const;
+		constexpr bool operator!=(const TVector& rhs) const;
 
 		TVector& operator=(TVector&&) = default;
 		TVector& operator=(const TVector&) = default;
@@ -342,6 +343,15 @@ namespace el1::math::vector
 			if(v[i] != rhs[i])
 				return false;
 		return true;
+	}
+
+	template<typename T, unsigned n_dim>
+	constexpr bool TVector<T, n_dim>::operator!=(const TVector& rhs) const
+	{
+		for(unsigned i = 0; i < n_dim; i++)
+			if(v[i] != rhs[i])
+				return true;
+		return false;
 	}
 
 	template<typename T, unsigned n_dim>

@@ -96,7 +96,7 @@ namespace el1::io::stream::fifo
 				return n_written;
 			}
 
-			iosize_t WriteOut(ISink<T>& sink, const iosize_t _n_items_max = (iosize_t)-1, const bool allow_recursion = true) final override
+			iosize_t WriteOut(ISink<T>& sink, const iosize_t _n_items_max, const bool) final override
 			{
 				iosize_t n_read = 0;
 				const usys_t n_items_max = util::Min<usys_t>(Remaining(), _n_items_max);

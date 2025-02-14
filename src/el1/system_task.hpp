@@ -324,6 +324,32 @@ namespace el1::system::task
 				};
 			};
 			#define EL_ARCH_STACKPOINTER_REGISTER_NAME sp
+		#elif defined(__riscv) && __riscv_xlen == 64
+			struct context_registers_t
+			{
+				union
+				{
+					u64_t arr[14]; // Adjusted for the typical callee-saved registers in RISC-V
+					struct
+					{
+						u64_t x8;
+						u64_t x9;
+						u64_t x18;
+						u64_t x19;
+						u64_t x20;
+						u64_t x21;
+						u64_t x22;
+						u64_t x23;
+						u64_t x24;
+						u64_t x25;
+						u64_t x26;
+						u64_t x27;
+						u64_t sp;
+						u64_t pc;
+					};
+				};
+			};
+			#define EL_ARCH_STACKPOINTER_REGISTER_NAME sp
 		#else
 			#error "unsupported CPU architecture"
 		#endif

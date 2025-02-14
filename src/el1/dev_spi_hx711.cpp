@@ -32,7 +32,7 @@ namespace el1::dev::spi::hx711
 	}
 
 	static const TTime T_RESET = 0.0001; // 100µs
-	static const TTime T_BOOT  = 0.4000; // 400ms
+	// static const TTime T_BOOT  = 0.4000; // 400ms
 
 	// We have to send 10101010 (0xAA) patterns as data to simulate a clock, thus we need two bits per virtual clock cycle
 	// since we need to pull 24+3 bits (24 data + up to 3 bits for the config) from the chip, we have to allocate 7 bytes

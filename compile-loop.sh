@@ -1,6 +1,7 @@
 #!/bin/bash -eu
+exec </dev/null
 source "/opt/amp-bash-commons/shell-util.sh"
-parseCommandlineArguments "f:follow" "t:target=string?dev" "j:jobs:NUMCPUS=integer?1" "gtest_filter=string?*" -- "$@"
+parseCommandlineArguments "f:follow" "t:target=string?test" "j:jobs:NUMCPUS=integer?1" "gtest_filter=string?*" -- "$@"
 
 less_args=("--RAW-CONTROL-CHARS" "--clear-screen" "--tabs=4" "--ignore-case" "--SILENT")
 

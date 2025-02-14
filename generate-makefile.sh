@@ -1,1 +1,0 @@
-support/generate-makefile.sh

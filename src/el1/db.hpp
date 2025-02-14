@@ -148,7 +148,7 @@ namespace el1::db
 	}
 
 	template<typename ... A>
-	const TResultPipe<A ...>::TOut* TResultPipe<A ...>::NextItem()
+	const typename TResultPipe<A ...>::TOut* TResultPipe<A ...>::NextItem()
 	{
 		rs->MoveNext();
 
