@@ -72,7 +72,7 @@ install: $(LIB_NAME) $(LIB_HEADERS) $(SUPER_HEADER)
 	install -m 644 $(LIB_HEADERS) $(SUPER_HEADER) "$(INCLUDE_DIR)/el1/"
 
 deploy: $(ARCH_RPM_NAME)
-	#ensure-git-clean.sh
+	ensure-git-clean.sh
 	deploy-rpm.sh --infile=$(SRC_RPM_NAME) --outdir="$(RPMDIR)" --keyid="$(KEYID)" --srpm
 	deploy-rpm.sh --infile="$(ARCH_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
 
