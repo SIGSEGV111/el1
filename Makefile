@@ -2,7 +2,7 @@
 
 VERSION ?= *DEVELOPMENT SNAPSHOT*
 CXX ?= $(shell which clang++)
-CXXFLAGS := "-DVERSION=\"$(VERSION)\"" -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -DEL1_WITH_POSTGRES -std=c++20 -O1 -g -flto -fPIC $(shell pkg-config --cflags libpq) $(shell pkg-config --cflags krb5) $(shell pkg-config --cflags zlib)
+CXXFLAGS := "-DVERSION=\"$(VERSION)\"" -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension -DEL1_WITH_POSTGRES -std=c++20 -O1 -g -flto -fPIC $(shell pkg-config --cflags libpq) $(shell pkg-config --cflags krb5) $(shell pkg-config --cflags zlib)
 LIB_LDFLAGS := $(shell pkg-config --libs libpq) $(shell pkg-config --libs krb5) $(shell pkg-config --libs zlib)
 
 OUT_DIR ?= gen
@@ -55,7 +55,7 @@ $(OUT_DIR)/gtest/lib/libgtest.a:
 
 $(LIB_NAME): $(LIB_OBJECTS)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) -o $@ $(LIB_OBJECTS) $(LIB_LDFLAGS) -shared
+	$(CXX) -fuse-ld=lld $(CXXFLAGS) -o $@ $(LIB_OBJECTS) $(LIB_LDFLAGS) -shared
 
 $(TEST_NAME): $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(LIB_NAME)
 	@mkdir -p $(@D)
