@@ -1,6 +1,12 @@
 .PHONY: all clean install package rpm test
 
+ARCH ?= $(shell rpm --eval '%{_target_cpu}')
 CXXFLAGS ?=
+
+ifeq ($(ARCH),x86_64)
+	CXXFLAGS += -march=x86-64-v2
+endif
+
 VERSION ?= *DEVELOPMENT SNAPSHOT*
 EL1_CXX ?= $(shell which clang++)
 EL1_CXXFLAGS := "-DVERSION=\"$(VERSION)\"" -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension -DEL1_WITH_POSTGRES -std=c++20 -O1 -g -flto -fPIC $(shell pkg-config --cflags libpq) $(shell pkg-config --cflags krb5) $(shell pkg-config --cflags zlib) $(CXXFLAGS)
@@ -10,7 +16,6 @@ OUT_DIR ?= gen
 LIB_DIR ?= /usr/lib
 INCLUDE_DIR ?= /usr/include
 KEYID ?= BE5096C665CA4595AF11DAB010CD9FF74E4565ED
-ARCH ?= $(shell rpm --eval '%{_target_cpu}')
 ARCH_RPM_NAME := el1.$(ARCH).rpm
 SRC_RPM_NAME := el1.src.rpm
 SPEC_NAME := el1.spec
