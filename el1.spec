@@ -5,8 +5,8 @@ Distribution:   openSUSE
 License:        GPLv3
 URL:            https://www.brennecke-it.net
 
-BuildRequires:  clang, go-md2man, krb5-devel, easy-rpm
-Requires:		krb5-client, libpq5
+BuildRequires:  clang, go-md2man, krb5-devel, easy-rpm, postgresql-devel, lld
+Requires:		krb5-client, libpq5, postgresql
 
 %description
 el1 is a C++ Essentials Library focused on IoT and high-level operations.

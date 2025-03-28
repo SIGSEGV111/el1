@@ -502,7 +502,7 @@ namespace el1::system::task
 		TFiber::Schedule();
 	}
 
-	extern "C" void SwapRegisters(context_registers_t* const current, const context_registers_t* const target) noexcept asm ("__SwapRegisters__");
+	void SwapRegisters(context_registers_t* const current, const context_registers_t* const target) noexcept;
 
 	void TFiber::SwitchTo()
 	{
@@ -535,7 +535,9 @@ namespace el1::system::task
 		#endif
 
 		// abrakadabra...
+		std::atomic_signal_fence(std::memory_order_seq_cst);
 		SwapRegisters(&self->registers, &this->registers);
+		std::atomic_signal_fence(std::memory_order_seq_cst);
 
 		// NOTE: "this" and "previous_fiber" might not exist any more (shutdown and destructed)
 		// thus no access to members of this and previous_fiber must happen past SwapRegisters()
