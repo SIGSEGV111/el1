@@ -29,8 +29,8 @@ namespace el1::io::text::terminal
 		}
 		catch(...)
 		{
-			// ... return the original handle if it fails
-			return system::handle::THandle(fd, true);
+			// ... return copy of the original handle if it fails
+			return system::handle::THandle(fd, false);
 		}
 	}
 
