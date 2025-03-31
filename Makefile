@@ -10,7 +10,7 @@ endif
 VERSION ?= *DEVELOPMENT SNAPSHOT*
 EL1_CXX ?= $(shell which clang++)
 EL1_CXXFLAGS := "-DVERSION=\"$(VERSION)\"" -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension -DEL1_WITH_POSTGRES -std=c++20 -O3 -g -flto -fPIC $(shell pkg-config --cflags libpq) $(shell pkg-config --cflags krb5) $(shell pkg-config --cflags zlib) $(CXXFLAGS)
-LIB_LDFLAGS := $(shell pkg-config --libs libpq) $(shell pkg-config --libs krb5) $(shell pkg-config --libs zlib)
+LIB_LDFLAGS := $(shell pkg-config --libs libpq) $(shell pkg-config --libs krb5) $(shell pkg-config --libs zlib) -Wl,--no-undefined
 
 OUT_DIR ?= gen
 LIB_DIR ?= /usr/lib

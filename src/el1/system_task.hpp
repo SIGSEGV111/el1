@@ -13,24 +13,6 @@
 #include "error.hpp"
 #include <optional>
 
-namespace __cxxabiv1
-{
-	struct __cxa_exception;
-
-	struct __cxa_eh_globals
-	{
-		__cxa_exception* caughtExceptions;
-		unsigned int uncaughtExceptions;
-
-		#if defined(__arm__) || defined(__aarch64__)
-			__cxa_exception* propagatingExceptions;
-		#endif
-	};
-
-	extern "C" __cxa_eh_globals* __cxa_get_globals() _GLIBCXX_NOTHROW __attribute__ ((__const__));
-}
-
-
 namespace el1::system::task
 {
 	using namespace io::text::string;
@@ -385,7 +367,6 @@ namespace el1::system::task
 			bool shutdown;
 			unsigned block_shutdown;
 			context_registers_t registers;
-			__cxxabiv1::__cxa_eh_globals eh_state;
 
 			static void Boot();
 			static void Schedule();

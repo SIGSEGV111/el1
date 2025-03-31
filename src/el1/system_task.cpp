@@ -209,12 +209,10 @@ namespace el1::system::task
 
 	TFiber::TFiber() : thread(TThread::Self()), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), stack_allocator(EStackAllocator::USER), shutdown(false), block_shutdown(0)
 	{
-		memset(&this->eh_state, 0, sizeof(this->eh_state));
 	}
 
 	TFiber::TFiber(TThread* const thread) : thread(thread), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::ACTIVE), stack_allocator(EStackAllocator::USER), shutdown(false), block_shutdown(0)
 	{
-		memset(&this->eh_state, 0, sizeof(this->eh_state));
 	}
 
 	void TFiber::BlockShutdown(const bool s)
@@ -303,7 +301,6 @@ namespace el1::system::task
 	TFiber::TFiber(TFunction<void> main_func, const bool autostart, const usys_t sz_stack, void* const p_stack) : thread(TThread::Self()), main_func(main_func), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), shutdown(false), block_shutdown(0)
 	{
 		IF_DEBUG_PRINTF("TFiber@%p::TFiber(main_func=?, autostart=%s, sz_stack=%zu, p_stack=%p)\n", this, autostart ? "true":"false", (size_t)sz_stack, p_stack);
-		memset(&this->eh_state, 0, sizeof(this->eh_state));
 		AllocateStack(p_stack, sz_stack, DEFAULT_STACK_ALLOCATOR);
 		if(autostart)
 			this->Start();
