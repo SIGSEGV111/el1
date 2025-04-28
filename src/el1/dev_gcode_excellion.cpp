@@ -25,7 +25,7 @@ namespace el1::dev::gcode::excellion
 		.Transform(TLineReader())
 		.Map([](auto& s){ return s.Split(';', 2)[0].Trim(); })
 		.Filter([](auto& s){ return s.Length() > 0; })
-		.ForEach([&](auto& line){
+		.ForEach( [&](auto& line) {
 			if(end) return;
 			if(header)
 			{

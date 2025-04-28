@@ -159,10 +159,10 @@ namespace el1::io::net::http
 
 			usys_t sz_header = 0;
 			auto ss = source.Pipe();
-			auto ds = ss.Transform(TUTF8Decoder());
+			auto ds = ss.Map([](byte_t chr){ return TUTF32((u32_t)chr); });
 			auto lr = ds.Transform(TLineReader(HEADER_CHAR_LIMIT));
 
-			// read request line
+			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): reading first line of request\n");
 			const TString* request_line = lr.NextItem();
 			if(request_line == nullptr)
 			{
@@ -206,7 +206,7 @@ namespace el1::io::net::http
 
 			arr_req.Clear();
 
-			// read header values
+			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): reading header values\n");
 			while((request_line = lr.NextItem()) != nullptr && request_line->Length() > 0U)
 			{
 				sz_header += request_line->Length();
@@ -255,9 +255,8 @@ namespace el1::io::net::http
 		catch(const IException& e1)
 		{
 			if(EL_UNLIKELY(DEBUG))
-				e1.Print("HTTP HANDLER");
+				e1.Print("THttpServer::HandleSingleRequest(): caught exception");
 
-			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): caught exception\n");
 			if(response_in_progress)
 			{
 				IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): response already in progress => closing streams\n");
@@ -374,6 +373,7 @@ namespace el1::io::net::http
 
 	TString UrlDecode(TString url)
 	{
+		if(url.Length() == 0) return url;
 		const TString hex = "0123456789abcdef";
 		for(usys_t i = 0; i + 2 < url.Length(); i++)
 			if(url[i] == '%')

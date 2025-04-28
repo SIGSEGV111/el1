@@ -82,7 +82,7 @@ namespace el1::system::random
 		return (q[i] = r - x);
 	}
 
-	const u32_t* TCMWC::NextItem()
+	u32_t* TCMWC::NextItem()
 	{
 		tmp = Generate();
 		return &tmp;
@@ -139,7 +139,7 @@ namespace el1::system::random
 		}
 	}
 
-	const u64_t* TXorShift::NextItem()
+	u64_t* TXorShift::NextItem()
 	{
 		tmp = Generate();
 		return &tmp;

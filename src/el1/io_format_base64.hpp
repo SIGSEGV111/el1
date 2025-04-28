@@ -79,7 +79,7 @@ namespace el1::io::format::base64
 			}
 
 			template<typename TSourceStream>
-			const byte_t* NextItem(TSourceStream* const source)
+			byte_t* NextItem(TSourceStream* const source)
 			{
 				if(n_remaining == 0)
 				{
@@ -169,7 +169,7 @@ namespace el1::io::format::base64
 			}
 
 			template<typename TSourceStream>
-			const TUTF32* NextItem(TSourceStream* const source)
+			TUTF32* NextItem(TSourceStream* const source)
 			{
 				if(n_remaining == 0)
 				{

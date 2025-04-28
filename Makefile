@@ -1,17 +1,17 @@
 .PHONY: all clean install package rpm test
 
-ARCH ?= $(shell rpm --eval '%{_target_cpu}')
-CXXFLAGS ?=
+ARCH ?= $(shell rpm --eval '%{_target_cpu}' || uname -m)
+CXXFLAGS ?= -O3 -g -flto
 
 ifeq ($(ARCH),x86_64)
 	CXXFLAGS += -march=x86-64-v2
 endif
 
 VERSION ?= *DEVELOPMENT SNAPSHOT*
-EL1_CXX ?= $(shell which clang++)
-EL1_COMMON_CXXFLAGS := -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension -DEL1_WITH_POSTGRES -std=c++20 -O3 -g -flto $(CXXFLAGS)
-EL1_LIB_CXXFLAGS := $(EL1_COMMON_CXXFLAGS) "-DVERSION=\"$(VERSION)\""  -fPIC $(shell pkg-config --cflags libpq) $(shell pkg-config --cflags krb5) $(shell pkg-config --cflags zlib)
-EL1_EXE_CXXFLAGS := $(EL1_COMMON_CXXFLAGS) -fPIE
+CXX := $(shell which clang++)
+COMMON_CXXFLAGS := -Wall -Wextra -Wno-unused-command-line-argument -Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension -std=c++20 $(CXXFLAGS) -DEL1_WITH_POSTGRES -DEL1_WITH_VALGRIND -fuse-ld=lld -Wno-deprecated-declarations
+LIB_CXXFLAGS := $(COMMON_CXXFLAGS) -fPIC -shared $(shell pkg-config --cflags libpq) $(shell pkg-config --cflags krb5) $(shell pkg-config --cflags zlib)
+EXE_CXXFLAGS := $(COMMON_CXXFLAGS) -fPIE
 LIB_LDFLAGS := $(shell pkg-config --libs libpq) $(shell pkg-config --libs krb5) $(shell pkg-config --libs zlib) -Wl,--no-undefined
 
 OUT_DIR ?= gen
@@ -35,9 +35,7 @@ TEST_SOURCES := $(wildcard src/el1/test/*.cpp)
 TEST_HEADERS := $(wildcard src/el1/test/*.hpp)
 TEST_OBJECTS := $(patsubst src/el1/test/%.cpp,$(OUT_DIR)/test/%.o,$(TEST_SOURCES))
 
-export EL1_CXX
-export EL1_LIB_CXXFLAGS
-export CXXFLAGS=-fPIC -fPIE
+export CXX
 
 all: $(LIB_NAME) $(SUPER_HEADER)
 
@@ -52,23 +50,25 @@ $(SUPER_HEADER): $(LIB_HEADERS)
 
 $(OUT_DIR)/%.o: src/el1/%.cpp
 	@mkdir -p $(@D)
-	$(EL1_CXX) $(EL1_LIB_CXXFLAGS) -MMD -MP -c -o $@ $<
+	$(CXX) $(LIB_CXXFLAGS) -MMD -MP -c -o $@ $<
+
+$(LIB_NAME): $(LIB_OBJECTS) $(LIB_HEADERS)
+	@mkdir -p $(@D)
+	$(CXX) $(LIB_CXXFLAGS) -o $@ $(LIB_OBJECTS) $(LIB_LDFLAGS)
 
 $(OUT_DIR)/test/%.o: src/el1/test/%.cpp
 	@mkdir -p $(@D)
-	$(EL1_CXX) $(EL1_LIB_CXXFLAGS) -I submodules/googletest/googletest/include -I src -MMD -MP -c -o $@ $<
+	$(CXX) $(LIB_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" -I submodules/googletest/googletest/include -I src -MMD -MP -c -o $@ $<
 
 $(OUT_DIR)/gtest/lib/libgtest.a:
 	@mkdir -p "$(OUT_DIR)/gtest"
-	(P="$$PWD"; cd "$(OUT_DIR)/gtest" && cmake "$$P/submodules/googletest" && make)
+	(P="$$PWD"; cd "$(OUT_DIR)/gtest" && CXXFLAGS="-Wno-unused-command-line-argument -fuse-ld=lld -fPIC $(CXXFLAGS)" cmake "$$P/submodules/googletest" && make)
 
-$(LIB_NAME): $(LIB_OBJECTS)
-	@mkdir -p $(@D)
-	$(EL1_CXX) -fuse-ld=lld $(EL1_LIB_CXXFLAGS) -o $@ $(LIB_OBJECTS) $(LIB_LDFLAGS) -shared
-
-$(TEST_NAME): $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(LIB_NAME)
-	@mkdir -p $(@D)
-	$(EL1_CXX) -fPIE $(EL1_EXE_CXXFLAGS) -o $@ $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(OUT_DIR)/gtest/lib/libgtest_main.a -L$(OUT_DIR) -lel1 $(EXEFLAGS)
+$(TEST_NAME): $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(LIB_NAME) $(LIB_HEADERS) $(SUPER_HEADER)
+	rm -rf "$(OUT_DIR)/test.tmp"
+	@mkdir -p "$(@D)" "$(OUT_DIR)/test.tmp"
+	./support/generate-testdata.sh
+	$(CXX) $(EXE_CXXFLAGS) -o $@ $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(OUT_DIR)/gtest/lib/libgtest_main.a -L$(OUT_DIR) -lel1 $(EXEFLAGS)
 
 $(ARCH_RPM_NAME) $(SRC_RPM_NAME): $(LIB_SOURCES) $(LIB_HEADERS) $(SERVICE_NAME) $(SPEC_NAME) $(CONF_NAME) Makefile
 	easy-rpm.sh --debug --name el1 --spec $(SPEC_NAME) --outdir . --plain --arch "$(ARCH)" -- $^
@@ -94,10 +94,10 @@ test: $(TEST_NAME)
 		--track-origins=yes \
 		--num-callers=30 \
 		--trace-children=no \
-		--track-fds=yes \
 		--error-exitcode=1 \
 		--suppressions=support/valgrind.sup \
 		--gen-suppressions=all \
 		$(TEST_NAME)
+# 		--track-fds=yes \
 
 -include $(DEP_FILES)

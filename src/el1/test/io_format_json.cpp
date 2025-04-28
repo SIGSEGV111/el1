@@ -140,7 +140,7 @@ namespace
 		}
 
 		{
-			const TJsonValue json = TJsonValue::Parse(TFile("gen/testdata/test1.json"));
+			const TJsonValue json = TJsonValue::Parse(TFile("testdata/test1.json"));
 		}
 
 		{

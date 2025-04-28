@@ -68,7 +68,7 @@ namespace el1::system::random
 			using IPipe<TCMWC, u32_t>::BlockingRead;
 			using IPipe<TCMWC, u32_t>::ReadAll;
 
-			const u32_t* NextItem() final override;
+			u32_t* NextItem() final override;
 
 			u32_t Generate();
 
@@ -93,7 +93,7 @@ namespace el1::system::random
 			using IPipe<TXorShift, u64_t>::BlockingRead;
 			using IPipe<TXorShift, u64_t>::ReadAll;
 
-			const u64_t* NextItem() final override;
+			u64_t* NextItem() final override;
 
 			u64_t Generate();
 

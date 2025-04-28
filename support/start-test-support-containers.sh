@@ -9,8 +9,9 @@ cat << EOF
 run this in your shell:
 --------------------------
 export PGDATABASE=postgres
-export PGHOST=localhost
+export PGHOST=127.0.0.1
 export PGUSER=postgres
 export PGPASSWORD=postgres
+export PGREQUIRESSL=0
 
 EOF

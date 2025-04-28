@@ -12,6 +12,7 @@ namespace
 {
 	using namespace el1::io::types;
 	using namespace el1::io::bcd;
+	using namespace el1::io::text::string;
 	using namespace el1::math;
 	using namespace el1::system::random;
 
@@ -236,6 +237,7 @@ namespace
 		EXPECT_EQ(TBCD(122, 10, 8, 0).Compare(TBCD(122, 10, 8, 0), false), 0);
 		EXPECT_EQ(TBCD(0, 10, 8, 0).Compare(TBCD(0, 10, 8, 0), false), 0);
 		EXPECT_EQ(TBCD(0, 10, 8, 0).Compare(TBCD(0, 10, 8, 0), true), 0);
+		EXPECT_EQ(TBCD(-17, 10, 8, 0), -17);
 
 		TXorShift rng;
 		for(unsigned i = 0; i < 1000; i++)
@@ -471,7 +473,19 @@ namespace
 		}
 
 		{
+			TBCD a(22.0, 10, 2, 10);
+			a.Round(0, ERoundingMode::UPWARD);
+			EXPECT_EQ(a, 22.0);
+		}
+
+		{
 			TBCD a(22.123456789, 10, 2, 10);
+			a.Round(0, ERoundingMode::DOWNWARD);
+			EXPECT_EQ(a, 22.0);
+		}
+
+		{
+			TBCD a(22.0, 10, 2, 10);
 			a.Round(0, ERoundingMode::DOWNWARD);
 			EXPECT_EQ(a, 22.0);
 		}
@@ -761,5 +775,14 @@ namespace
 				break;
 			}
 		}
+	}
+
+	TEST(io_bcd, TBCD_FromString)
+	{
+		EXPECT_EQ(TBCD::FromString(TString("+17.28").Reverse(), DECIMAL_SYMBOLS),  17.28);
+		EXPECT_EQ(TBCD::FromString(TString("-17.28").Reverse(), DECIMAL_SYMBOLS), -17.28);
+		EXPECT_EQ(TBCD::FromString(TString("+17").Reverse(), DECIMAL_SYMBOLS),  17);
+		EXPECT_EQ(TBCD::FromString(TString("-17").Reverse(), DECIMAL_SYMBOLS), -17);
+		EXPECT_EQ(TBCD::FromString(TString("17").Reverse(), DECIMAL_SYMBOLS), 17);
 	}
 }

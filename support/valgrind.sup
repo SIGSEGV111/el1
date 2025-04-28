@@ -32,3 +32,18 @@
    fun:allocate_stack
    fun:pthread_create@@GLIBC_2.34
 }
+
+{
+   libcrypto1
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:CRYPTO_malloc
+}
+
+{
+   libcrypto2
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:CRYPTO_aligned_alloc
+}

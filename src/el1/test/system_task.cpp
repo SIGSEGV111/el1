@@ -1,3 +1,4 @@
+#include <sched.h>
 #include <gtest/gtest.h>
 #include <el1/system_task.hpp>
 #include <el1/system_time_timer.hpp>
@@ -321,7 +322,7 @@ namespace
 
 		TThread t("test", [&](){
 			mtx.Acquire();
-			while(state == 0); // busy loop
+			while(state == 0) sched_yield(); // busy loop, bypass internal scheduler, but call yield() to make valgrind happy
 		});
 
 		TFiber::Sleep(0.1);

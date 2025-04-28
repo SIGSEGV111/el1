@@ -49,8 +49,8 @@ namespace
 	{
 		#ifdef EL_OS_LINUX
 		{
-			TDirectory dir1 = TPath("gen/testdata");
-			TDirectory dir2 = TPath("gen/testdata");
+			TDirectory dir1 = TPath("gen/test.tmp");
+			TDirectory dir2 = TPath("gen/test.tmp");
 			TDirectory dir3 = TPath(".");
 			EXPECT_EQ(dir1, dir2);
 			EXPECT_NE(dir1, dir3);
@@ -66,13 +66,13 @@ namespace
 			TList<direntry_t> dents;
 			TDirectory testdata_dir = TPath("gen/testdata");
 			testdata_dir.Enum([&](const direntry_t& de) { dents.Append(de); return true; });
-			EXPECT_EQ(dents.Count(), 10U);
+			EXPECT_EQ(dents.Count(), 11U);
 
 			auto comp_by_name = [](const char* const name, const direntry_t& de) {
 				return de.name == name;
 			};
 
-			EXPECT_EQ(dents.Count(), 10U);
+			EXPECT_EQ(dents.Count(), 11U);
 
 			EXPECT_TRUE(dents.Contains("dead-symlink", comp_by_name));
 			EXPECT_TRUE(dents.Contains("dir", comp_by_name));

@@ -27,7 +27,7 @@ namespace el1::io::stream::producer
 			}
 
 		public:
-			const TOut* NextItem()
+			TOut* NextItem()
 			{
 				if(idx_peek >= peek_buffer.Count())
 				{

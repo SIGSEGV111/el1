@@ -548,7 +548,7 @@ namespace el1::io::format::json
 			using TOut = TJsonValue;
 
 			template<typename TSourceStream>
-			const TJsonValue* NextItem(TSourceStream* const source)
+			TJsonValue* NextItem(TSourceStream* const source)
 			{
 				const TUTF32* const chr = EatWhitespace(source);
 				if(chr == nullptr)

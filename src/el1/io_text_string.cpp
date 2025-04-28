@@ -1,5 +1,6 @@
 #include "io_text_string.hpp"
 #include "io_text_encoding_utf8.hpp"
+#include "io_bcd.hpp"
 #include <string.h>
 #include <iostream>
 #include <math.h>
@@ -58,6 +59,7 @@ namespace el1::io::text::string
 	TString IFormatter::Format(const s64_t) const          { EL_THROW(TUndefineFormatException, "s64_t",    FormatName()); }
 	TString IFormatter::Format(const u64_t) const          { EL_THROW(TUndefineFormatException, "u64_t",    FormatName()); }
 	TString IFormatter::Format(const double) const         { EL_THROW(TUndefineFormatException, "double",   FormatName()); }
+	TString IFormatter::Format(const bcd::TBCD&) const     { EL_THROW(TUndefineFormatException, "TBCD",     FormatName()); }
 	TString IFormatter::Format(const void* const, const usys_t) const { EL_THROW(TUndefineFormatException, "void*", FormatName()); }
 	// LCOV_EXCL_STOP
 
@@ -77,80 +79,80 @@ namespace el1::io::text::string
 		.symbols = &OCTAL_SYMBOLS,
 		.prefix = "",
 		.suffix = "",
-		.sign_placement = EPlacement::START,
-		.force_sign = false,
 		.decimal_point_sign = '.',
 		.grouping_sign = TUTF32::TERMINATOR,
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
+		.positive_sign = TUTF32::TERMINATOR,
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
+		.rounding = math::ERoundingMode::TO_NEAREST,
 	});
 
 	const TNumberFormatter  TNumberFormatter::PLAIN_DECIMAL_US_EN({
 		.symbols = &DECIMAL_SYMBOLS,
 		.prefix = "",
 		.suffix = "",
-		.sign_placement = EPlacement::START,
-		.force_sign = false,
 		.decimal_point_sign = '.',
 		.grouping_sign = TUTF32::TERMINATOR,
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
+		.positive_sign = TUTF32::TERMINATOR,
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
+		.rounding = math::ERoundingMode::TO_NEAREST,
 	});
 
 	const TNumberFormatter TNumberFormatter::PLAIN_HEXADECIMAL_UPPER_US_EN({
 		.symbols = &HEXADECIMAL_SYMBOLS_UC,
 		.prefix = "",
 		.suffix = "",
-		.sign_placement = EPlacement::START,
-		.force_sign = false,
 		.decimal_point_sign = '.',
 		.grouping_sign = TUTF32::TERMINATOR,
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
+		.positive_sign = TUTF32::TERMINATOR,
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
+		.rounding = math::ERoundingMode::TO_NEAREST,
 	});
 
 	const TNumberFormatter TNumberFormatter::PLAIN_HEXADECIMAL_LOWER_US_EN({
 		.symbols = &HEXADECIMAL_SYMBOLS_LC,
 		.prefix = "",
 		.suffix = "",
-		.sign_placement = EPlacement::START,
-		.force_sign = false,
 		.decimal_point_sign = '.',
 		.grouping_sign = TUTF32::TERMINATOR,
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
+		.positive_sign = TUTF32::TERMINATOR,
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
+		.rounding = math::ERoundingMode::TO_NEAREST,
 	});
 
 	const TNumberFormatter TNumberFormatter::PLAIN_BINARY_US_EN({
 		.symbols = &BINARY_SYMBOLS,
 		.prefix = "",
 		.suffix = "",
-		.sign_placement = EPlacement::START,
-		.force_sign = false,
 		.decimal_point_sign = '.',
 		.grouping_sign = TUTF32::TERMINATOR,
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
+		.positive_sign = TUTF32::TERMINATOR,
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
+		.rounding = math::ERoundingMode::TO_NEAREST,
 	});
 
 	const char* TNumberFormatter::FormatName() const
@@ -201,9 +203,6 @@ namespace el1::io::text::string
 			out.chars.Inflate(config.n_decimal_places, (*config.symbols)[0]);
 		}
 
-		if((is_negative || config.force_sign) && config.sign_placement == EPlacement::END)
-			out += config.negative_sign;
-
 		return out;
 	}
 
@@ -217,9 +216,6 @@ namespace el1::io::text::string
 				out.chars.Append(config.decimal_point_sign);
 			out.chars.Inflate(config.n_decimal_places, (*config.symbols)[0]);
 		}
-
-		if(config.force_sign && config.sign_placement == EPlacement::END)
-			out += config.negative_sign;
 
 		return out;
 	}
@@ -241,6 +237,79 @@ namespace el1::io::text::string
 		out.Insert(0, MakeIntegerPart((u64_t)abs_value, is_negative));
 
 		return out;
+	}
+
+	TString TNumberFormatter::Format(const bcd::TBCD& _value) const
+	{
+		const bcd::TBCD& value = _value.Base() == config.symbols->Count() ? _value : bcd::TBCD(_value, config.symbols->Count());
+		const bool int_pad_is_digit = config.symbols->Contains(config.integer_pad_sign);
+		const int n_significant_integer = value.CountSignificantIntegerDigits();
+		const bool do_grouping = config.grouping_sign != TUTF32::TERMINATOR && config.n_digits_per_group > 0;
+		const TUTF32 int_pad_sign = config.integer_pad_sign == TUTF32::TERMINATOR ? (*config.symbols)[0] : config.integer_pad_sign;
+		const TUTF32 dec_pad_sign = config.decimal_pad_sign == TUTF32::TERMINATOR ? (*config.symbols)[0] : config.decimal_pad_sign;
+		TString s = config.prefix;
+
+		if(int_pad_is_digit)
+		{
+			// generate positive|negative sign
+			if(value.IsNegative() && config.negative_sign != TUTF32::TERMINATOR)
+				s += config.negative_sign;
+			else if(!value.IsNegative() && config.positive_sign != TUTF32::TERMINATOR)
+				s += config.positive_sign;
+
+			// generate integer padding with grouping
+			for(int i = config.n_min_integer_places; i > n_significant_integer; i--)
+			{
+				s += int_pad_sign;
+				if(do_grouping && i != 1 && ((i-1) % config.n_digits_per_group) == 0)
+					s += config.grouping_sign;
+			}
+		}
+		else
+		{
+			// generate integer padding without grouping
+			for(int i = config.n_min_integer_places; i > n_significant_integer; i--)
+				s += int_pad_sign;
+
+			// generate positive|negative sign
+			if(value.IsNegative() && config.negative_sign != TUTF32::TERMINATOR)
+				s += config.negative_sign;
+			else if(!value.IsNegative() && config.positive_sign != TUTF32::TERMINATOR)
+				s += config.positive_sign;
+		}
+
+		// generate integer digits
+		for(int i = n_significant_integer - 1; i >= 0; i--)
+		{
+			s += (*config.symbols)[value.Digit(i)];
+			if(do_grouping && i != 1 && ((i-1) % config.n_digits_per_group) == 0)
+				s += config.grouping_sign;
+		}
+
+		const unsigned n_significant_decimal = value.CountSignificantDecimalDigits();
+		if((config.n_decimal_places > 0 && config.n_decimal_places != -1U) || (config.n_decimal_places == -1U && n_significant_decimal > 0))
+		{
+			// add decimal point
+			if(config.decimal_point_sign != TUTF32::TERMINATOR)
+				s += config.decimal_point_sign;
+
+			// generate decimal digits
+			const unsigned n = (config.n_decimal_places > 0 && config.n_decimal_places != -1U) ? config.n_decimal_places : n_significant_decimal;
+
+			if(n < n_significant_decimal)
+				; // TODO: rounding
+
+			for(unsigned i = 0; i < n; i++)
+			{
+				if(do_grouping && i != 0 && (i % config.n_digits_per_group) == 0)
+					s += config.grouping_sign;
+				s += i >= n_significant_decimal ? dec_pad_sign : (*config.symbols)[value.Digit(-i)];
+			}
+		}
+
+
+		s += config.suffix;
+		return s;
 	}
 
 	TString TNumberFormatter::MakeDecimalPart(double& value) const
@@ -334,11 +403,13 @@ namespace el1::io::text::string
 			}
 		}
 
-		if((is_negative || config.force_sign) && config.sign_placement == EPlacement::START)
-			digits += config.negative_sign;
-
 		if(config.n_min_integer_places != -1U && config.n_min_integer_places != 0)
 			digits.Pad(config.integer_pad_sign, config.n_min_integer_places, EPlacement::END);
+
+		if(is_negative && config.negative_sign != TUTF32::TERMINATOR)
+			digits += config.negative_sign;
+		else if(!is_negative && config.positive_sign != TUTF32::TERMINATOR)
+			digits += config.positive_sign;
 
 		digits.Reverse();
 		return digits;
@@ -499,7 +570,7 @@ namespace el1::io::text::string
 		if(arg_str.Length() > 0)
 		{
 			// std::cerr<<"DEBUG: arg_str = '"<<arg_str.MakeCStr().get()<<"'\n";
-			std::unique_ptr<TNumberFormatter> custom_formatter = std::unique_ptr<TNumberFormatter>(new TNumberFormatter(default_format->config));
+			auto custom_formatter = New<TNumberFormatter>(default_format->config);
 
 			usys_t pos = 0;
 			const bool has_padding_chr = !(arg_str[0].code >= '1' && arg_str[0].code <= '9');
@@ -1012,7 +1083,7 @@ namespace el1::io::text::string
 	TList<TString> TString::Split(const TString& delimiter, const usys_t n_max, const bool skip_empty) const
 	{
 		usys_t start = 0;
-		TList<TString> list;
+		TList<TString> list(n_max < 256 ? n_max : 8);
 
 		while(start < this->Length() && list.Count() + 1 < n_max)
 		{

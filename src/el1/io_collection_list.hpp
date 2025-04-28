@@ -150,8 +150,8 @@ namespace el1::io::collection::list
 			T* ItemPtr(const usys_t index) EL_GETTER;
 			const T* ItemPtr(const usys_t index) const EL_GETTER;
 
-			T& operator[](const ssys_t index) EL_GETTER { return this->arr_items[this->AbsoluteIndex(index, false)]; }
-			const T& operator[](const ssys_t index) const EL_GETTER { return const_cast<array_t&>(*this)[index]; }
+			T& operator[](const ssys_t index) const EL_GETTER { return this->arr_items[this->AbsoluteIndex(index, false)]; }
+			// T& operator[](const ssys_t index) const EL_GETTER { return const_cast<array_t&>(*this)[index]; }
 
 			constexpr operator const array_t<const T>&() const    { return reinterpret_cast<array_t<const T>&>(const_cast<array_t&>(*this)); }
 			constexpr explicit operator array_t<const T>*() const { return reinterpret_cast<array_t<const T>*>(const_cast<array_t*>( this)); }
@@ -242,6 +242,9 @@ namespace el1::io::collection::list
 			void Remove(const ssys_t index, const usys_t n_items_remove);
 			void Remove(const ssys_t index);
 
+			// removes and returns the first entry in the list
+			T PopHead();
+
 			template<typename C = decltype(EqualsComparator<T>)>
 			usys_t RemoveItem(const T& needle, const usys_t n_max = 1U, C comparator = EqualsComparator<T>);
 
@@ -261,7 +264,7 @@ namespace el1::io::collection::list
 	};
 
 	template<typename T>
-	class TArrayPipe : public stream::IPipe<TArrayPipe<typename std::remove_const<T>::type>, typename std::remove_const<T>::type>
+	class TArrayPipe : public stream::IPipe<TArrayPipe<T>, T>
 	{
 		protected:
 			const array_t<T>* const array;
@@ -271,7 +274,7 @@ namespace el1::io::collection::list
 			using TOut = T;
 			using TIn = void;
 
-			const TOut* NextItem() final override
+			TOut* NextItem() final override
 			{
 				if(index < array->Count())
 					return &((*array)[index++]);
@@ -279,7 +282,7 @@ namespace el1::io::collection::list
 					return nullptr;
 			}
 
-			TArrayPipe(const array_t<T>* array) : array(array), index(0) {}
+			TArrayPipe(const array_t<T>* const array) : array(array), index(0) {}
 	};
 
 	template<typename T>
@@ -945,6 +948,15 @@ namespace el1::io::collection::list
 	}
 
 	template<typename T>
+	T TList<T>::PopHead()
+	{
+		EL_ERROR(this->n_items == 0, TException, "list is empty");
+		T tmp = std::move(this->arr_items[0]);
+		this->Remove(0,1);
+		return tmp;
+	}
+
+	template<typename T>
 	void TList<T>::Cut(const usys_t n_start, const usys_t n_end)
 	{
 		const usys_t n_cut = n_start + n_end;
@@ -997,11 +1009,11 @@ namespace el1::io::stream
 	template<typename TStream, typename TOut>
 	collection::list::TList<TOut> IPipe<TStream, TOut>::Collect(const usys_t n_prealloc)
 	{
-		collection::list::TList<TOut> list(n_prealloc);
+		collection::list::TList<TOut> list;
 		TStream* source = static_cast<TStream*>(this);
 
-		for(const TOut* item = source->NextItem(); item != nullptr; item = source->NextItem())
-			list.Append(std::move(*item));
+		for(TOut* item = source->NextItem(); item != nullptr; item = source->NextItem())
+			list.MoveAppend(std::move(*item));
 
 		return list;
 	}

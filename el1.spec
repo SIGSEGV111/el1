@@ -5,7 +5,7 @@ Distribution:   openSUSE
 License:        GPLv3
 URL:            https://www.brennecke-it.net
 
-BuildRequires:  clang, go-md2man, krb5-devel, easy-rpm, postgresql-devel, lld
+BuildRequires:  clang, go-md2man, krb5-devel, easy-rpm, postgresql-devel, lld, valgrind-devel
 Requires:		krb5-client, libpq5, postgresql
 
 %description

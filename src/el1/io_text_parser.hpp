@@ -348,6 +348,12 @@ namespace el1::io::text::parser
 		return TParser(ast::TRepeatNode<N>(parser.root, n_min, n_max));
 	}
 
+	template<typename N>
+	constexpr auto OneOrMore(TParser<N> parser)
+	{
+		return TParser(ast::TRepeatNode<N>(parser.root, 1, NEG1));
+	}
+
 	constexpr auto CharRange(const TUTF32 from, const TUTF32 to)
 	{
 		return TParser(ast::TCharRangeNode(from, to));
@@ -363,6 +369,18 @@ namespace el1::io::text::parser
 	constexpr auto Translate(L lambda, TParser<N> ... parsers)
 	{
 		return TParser(ast::TTranslateNode<L,N...>(lambda, std::tuple<N...>(parsers.root ...)));
+	}
+
+	template<typename T, typename C, typename ... N>
+	constexpr auto TranslateCast(TParser<N> ... parsers)
+	{
+		return Translate([](auto ... a){ return New<T,C>(a...); }, parsers...);
+	}
+
+	template<typename T, typename ... N>
+	constexpr auto Translate(TParser<N> ... parsers)
+	{
+		return Translate([](auto ... a){ return T(a...); }, parsers...);
 	}
 
 	template<typename N>

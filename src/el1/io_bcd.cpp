@@ -1,5 +1,6 @@
 #include "io_bcd.hpp"
 #include "io_text_string.hpp"
+#include "system_random.hpp"
 #include "util.hpp"
 #include <string.h>
 #include <endian.h>
@@ -451,16 +452,37 @@ namespace el1::io::bcd
 			(*this) >>= -s;
 	}
 
-	void TBCD::Round(const u8_t n_decimal_max, const ERoundingMode mode)
+	static ERoundingMode DecideStochasticRounding(const TBCD& value)
+	{
+		EL_NOT_IMPLEMENTED;
+		// static system::random::TXorShift rng;
+		// const TBCD delta = value - floor_val;	// fractional part, always in [0.0, 1.0)
+  //
+		// // Generate random number in [0.0, 1.0)
+		// const double r = TBCD::Random(value.Base(), value.CountInteger(), value.CountDecimal());
+		// r.TruncateIntegerDigits(0);
+  //
+		// // Probability of rounding up is proportional to fractional part
+		// return r < delta ? ERoundingDirection::UPWARD : ERoundingDirection::DOWNWARD;
+	}
+
+	void TBCD::Round(const u8_t n_decimal_max, ERoundingMode mode)
 	{
 		if(n_decimal_max >= n_decimal || IsZero())
 			return;
+
+		const u8_t n_sig = CountSignificantDecimalDigits();
+		if(n_decimal_max >= n_sig)
+			return;
+
+		if(mode == ERoundingMode::STOCHASTIC)
+			mode = DecideStochasticRounding(*this);
 
 		int carry = 0;
 		switch(mode)
 		{
 			case ERoundingMode::TO_NEAREST:
-				carry = Digit(-n_decimal_max - 1) >= 5 ? 1 : 0;
+				carry = Digit(-n_decimal_max - 1) >= base/2 ? 1 : 0;	// correct, no recursion, only the first truncated digit counts
 				break;
 			case ERoundingMode::TOWARDS_ZERO:
 				carry = 0;
@@ -474,13 +496,21 @@ namespace el1::io::bcd
 			case ERoundingMode::UPWARD:
 				carry = is_negative ? 0 : 1;
 				break;
+			case ERoundingMode::TO_NEAREST_EVEN:
+				EL_NOT_IMPLEMENTED;
+				break;
+			case ERoundingMode::STOCHASTIC:
+				EL_THROW(TLogicException);
 		}
 
 		memset(DigitsPointer(), 0, (n_decimal - n_decimal_max) * sizeof(digit_t));
 
-		TBCD bcd_carry(carry, *this);
-		bcd_carry >>= n_decimal_max;
-		AbsAdd(*this, *this, bcd_carry);
+		if(carry != 0)
+		{
+			TBCD bcd_carry(carry, *this);
+			bcd_carry >>= n_decimal_max;
+			AbsAdd(*this, *this, bcd_carry);
+		}
 	}
 
 	void TBCD::SetZero() noexcept
@@ -730,6 +760,7 @@ namespace el1::io::bcd
 
 	void TBCD::ConvertBCD(const TBCD& value)
 	{
+		EL_ERROR(value.IsInvalid(), TInvalidArgumentException, "value", "value is not valid");
 		if(value.IsZero())
 		{
 			SetZero();
@@ -747,9 +778,10 @@ namespace el1::io::bcd
 			{
 				if(this->base == value.base)
 				{
-					// we can just copy the DigitsPointer()
+					// we can just copy the digits
 					for(int i = -n_decimal; i < n_integer; i++)
 						Digit(i, value.Digit(i));
+					is_negative = value.is_negative;
 				}
 				else
 					EL_NOT_IMPLEMENTED;
@@ -759,6 +791,9 @@ namespace el1::io::bcd
 
 	TBCD& TBCD::operator=(TBCD&& rhs)
 	{
+		if(&rhs == this)
+			return *this;
+
 		if(HasSameSpecs(rhs))
 		{
 			EnsureDigits();
@@ -776,6 +811,8 @@ namespace el1::io::bcd
 
 	TBCD& TBCD::operator=(const TBCD& rhs)
 	{
+		if(&rhs == this)
+			return *this;
 		ConvertBCD(rhs);
 		return *this;
 	}
@@ -1540,7 +1577,7 @@ namespace el1::io::bcd
 		return this->ToUnsignedInt();
 	}
 
-	TBCD TBCD::FromString(const text::string::TString& str, const text::string::TString& symbols, const text::encoding::TUTF32 decimal_seperator)
+	TBCD TBCD::FromString(const text::string::TString& str, const text::string::TString& symbols, const text::encoding::TUTF32 decimal_seperator, const text::encoding::TUTF32 negative_symbol, const text::encoding::TUTF32 positive_symbol, const bool default_negative)
 	{
 		if(str.Length() == 0)
 			return INVALID;
@@ -1549,11 +1586,35 @@ namespace el1::io::bcd
 
 		usys_t value;
 		usys_t pos_dec = str.chars.FindFirst(decimal_seperator);
-		TBCD bcd(0, symbols.Length(), str.Length() - (pos_dec == NEG1 ? 0 : pos_dec + 1), (pos_dec == NEG1 ? 0 : pos_dec));
+
+		usys_t i,n;
+		bool is_negative;
+
+		if(str.chars[0] == negative_symbol || str.chars[0] == positive_symbol)
+		{
+			is_negative = str.chars[0] == negative_symbol;
+			i = 1;
+			n = str.chars.Count() - 1;
+		}
+		else if(str.chars[-1] == negative_symbol || str.chars[-1] == positive_symbol)
+		{
+			is_negative = str.chars[-1] == negative_symbol;
+			i = 0;
+			n = str.chars.Count() - 1;
+		}
+		else
+		{
+			is_negative = default_negative;
+			i = 0;
+			n = str.chars.Count();
+		}
+
+		TBCD bcd(0, symbols.Length(), i + n - (pos_dec == NEG1 ? 0 : pos_dec + 1), (pos_dec == NEG1 ? 0 : pos_dec - i));
 		digit_t* d = bcd.DigitsPointer();
 
-		for(auto chr : str.chars)
+		for(; i < n; i++)
 		{
+			auto chr = str.chars[i];
 			if(chr != decimal_seperator)
 			{
 				EL_ERROR((value = symbols.chars.FindFirst(chr)) == NEG1, TException, TString::Format("unknown character %q in numeric string %q; known numeric symbols are %q", chr, str, symbols));
@@ -1564,8 +1625,10 @@ namespace el1::io::bcd
 			}
 		}
 
+		bcd.IsNegative(is_negative);
 		return bcd;
 	}
 
+	TBCD::TBCD() : TBCD(0, 1, 0, 0) {}
 	const TBCD TBCD::INVALID(0, 1, 0, 0);
 }

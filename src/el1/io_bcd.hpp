@@ -221,7 +221,7 @@ namespace el1::io::bcd
 
 			// This function does NOT change `n_decimal`, it just rounds the extra digits so they become 0.
 			// If `n_decimal_max` >= `n_decimal` then this function has no effect.
-			void Round(const u8_t n_decimal_max, const math::ERoundingMode mode);
+			void Round(const u8_t n_decimal_max, math::ERoundingMode mode);
 
 			// Sets all digits to 0.
 			void SetZero() noexcept;
@@ -282,11 +282,14 @@ namespace el1::io::bcd
 			TBCD(const float  v, const TBCD& conf_ref);
 			TBCD(const double v, const TBCD& conf_ref);
 
+			TBCD();
 			~TBCD();
 
 			static const TBCD INVALID;
 
 			// First digit in str is considered least significant value, while last position is most significant value (reversed to what humans do).
-			static TBCD FromString(const text::string::TString& str, const text::string::TString& symbols, const text::encoding::TUTF32 decimal_seperator = '.');
+			static TBCD FromString(const text::string::TString& str, const text::string::TString& symbols, const text::encoding::TUTF32 decimal_seperator = '.', const text::encoding::TUTF32 negative_symbol = '-', const text::encoding::TUTF32 positive_symbol = '+', const bool default_negative = false);
+
+			static TBCD Random(const digit_t base, const u8_t n_integer, const u8_t n_decimal);
 	};
 }

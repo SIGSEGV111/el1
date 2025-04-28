@@ -7,11 +7,12 @@ namespace el1::math
 {
 	enum class ERoundingMode : io::types::u8_t
 	{
-		TO_NEAREST,      // rounds up when the digit is >=(base/2) and down otherwise
-		TOWARDS_ZERO,    // rounds up when the number is negative and down when the number is positive
-		AWAY_FROM_ZERO,  // the opposite of TOWARDS_ZERO
-		DOWNWARD,        // always rounds down (negative numbers round away from zero, positive numbers round towards zero)
-		UPWARD           // always rounds up (negative numbers round towards zero, positive numbers away from zero)
+		TO_NEAREST,		// Round to nearest; ties round away from zero
+		TO_NEAREST_EVEN,// Round to nearest; ties round to even (IEEE 754 default)
+		TOWARDS_ZERO,	// Truncate toward zero
+		AWAY_FROM_ZERO,	// Round away from zero
+		DOWNWARD,		// Round toward negative infinity
+		UPWARD,			// Round toward positive infinity
+		STOCHASTIC		// Randomized rounding based on distance to adjacent values
 	};
 }
-

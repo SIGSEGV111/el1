@@ -10,3 +10,4 @@ examples/dcf77-gpio/dcf77-gpio
 examples/neopixel-spi-driver/neopixel-spi-driver
 src/**/*.Makefile
 *.rpm
+vgcore.*

@@ -15,7 +15,7 @@ namespace
 
 		{
 			TSortedMap<u32_t, u32_t> histogram;
-			rng.Limit(1024).ForEach([&histogram](auto v) { histogram.Get(v, 0)++; });
+			rng.Limit(1024).ForEach([&histogram](auto v) { histogram.GetOrInsertDefault(v, 0)++; });
 			for(auto& kv : histogram.Items())
 				EXPECT_EQ(kv.value, 1U);
 		}
@@ -26,7 +26,7 @@ namespace
 		{
 			TXorShift rng;
 			TSortedMap<u64_t, u32_t> histogram;
-			rng.Limit(1024).ForEach([&histogram](auto v) { histogram.Get(v, 0)++; });
+			rng.Limit(1024).ForEach([&histogram](auto v) { histogram.GetOrInsertDefault(v, 0)++; });
 			for(auto& kv : histogram.Items())
 				EXPECT_EQ(kv.value, 1U);
 		}

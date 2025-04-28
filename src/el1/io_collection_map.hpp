@@ -74,7 +74,7 @@ namespace el1::io::collection::map
 			array_t<kv_pair_t>& Items() { return items; }
 			sorter_function_t Sorter() const { return sorter; }
 
-			// retreives the value associated with a key; throws if the key does not exist
+			// retrieves the value associated with a key; throws if the key does not exist
 			const TValue& operator[](const TKey& key) const;
 
 			// receives the value associated with the specified key; return nullptr if the key does not exist
@@ -86,6 +86,12 @@ namespace el1::io::collection::map
 			TValue& Add(TKey key, const TValue& value);
 			TValue& Add(TKey key, TValue&& value);
 			TValue& Add(kv_pair_t&& pair);
+
+			// adds a default value if the key does not exist yet, otherwise the existing value is returned
+			const TValue& GetOrInsertDefault(const TKey& key, const TValue& _default);
+
+			// if key exists in the map the value associated value is returned, otherwise the _default value is returned
+			const TValue& GetWithDefault(const TKey& key, const TValue& _default);
 
 			TSortedMap& operator=(TSortedMap&& other) = default;
 			TSortedMap& operator=(TSortedMap& other) = default;
@@ -106,10 +112,10 @@ namespace el1::io::collection::map
 
 			using TSortedMap<TKey, const TValue>::Items;
 
-			// retreives the value associated with a key; throws if the key does not exist
+			// retrieves the value associated with a key; throws if the key does not exist
 			TValue& operator[](const TKey& key) const;
 
-			// retreivs the value associated with the specified key; return nullptr if the key does not exist
+			// retrieves the value associated with the specified key; return nullptr if the key does not exist
 			TValue* Get(const TKey& key) const EL_GETTER;
 
 			// updates the value asociated with a key; calls Add() if the key does not exist yet
@@ -117,11 +123,11 @@ namespace el1::io::collection::map
 			TValue& Set(const TKey& key, TValue&& value);
 			TValue& Set(kv_pair_t&& pair);
 
-			// adds a default value if the key does not exist yet, otherwise the existing value is returned
-			TValue& GetOrInsertDefault(const TKey& key, const TValue& _default);
-
 			// removes the specified key (along with its value) from the map; return false if the key did not exist; true otherwise
 			bool Remove(const TKey& key);
+
+			// adds a default value if the key does not exist yet, otherwise the existing value is returned
+			TValue& GetOrInsertDefault(const TKey& key, const TValue& _default);
 
 			TSortedMap& operator=(TSortedMap&& other) = default;
 			TSortedMap& operator=(TSortedMap& other) = default;
@@ -263,6 +269,22 @@ namespace el1::io::collection::map
 		}
 	}
 
+	template<typename TKey, typename TValue>
+	const TValue& TSortedMap<TKey, const TValue>::GetOrInsertDefault(const TKey& key, const TValue& _default)
+	{
+		const TValue* value = this->Get(key);
+		if(value == nullptr)
+			value = &this->Add(key, _default);
+		return *value;
+	}
+
+	template<typename TKey, typename TValue>
+	const TValue& TSortedMap<TKey, const TValue>::GetWithDefault(const TKey& key, const TValue& _default)
+	{
+		const TValue* value = this->Get(key);
+		return value == nullptr ? _default : *value;
+	}
+
 	/*****************************************************************************/
 
 	template<typename TKey, typename TValue>
@@ -348,15 +370,6 @@ namespace el1::io::collection::map
 	}
 
 	template<typename TKey, typename TValue>
-	TValue& TSortedMap<TKey, TValue>::GetOrInsertDefault(const TKey& key, const TValue& _default)
-	{
-		TValue* value = this->Get(key);
-		if(value == nullptr)
-			value = &this->Add(key, _default);
-		return *value;
-	}
-
-	template<typename TKey, typename TValue>
 	bool TSortedMap<TKey, TValue>::Remove(const TKey& key)
 	{
 		const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
@@ -368,5 +381,14 @@ namespace el1::io::collection::map
 
 		this->items.Remove(index, 1);
 		return true;
+	}
+
+	template<typename TKey, typename TValue>
+	TValue& TSortedMap<TKey, TValue>::GetOrInsertDefault(const TKey& key, const TValue& _default)
+	{
+		TValue* value = this->Get(key);
+		if(value == nullptr)
+			value = &this->Add(key, _default);
+		return *value;
 	}
 }

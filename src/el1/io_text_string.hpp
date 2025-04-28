@@ -5,6 +5,12 @@
 #include "io_types.hpp"
 #include "error.hpp"
 #include "def.hpp"
+#include "math.hpp"
+
+namespace el1::io::bcd
+{
+	class TBCD;
+}
 
 namespace el1::io::text::string
 {
@@ -251,6 +257,7 @@ namespace el1::io::text::string
 		virtual TString Format(const s64_t value) const;
 		virtual TString Format(const u64_t value) const;
 		virtual TString Format(const double value) const;
+		virtual TString Format(const bcd::TBCD& value) const;
 		virtual TString Format(const void* const p_data, const usys_t n_bits) const;
 
 		virtual ~IFormatter();
@@ -294,16 +301,16 @@ namespace el1::io::text::string
 			const array_t<const TUTF32>* symbols;
 			TString prefix;
 			TString suffix;
-			EPlacement sign_placement;
-			bool force_sign;
 			TUTF32 decimal_point_sign;
 			TUTF32 grouping_sign;
 			TUTF32 integer_pad_sign;
 			TUTF32 decimal_pad_sign;
 			TUTF32 negative_sign;
+			TUTF32 positive_sign;
 			unsigned n_digits_per_group;
-			unsigned n_decimal_places;
+			unsigned n_decimal_places;		// -1U => all significant decimal digits
 			unsigned n_min_integer_places;
+			math::ERoundingMode rounding;
 		};
 
 		config_t config;
@@ -318,6 +325,7 @@ namespace el1::io::text::string
 		TString Format(const u32_t value) const final override;
 		TString Format(const s64_t value) const final override;
 		TString Format(const u64_t value) const final override;
+		TString Format(const bcd::TBCD& value) const final override;
 		TString Format(const double value) const final override;
 
 		TString MakeIntegerPart(u64_t value, const bool is_negative) const;
@@ -392,7 +400,7 @@ namespace el1::io::text::string
 		// string with optional padding: %[0-9]*s
 		// quoted string: %[^q]?q
 
-		TFormatVariable(bool shared_formatter, const IFormatter* formatter) : pos(0), len(0), shared_formatter(shared_formatter), formatter(formatter)
+		TFormatVariable(const bool shared_formatter, const IFormatter* formatter) : pos(0), len(0), shared_formatter(shared_formatter), formatter(formatter)
 		{
 		}
 
@@ -448,6 +456,20 @@ namespace el1::io::text::string
 	{
 		_Format(out, format, pos, value);
 		_Format(out, format, pos, rest ...);
+	}
+
+	static inline bool MatchStringList(const TString& needle, const char* const haystack)
+	{
+		return needle == haystack;
+	}
+
+	template<typename ... A>
+	static inline bool MatchStringList(const TString& needle, const char* const haystack, const A ... haystacks)
+	{
+		if(MatchStringList(needle, haystack))
+			return true;
+
+		return MatchStringList(needle, haystacks ...);
 	}
 }
 

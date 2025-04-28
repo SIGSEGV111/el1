@@ -67,7 +67,7 @@ namespace el1::io::text::encoding::utf8
 			using TOut = TUTF32;
 
 			template<typename TSourceStream>
-			const TUTF32* NextItem(TSourceStream* const source)
+			TUTF32* NextItem(TSourceStream* const source)
 			{
 				const byte_t* const start_byte = source->NextItem();
 				if(start_byte == nullptr)
@@ -136,7 +136,7 @@ namespace el1::io::text::encoding::utf8
 			using TOut = byte_t;
 
 			template<typename TSourceStream>
-			const byte_t* NextItem(TSourceStream* const source)
+			byte_t* NextItem(TSourceStream* const source)
 			{
 				buffer_value >>= 8;
 

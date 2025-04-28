@@ -451,7 +451,7 @@ namespace el1::io::graphics::image::format::png
 		}
 
 		template<typename TSourceStream>
-		const pixel_t* NextItem(TSourceStream* const source)
+		pixel_t* NextItem(TSourceStream* const source)
 		{
 			if(EL_UNLIKELY(ipx >= npx))
 			{

@@ -285,9 +285,10 @@ namespace el1::io::stream
 	};
 
 	template<typename TPipe, typename TOut>
-	struct TPipeSource<TPipe, TOut, true> : public ISource<TOut>
+	struct TPipeSource<TPipe, TOut, true> : public ISource<typename std::remove_const<TOut>::type>
 	{
-		usys_t Read(TOut* const arr_items, const usys_t n_items_max) override EL_WARN_UNUSED_RESULT;
+		using TOutBase = typename std::remove_const<TOut>::type;
+		usys_t Read(TOutBase* const arr_items, const usys_t n_items_max) override EL_WARN_UNUSED_RESULT;
 	};
 
 	template<typename TPipe, typename TOut>
@@ -303,7 +304,7 @@ namespace el1::io::stream
 		// this function is called repeatedly to fetch the next item from the stream
 		// once the pipe has run out of items it must return nullptr and continue to do so
 		// the returned item pointer needs only to be valid until the next call
-		virtual const TOut* NextItem() = 0;
+		virtual TOut* NextItem() = 0;
 
 		template<typename L>
 		TFilterPipe<TPipe, L> Filter(L callable);
@@ -364,7 +365,7 @@ namespace el1::io::stream
 		using TOut = _TOut;
 
 		template<typename TSourceStream>
-		const TOut* NextItem(TSourceStream* const source)
+		auto NextItem(TSourceStream* const source)
 		{
 			return reinterpret_cast<const TOut*>(source->NextItem());
 		}
@@ -412,7 +413,7 @@ namespace el1::io::stream
 			using TOut = T;
 			using TIn = void;
 
-			const TOut* NextItem() final override
+			TOut* NextItem() final override
 			{
 				for(;;)
 				{
@@ -443,7 +444,7 @@ namespace el1::io::stream
 	// template<typename TPipe, typename TOut>
 	// struct ITransformator
 	// {
-	// 	virtual const TOut* NextItem() = 0;
+	// 	virtual TOut* NextItem() final override = 0;
 	// 	virtual void Source(TPipe* const source) = 0;
 	// };
 
@@ -458,11 +459,11 @@ namespace el1::io::stream
 			using TIn = typename TPipe::TOut;
 			using TOut = TIn;
 
-			const TOut* NextItem() final override
+			TOut* NextItem() final override
 			{
 				for(;;)
 				{
-					const TIn* const item = source->NextItem();
+					auto item = source->NextItem();
 
 					if(item == nullptr)
 						return nullptr;
@@ -486,7 +487,7 @@ namespace el1::io::stream
 			using TIn = typename TPipe::TOut;
 			using TOut = TIn;
 
-			const TOut* NextItem() final override
+			TOut* NextItem() final override
 			{
 				if(EL_UNLIKELY(n_remaining == 0))
 					return nullptr;
@@ -541,7 +542,7 @@ namespace el1::io::stream
 			TOut out;
 
 		public:
-			const TOut* NextItem() final override
+			TOut* NextItem() final override
 			{
 				const TIn* const item = source->NextItem();
 
@@ -566,9 +567,9 @@ namespace el1::io::stream
 			std::tuple<TPipes* ...> streams;
 
 			template<std::size_t... Is>
-			const TOut* NextItem(std::index_sequence<Is...>)
+			TOut* NextItem(std::index_sequence<Is...>)
 			{
-				const TOut* item = nullptr;
+				TOut* item = nullptr;
 				#ifdef EL_CC_CLANG
 					#pragma clang diagnostic push
 					#pragma clang diagnostic ignored "-Wunused-value"
@@ -581,7 +582,7 @@ namespace el1::io::stream
 			}
 
 		public:
-			const TOut* NextItem() final override
+			TOut* NextItem() final override
 			{
 				return NextItem(std::make_index_sequence<std::tuple_size<decltype(streams)>::value>{});
 			}
@@ -598,15 +599,15 @@ namespace el1::io::stream
 
 		protected:
 			TPipe* const source;
-			TTransformator transformator;
+			std::remove_reference_t<TTransformator> transformator;
 
 		public:
-			const TOut* NextItem() final override
+			TOut* NextItem() final override
 			{
 				return transformator.NextItem(source);
 			}
 
-			TTransformPipe(TPipe* const source, TTransformator transformator) : source(source), transformator(transformator)
+			TTransformPipe(TPipe* const source, TTransformator&& transformator) : source(source), transformator(std::move(transformator))
 			{
 			}
 	};
@@ -721,7 +722,7 @@ namespace el1::io::stream
 	/**********************************************/
 
 	template<typename TPipe, typename TOut>
-	usys_t TPipeSource<TPipe, TOut, true>::Read(TOut* const arr_items, const usys_t n_items_max)
+	usys_t TPipeSource<TPipe, TOut, true>::Read(TOutBase* const arr_items, const usys_t n_items_max)
 	{
 		TPipe* source = static_cast<TPipe*>(this);
 		for(usys_t i = 0; i < n_items_max; i++)
