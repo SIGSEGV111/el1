@@ -19,9 +19,13 @@
 // only enable pure on g++, but NOT on clang++
 // since clang++ does NOT allow pure functions to throw exceptions
 #ifdef EL_CC_GCC
+	#define EL_NO_SIDE_EFFECTS	__attribute__((pure))
+	#define EL_NO_GLOBAL_MEMORY	__attribute__((const))
 	#define	EL_LIKELY(expr)		__builtin_expect((expr), true)
 	#define	EL_UNLIKELY(expr)	__builtin_expect((expr), false)
 #else
+	#define EL_NO_SIDE_EFFECTS
+	#define EL_NO_GLOBAL_MEMORY
 	#define	EL_LIKELY(expr)		(expr)
 	#define	EL_UNLIKELY(expr)	(expr)
 #endif
@@ -39,7 +43,7 @@
 	#error "unsupported compiler"
 #endif
 
-#define EL_GETTER  EL_WARN_UNUSED_RESULT
+#define EL_GETTER EL_NO_SIDE_EFFECTS EL_WARN_UNUSED_RESULT
 #define EL_SETTER
 
 namespace el1

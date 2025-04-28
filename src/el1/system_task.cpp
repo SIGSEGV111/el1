@@ -499,7 +499,7 @@ namespace el1::system::task
 		TFiber::Schedule();
 	}
 
-	void SwapRegisters(context_registers_t* const current, const context_registers_t* const target) noexcept;
+	extern "C" void SwapRegisters(context_registers_t* const current, const context_registers_t* const target) noexcept asm ("__SwapRegisters__");
 
 	void TFiber::SwitchTo()
 	{
