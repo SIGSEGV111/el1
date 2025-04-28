@@ -9,7 +9,9 @@ endif
 
 VERSION ?= *DEVELOPMENT SNAPSHOT*
 EL1_CXX ?= $(shell which clang++)
-EL1_CXXFLAGS := "-DVERSION=\"$(VERSION)\"" -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension -DEL1_WITH_POSTGRES -std=c++20 -O3 -g -flto -fPIC $(shell pkg-config --cflags libpq) $(shell pkg-config --cflags krb5) $(shell pkg-config --cflags zlib) $(CXXFLAGS)
+EL1_COMMON_CXXFLAGS := -Wall -Wextra -Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension -DEL1_WITH_POSTGRES -std=c++20 -O3 -g -flto $(CXXFLAGS)
+EL1_LIB_CXXFLAGS := $(EL1_COMMON_CXXFLAGS) "-DVERSION=\"$(VERSION)\""  -fPIC $(shell pkg-config --cflags libpq) $(shell pkg-config --cflags krb5) $(shell pkg-config --cflags zlib)
+EL1_EXE_CXXFLAGS := $(EL1_COMMON_CXXFLAGS) -fPIE
 LIB_LDFLAGS := $(shell pkg-config --libs libpq) $(shell pkg-config --libs krb5) $(shell pkg-config --libs zlib) -Wl,--no-undefined
 
 OUT_DIR ?= gen
@@ -34,7 +36,8 @@ TEST_HEADERS := $(wildcard src/el1/test/*.hpp)
 TEST_OBJECTS := $(patsubst src/el1/test/%.cpp,$(OUT_DIR)/test/%.o,$(TEST_SOURCES))
 
 export EL1_CXX
-export EL1_CXXFLAGS
+export EL1_LIB_CXXFLAGS
+export CXXFLAGS=-fPIC -fPIE
 
 all: $(LIB_NAME) $(SUPER_HEADER)
 
@@ -49,11 +52,11 @@ $(SUPER_HEADER): $(LIB_HEADERS)
 
 $(OUT_DIR)/%.o: src/el1/%.cpp
 	@mkdir -p $(@D)
-	$(EL1_CXX) $(EL1_CXXFLAGS) -MMD -MP -c -o $@ $<
+	$(EL1_CXX) $(EL1_LIB_CXXFLAGS) -MMD -MP -c -o $@ $<
 
 $(OUT_DIR)/test/%.o: src/el1/test/%.cpp
 	@mkdir -p $(@D)
-	$(EL1_CXX) $(EL1_CXXFLAGS) -I submodules/googletest/googletest/include -I src -MMD -MP -c -o $@ $<
+	$(EL1_CXX) $(EL1_LIB_CXXFLAGS) -I submodules/googletest/googletest/include -I src -MMD -MP -c -o $@ $<
 
 $(OUT_DIR)/gtest/lib/libgtest.a:
 	@mkdir -p "$(OUT_DIR)/gtest"
@@ -61,11 +64,11 @@ $(OUT_DIR)/gtest/lib/libgtest.a:
 
 $(LIB_NAME): $(LIB_OBJECTS)
 	@mkdir -p $(@D)
-	$(EL1_CXX) -fuse-ld=lld $(EL1_CXXFLAGS) -o $@ $(LIB_OBJECTS) $(LIB_LDFLAGS) -shared
+	$(EL1_CXX) -fuse-ld=lld $(EL1_LIB_CXXFLAGS) -o $@ $(LIB_OBJECTS) $(LIB_LDFLAGS) -shared
 
 $(TEST_NAME): $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(LIB_NAME)
 	@mkdir -p $(@D)
-	$(EL1_CXX) $(EL1_CXXFLAGS) -o $@ $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(OUT_DIR)/gtest/lib/libgtest_main.a -L$(OUT_DIR) -lel1 $(EXEFLAGS)
+	$(EL1_CXX) -fPIE $(EL1_EXE_CXXFLAGS) -o $@ $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(OUT_DIR)/gtest/lib/libgtest_main.a -L$(OUT_DIR) -lel1 $(EXEFLAGS)
 
 $(ARCH_RPM_NAME) $(SRC_RPM_NAME): $(LIB_SOURCES) $(LIB_HEADERS) $(SERVICE_NAME) $(SPEC_NAME) $(CONF_NAME) Makefile
 	easy-rpm.sh --debug --name el1 --spec $(SPEC_NAME) --outdir . --plain --arch "$(ARCH)" -- $^
