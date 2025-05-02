@@ -118,7 +118,7 @@ namespace el1::io::collection::map
 			TValue& Set(kv_pair_t&& pair);
 
 			// adds a default value if the key does not exist yet, otherwise the existing value is returned
-			TValue& Get(const TKey& key, const TValue& _default);
+			TValue& GetOrInsertDefault(const TKey& key, const TValue& _default);
 
 			// removes the specified key (along with its value) from the map; return false if the key did not exist; true otherwise
 			bool Remove(const TKey& key);
@@ -348,7 +348,7 @@ namespace el1::io::collection::map
 	}
 
 	template<typename TKey, typename TValue>
-	TValue& TSortedMap<TKey, TValue>::Get(const TKey& key, const TValue& _default)
+	TValue& TSortedMap<TKey, TValue>::GetOrInsertDefault(const TKey& key, const TValue& _default)
 	{
 		TValue* value = this->Get(key);
 		if(value == nullptr)
