@@ -80,6 +80,9 @@ namespace el1::io::collection::map
 			// receives the value associated with the specified key; return nullptr if the key does not exist
 			const TValue* Get(const TKey& key) const EL_GETTER;
 
+			// receives the value associated with the specified key; return nullptr if the key does not exist
+			const TValue& GetWithDefault(const TKey& key, const TValue& _default) const EL_GETTER;
+
 			bool Contains(const TKey& key) const EL_GETTER;
 
 			// adds a new key/value pair to the map; if the key already exists it will throw an exception
@@ -215,6 +218,13 @@ namespace el1::io::collection::map
 			return nullptr;
 		else
 			return &this->items[index].value;
+	}
+
+	template<typename TKey, typename TValue>
+	const TValue& TSortedMap<TKey, const TValue>::GetWithDefault(const TKey& key, const TValue& _default) const
+	{
+		const TValue* const value = Get(key);
+		return value == nullptr ? _default : *value;
 	}
 
 	template<typename TKey, typename TValue>
