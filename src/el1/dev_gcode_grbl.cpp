@@ -503,11 +503,11 @@ namespace el1::dev::gcode::grbl
 				return New<TToolChangeCommand, ICommand>(*state, fields);
 			}
 			else
-				EL_THROW(TException, TString::Format("unknown g-code %q in line %d", str_cmd, idx_line));
+				EL_THROW(TException, TString::Format("unknown g-code %q in line %d", str_cmd, state->idx_line));
 		}
 		catch(const IException& e)
 		{
-			EL_FORWARD(e, TException, TString::Format("while processing line %d", idx_line));
+			EL_FORWARD(e, TException, TString::Format("while processing line %d", state->idx_line));
 		}
 	}
 }

@@ -70,7 +70,7 @@ $(TEST_NAME): $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(LIB_NAME) $(LIB_
 	./support/generate-testdata.sh
 	$(CXX) $(EXE_CXXFLAGS) -o $@ $(TEST_OBJECTS) $(OUT_DIR)/gtest/lib/libgtest.a $(OUT_DIR)/gtest/lib/libgtest_main.a -L$(OUT_DIR) -lel1 $(EXEFLAGS)
 
-$(ARCH_RPM_NAME) $(SRC_RPM_NAME): $(LIB_SOURCES) $(LIB_HEADERS) $(SERVICE_NAME) $(SPEC_NAME) $(CONF_NAME) Makefile
+$(ARCH_RPM_NAME) $(SRC_RPM_NAME): $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile
 	easy-rpm.sh --debug --name el1 --spec $(SPEC_NAME) --outdir . --plain --arch "$(ARCH)" -- $^
 
 install: $(LIB_NAME) $(LIB_HEADERS) $(SUPER_HEADER)

@@ -26,6 +26,7 @@ namespace
 		state.fr_cmd = 0;
 		state.fr_drill_return = 0;
 		state.spindle_rpm = -1;
+		state.idx_line = 0;
 		state.spindle_dir = ERotation::CLOCKWISE;
 		state.spindle_on = false;
 		state.plane = EPlane::XY;
@@ -34,6 +35,7 @@ namespace
 		state.drill_return = EDrillReturn::PREVIOUS_Z;
 		state.idx_wcs = 0;
 		state.idx_tool = 0;
+		state.eof = false;
 		return state;
 	}
 

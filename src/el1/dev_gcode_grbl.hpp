@@ -112,6 +112,7 @@ namespace el1::dev::gcode::grbl
 		TDecimal fr_cmd;	///< Current feedrate for G1 (mm/min).
 		TDecimal fr_drill_return;	///< Feedrate for G98/G99 return (mm/min).
 		TDecimal spindle_rpm;
+		unsigned idx_line;
 		bool spindle_on;
 		ERotation spindle_dir;
 		EPlane plane;	///< Current arc plane (G17–G19).
@@ -120,6 +121,7 @@ namespace el1::dev::gcode::grbl
 		EDrillReturn drill_return;
 		u8_t idx_wcs;	///< Active WCS index.
 		u8_t idx_tool;	///< Active tool number.
+		bool eof;
 	};
 
 	/**
@@ -398,8 +400,6 @@ namespace el1::dev::gcode::grbl
 			TList<std::unique_ptr<ICommand>> out_queue;
 			TOut tmp;
 			machine_state_t* state;
-			unsigned idx_line;
-			bool eof;
 
 			std::unique_ptr<ICommand> ParseCommand(const TString& line);
 
@@ -409,7 +409,7 @@ namespace el1::dev::gcode::grbl
 				if(EL_UNLIKELY(out_queue.Count() > 0))
 					return &(tmp = out_queue.PopHead());
 
-				if(EL_UNLIKELY(eof))
+				if(EL_UNLIKELY(state->eof))
 					return nullptr;
 
 				TString str_cmd;
@@ -419,7 +419,7 @@ namespace el1::dev::gcode::grbl
 					if(EL_UNLIKELY(line == nullptr))
 						return nullptr;
 
-					idx_line++;
+					state->idx_line++;
 					line->Trim();
 					if(EL_LIKELY(line->Length() > 0))
 					{
@@ -454,7 +454,7 @@ namespace el1::dev::gcode::grbl
 				tmp = ParseCommand(str_cmd);
 
 				if(EL_UNLIKELY(dynamic_cast<TEndOfProgramCommand*>(tmp.get()) != nullptr))
-					eof = true;
+					state->eof = true;
 
 				if(EL_LIKELY(out_queue.Count() == 0))
 					return &tmp;
@@ -465,7 +465,7 @@ namespace el1::dev::gcode::grbl
 			TGrblParser(TGrblParser&&) = default;
 			TGrblParser(const TGrblParser&) = delete;
 
-			TGrblParser(machine_state_t* const state) : state(state), idx_line(0), eof(false)
+			TGrblParser(machine_state_t* const state) : state(state)
 			{
 			}
 	};
