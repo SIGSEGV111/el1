@@ -1038,9 +1038,9 @@ namespace el1::io::text::string
 		usys_t n_replace = 0;
 		usys_t pos_current = chars.AbsoluteIndex(start, false);
 
-		const ssys_t displacement = ((ssys_t)substitute.Length() - (ssys_t)needle.Length()) * (reverse ? -1 : 1);
+		const ssys_t displacement = reverse ? -1 : ((ssys_t)substitute.Length() - (ssys_t)needle.Length() + 1);
 
-		while(n_replace < n_max_replacements)
+		while(n_replace < n_max_replacements && pos_current < Length())
 		{
 			const usys_t pos_found = Find(needle, pos_current, reverse);
 			if(pos_found == NEG1)

@@ -257,6 +257,18 @@ namespace
 
 		{
 			TString s = "test";
+			s.Replace("t", "ttt");
+			EXPECT_EQ(s, "tttesttt");
+		}
+
+		{
+			TString s = "test";
+			s.Replace("t", "t");
+			EXPECT_EQ(s, "test");
+		}
+
+		{
+			TString s = "test";
 			EXPECT_THROW(s.Replace("", "test"), TInvalidArgumentException);
 		}
 	}
