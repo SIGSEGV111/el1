@@ -83,7 +83,7 @@ namespace el1::dev::gcode::grbl
 	};
 
 	using TArgumentMap = TSortedMap<TUTF32, TDecimal>;
-	struct machine_state_t;
+	struct parser_state_t;
 
 	struct TDecimalVector : math::vector::TVector<TDecimal, 3>
 	{
@@ -93,19 +93,18 @@ namespace el1::dev::gcode::grbl
 		template<typename ... A>
 		TDecimalVector(A ... a) : math::vector::TVector<TDecimal, 3>(a...) {}
 
-		void UpdatePosition(machine_state_t& state);
+		void UpdatePosition(parser_state_t& state);
 	};
 
 	/**
 	 * @brief Current machine state snapshot.
 	 */
-	struct machine_state_t
+	struct parser_state_t
 	{
 		TString comment;	///< Active comment, if applicable.
 		TDecimalVector wcs[6];		///< Work coordinate offsets G54–G59.
 		TDecimal fr_rapid_xy;
 		TDecimal fr_rapid_z;
-		TDecimalVector fr_accel;	///< Max acceleration per axis (mm/min²).
 		TDecimalVector n_stp_mm;	///< Number of motor steps per mm.
 		TDecimalVector tool_change_pos;	///< Tool change parking position.
 		TDecimalVector pos;	///< Current machine position.
@@ -159,7 +158,7 @@ namespace el1::dev::gcode::grbl
 	 */
 	struct TLinearMoveCommand : IMoveCommand
 	{
-		TLinearMoveCommand(machine_state_t& state, TList<TString>& fields);
+		TLinearMoveCommand(parser_state_t& state, TList<TString>& fields);
 		TLinearMoveCommand(TDecimalVector target, TDecimal feedrate);
 		TString ToString() const final override;
 	};
@@ -174,7 +173,7 @@ namespace el1::dev::gcode::grbl
 		EPlane plane;	///< Plane of the arc.
 		ERotation rot;	///< Arc direction.
 
-		TArcMoveCommand(machine_state_t& state, TList<TString>& fields);
+		TArcMoveCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -185,7 +184,7 @@ namespace el1::dev::gcode::grbl
 	{
 		TTime time;
 
-		TDwellCommand(machine_state_t& state, TList<TString>& fields);
+		TDwellCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -197,7 +196,7 @@ namespace el1::dev::gcode::grbl
 		TDecimalVector origin; ///< New WCS origin in machine coordinates.
 		u8_t preset_index; ///< Index of WCS preset (G54=0 ... G59=5).
 
-		TSetWorkCoordOffsetCommand(machine_state_t& state, TList<TString>& fields);
+		TSetWorkCoordOffsetCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -208,7 +207,7 @@ namespace el1::dev::gcode::grbl
 	{
 		EPlane plane;
 
-		TPlaneSelectCommand(machine_state_t& state, TList<TString>& fields);
+		TPlaneSelectCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -219,7 +218,7 @@ namespace el1::dev::gcode::grbl
 	{
 		EUnit unit;
 
-		TUnitSelectCommand(machine_state_t& state, TList<TString>& fields);
+		TUnitSelectCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -244,7 +243,7 @@ namespace el1::dev::gcode::grbl
 		ETrigger trigger;
 		bool error_on_miss; ///< True = alarm if probe not triggered.
 
-		TProbeCommand(machine_state_t& state, TList<TString>& fields);
+		TProbeCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -255,7 +254,7 @@ namespace el1::dev::gcode::grbl
 	{
 		u8_t idx_wcs;
 
-		TSelectWorkCoordOffsetCommand(machine_state_t& state, TList<TString>& fields);
+		TSelectWorkCoordOffsetCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -264,7 +263,7 @@ namespace el1::dev::gcode::grbl
 	 */
 	struct TCancelActiveCycleCommand : ICommand
 	{
-		TCancelActiveCycleCommand(machine_state_t& state, TList<TString>& fields);
+		TCancelActiveCycleCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -277,7 +276,7 @@ namespace el1::dev::gcode::grbl
 		TDecimal fr_down;	// feedrate for the downward motion
 		TDecimal retract_height;
 
-		TDrillCommand(machine_state_t& state, TList<TString>& fields);
+		TDrillCommand(parser_state_t& state, TList<TString>& fields);
 	};
 
 	/**
@@ -287,7 +286,7 @@ namespace el1::dev::gcode::grbl
 	{
 		ECoordMode mode;
 
-		TSelectCoordModeCommand(machine_state_t& state, TList<TString>& fields);
+		TSelectCoordModeCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -298,7 +297,7 @@ namespace el1::dev::gcode::grbl
 	{
 		EDrillReturn drill_return;
 
-		TSetDrillReturnCommand(machine_state_t& state, TList<TString>& fields);
+		TSetDrillReturnCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -309,7 +308,7 @@ namespace el1::dev::gcode::grbl
 	{
 		bool optional;
 
-		TPauseCommand(machine_state_t& state, TList<TString>& fields);
+		TPauseCommand(parser_state_t& state, TList<TString>& fields);
 		TPauseCommand(bool optional) : optional(optional) {}
 		TString ToString() const final override;
 	};
@@ -319,7 +318,7 @@ namespace el1::dev::gcode::grbl
 	 */
 	struct TEndOfProgramCommand : ICommand
 	{
-		TEndOfProgramCommand(machine_state_t& state, TList<TString>& fields);
+		TEndOfProgramCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -333,7 +332,7 @@ namespace el1::dev::gcode::grbl
 		TDecimal rpm;
 		bool spindle_on;
 
-		TSpindelDirCommand(machine_state_t& state, TList<TString>& fields);
+		TSpindelDirCommand(parser_state_t& state, TList<TString>& fields);
 		TSpindelDirCommand(ERotation dir, TDecimal rpm, bool spindle_on);
 		TString ToString() const final override;
 	};
@@ -345,7 +344,7 @@ namespace el1::dev::gcode::grbl
 	{
 		u32_t index; ///< Tool index as reported by FreeCAD (Tn).
 
-		TToolChangeCommand(machine_state_t& state, TList<TString>& fields);
+		TToolChangeCommand(parser_state_t& state, TList<TString>& fields);
 	};
 
 	/**
@@ -367,13 +366,13 @@ namespace el1::dev::gcode::grbl
 
 		ECode code;
 
-		TRealtimeCommand(machine_state_t& state, TList<TString>& fields);
+		TRealtimeCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
 	struct TSetVariableCommand : ICommand, kv_pair_tt<u32_t, TDecimal>
 	{
-		TSetVariableCommand(machine_state_t& state, TList<TString>& fields);
+		TSetVariableCommand(parser_state_t& state, TList<TString>& fields);
 		TString ToString() const final override;
 	};
 
@@ -399,7 +398,7 @@ namespace el1::dev::gcode::grbl
 
 			TList<std::unique_ptr<ICommand>> out_queue;
 			TOut tmp;
-			machine_state_t* state;
+			parser_state_t* state;
 
 			std::unique_ptr<ICommand> ParseCommand(const TString& line);
 
@@ -465,7 +464,7 @@ namespace el1::dev::gcode::grbl
 			TGrblParser(TGrblParser&&) = default;
 			TGrblParser(const TGrblParser&) = delete;
 
-			TGrblParser(machine_state_t* const state) : state(state)
+			TGrblParser(parser_state_t* const state) : state(state)
 			{
 			}
 	};

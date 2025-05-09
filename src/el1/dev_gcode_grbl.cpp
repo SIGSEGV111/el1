@@ -52,7 +52,7 @@ namespace el1::dev::gcode::grbl
 		}
 	}
 
-	void TDecimalVector::UpdatePosition(machine_state_t& state)
+	void TDecimalVector::UpdatePosition(parser_state_t& state)
 	{
 		const TDecimalVector& ref = state.coord_mode == ECoordMode::ABSOLUTE ? state.wcs[state.idx_wcs] : (state.coord_mode == ECoordMode::RELATIVE ? state.pos : TDecimalVector());
 
@@ -112,7 +112,7 @@ namespace el1::dev::gcode::grbl
 		return TString::Join(commands.Pipe().Map([](auto& cmd) { return cmd->ToString(); }).Collect(), "\n");
 	}
 
-	TLinearMoveCommand::TLinearMoveCommand(machine_state_t& state, TList<TString>& fields)
+	TLinearMoveCommand::TLinearMoveCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		auto args = ParseArgs(fields, 1, "", "XYZF");
 		target = TDecimalVector(state.unit, "XYZ", args);
@@ -139,7 +139,7 @@ namespace el1::dev::gcode::grbl
 		return TString::Format("G01 X%d Y%d Z%d F%d", target[0], target[1], target[2], feedrate);
 	}
 
-	TArcMoveCommand::TArcMoveCommand(machine_state_t& state, TList<TString>& fields)
+	TArcMoveCommand::TArcMoveCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		auto args = ParseArgs(fields, 1, "", "XYZFIJK");
 		start = state.pos;
@@ -157,7 +157,7 @@ namespace el1::dev::gcode::grbl
 		return TString::Format("G03 X%d Y%d Z%d I%d J%d K%d F%d", target[0], target[1], target[2], rel_center[0], rel_center[1], rel_center[2], feedrate);
 	}
 
-	TDwellCommand::TDwellCommand(machine_state_t& state, TList<TString>& fields)
+	TDwellCommand::TDwellCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		auto args = ParseArgs(fields, 1, "P", "");
 		time = args['P'].ToDouble() / 1000.0;
@@ -168,7 +168,7 @@ namespace el1::dev::gcode::grbl
 		return TString::Format("G04 P%d", time.ConvertToI(system::time::EUnit::MILLISECONDS));
 	}
 
-	TSetWorkCoordOffsetCommand::TSetWorkCoordOffsetCommand(machine_state_t& state, TList<TString>& fields)
+	TSetWorkCoordOffsetCommand::TSetWorkCoordOffsetCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		auto args = ParseArgs(fields, 1, "LP", "XYZ");
 		preset_index = (u8_t)args['P'].ToUnsignedInt();
@@ -185,7 +185,7 @@ namespace el1::dev::gcode::grbl
 		return TString::Format("G10 L2 P%d X%d Y%d Z%d", preset_index, origin[0], origin[1], origin[2]);
 	}
 
-	TPlaneSelectCommand::TPlaneSelectCommand(machine_state_t& state, TList<TString>& fields)
+	TPlaneSelectCommand::TPlaneSelectCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		if(fields[0] == "G17")
 			plane = EPlane::XY;
@@ -209,7 +209,7 @@ namespace el1::dev::gcode::grbl
 		EL_THROW(TLogicException);
 	}
 
-	TUnitSelectCommand::TUnitSelectCommand(machine_state_t& state, TList<TString>& fields)
+	TUnitSelectCommand::TUnitSelectCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		if(fields[0] == "G20")
 			unit = EUnit::IMPERIAL;
@@ -225,7 +225,7 @@ namespace el1::dev::gcode::grbl
 		return TString();
 	}
 
-	TProbeCommand::TProbeCommand(machine_state_t& state, TList<TString>& fields)
+	TProbeCommand::TProbeCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		trigger = MatchStringList(fields[0], "G38.2", "G38.3") ? ETrigger::CONTACT : ETrigger::CLEAR;
 		error_on_miss = MatchStringList(fields[0], "G38.2", "G38.4");
@@ -246,7 +246,7 @@ namespace el1::dev::gcode::grbl
 		return TString::Format("%s X%d Y%d Z%d F%d", code, target[0], target[1], target[2], feedrate);
 	}
 
-	TSelectWorkCoordOffsetCommand::TSelectWorkCoordOffsetCommand(machine_state_t& state, TList<TString>& fields)
+	TSelectWorkCoordOffsetCommand::TSelectWorkCoordOffsetCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		fields[0].Cut(1,0);
 		idx_wcs = fields[0].ToInteger() - 54;
@@ -259,7 +259,7 @@ namespace el1::dev::gcode::grbl
 		return TString();
 	}
 
-	TCancelActiveCycleCommand::TCancelActiveCycleCommand(machine_state_t& state, TList<TString>& fields)
+	TCancelActiveCycleCommand::TCancelActiveCycleCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		// nothing do do
 	}
@@ -269,7 +269,7 @@ namespace el1::dev::gcode::grbl
 		return TString();
 	}
 
-	TDrillCommand::TDrillCommand(machine_state_t& state, TList<TString>& fields)
+	TDrillCommand::TDrillCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		auto args = ParseArgs(fields, 1, "", "XYZFR");
 		drill_down_pos = TDecimalVector(state.unit, "XYZ", args);
@@ -292,7 +292,7 @@ namespace el1::dev::gcode::grbl
 		));
 	}
 
-	TSelectCoordModeCommand::TSelectCoordModeCommand(machine_state_t& state, TList<TString>& fields)
+	TSelectCoordModeCommand::TSelectCoordModeCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		state.coord_mode = mode = fields[0] == "G90" ? ECoordMode::ABSOLUTE : ECoordMode::RELATIVE;
 	}
@@ -302,7 +302,7 @@ namespace el1::dev::gcode::grbl
 		return TString();
 	}
 
-	TSetDrillReturnCommand::TSetDrillReturnCommand(machine_state_t& state, TList<TString>& fields)
+	TSetDrillReturnCommand::TSetDrillReturnCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		state.drill_return = drill_return = fields[0] == "G98" ? EDrillReturn::R_LEVEL : EDrillReturn::PREVIOUS_Z;
 	}
@@ -312,7 +312,7 @@ namespace el1::dev::gcode::grbl
 		return TString();
 	}
 
-	TPauseCommand::TPauseCommand(machine_state_t& state, TList<TString>& fields)
+	TPauseCommand::TPauseCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		optional = MatchStringList(fields[0], "M0", "M00");
 	}
@@ -322,7 +322,7 @@ namespace el1::dev::gcode::grbl
 		return optional ? "M00" : "M01";
 	}
 
-	TEndOfProgramCommand::TEndOfProgramCommand(machine_state_t& state, TList<TString>& fields)
+	TEndOfProgramCommand::TEndOfProgramCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		// nothing to do
 	}
@@ -332,7 +332,7 @@ namespace el1::dev::gcode::grbl
 		return "M02";
 	}
 
-	TSpindelDirCommand::TSpindelDirCommand(machine_state_t& state, TList<TString>& fields)
+	TSpindelDirCommand::TSpindelDirCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		if(MatchStringList(fields[0], "M5", "M05"))
 		{
@@ -364,7 +364,7 @@ namespace el1::dev::gcode::grbl
 			return "M05";
 	}
 
-	TToolChangeCommand::TToolChangeCommand(machine_state_t& state, TList<TString>& fields)
+	TToolChangeCommand::TToolChangeCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		auto args = ParseArgs(fields, 1, "", "T");
 
@@ -394,7 +394,7 @@ namespace el1::dev::gcode::grbl
 		));
 	}
 
-	TRealtimeCommand::TRealtimeCommand(machine_state_t& state, TList<TString>& fields)
+	TRealtimeCommand::TRealtimeCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		EL_NOT_IMPLEMENTED;
 	}
@@ -404,7 +404,7 @@ namespace el1::dev::gcode::grbl
 		EL_NOT_IMPLEMENTED;
 	}
 
-	TSetVariableCommand::TSetVariableCommand(machine_state_t& state, TList<TString>& fields)
+	TSetVariableCommand::TSetVariableCommand(parser_state_t& state, TList<TString>& fields)
 	{
 		EL_NOT_IMPLEMENTED;
 	}

@@ -13,13 +13,12 @@ namespace
 	using namespace el1::io::file;
 	using namespace el1::io::text::encoding::utf8;
 
-	static machine_state_t InitState()
+	static parser_state_t InitState()
 	{
-		machine_state_t state;
+		parser_state_t state;
 		state.comment = "";
 		state.fr_rapid_xy = 2000;
 		state.fr_rapid_z = 200;
-		state.fr_accel = {100,100,100};
 		state.n_stp_mm = {40,40,100};
 		state.tool_change_pos = {0,0,0};
 		state.pos = {0,0,0};
