@@ -727,7 +727,7 @@ namespace el1::io::stream
 		TPipe* source = static_cast<TPipe*>(this);
 		for(usys_t i = 0; i < n_items_max; i++)
 		{
-			const TOut* const item = source->NextItem();
+			auto* const item = source->NextItem();
 			if(item == nullptr)
 				return i;
 			arr_items[i] = *item;
@@ -749,7 +749,7 @@ namespace el1::io::stream
 			usys_t n_read = 0;
 			for(; n_read < sz_buffer; n_read++)
 			{
-				const TOut* const item = source->NextItem();
+				auto* const item = source->NextItem();
 				if(item == nullptr)
 					break;
 
@@ -772,7 +772,7 @@ namespace el1::io::stream
 		usys_t i = 0;
 		for(;;)
 		{
-			const TOut* const item = source->NextItem();
+			auto* const item = source->NextItem();
 			if(item == nullptr)
 				return i;
 			list.Append(*item);
@@ -788,7 +788,7 @@ namespace el1::io::stream
 		TPipe* source = static_cast<TPipe*>(this);
 		for(;;)
 		{
-			const TOut* const item = source->NextItem();
+			auto* const item = source->NextItem();
 			if(item == nullptr)
 				return;
 			callable(*item);
@@ -804,7 +804,7 @@ namespace el1::io::stream
 		TPipe* source = static_cast<TPipe*>(this);
 		for(;;)
 		{
-			const TOut* const item = source->NextItem();
+			auto* const item = source->NextItem();
 			if(item == nullptr)
 				break;
 
@@ -830,7 +830,7 @@ namespace el1::io::stream
 	const TOut& IPipe<TPipe, TOut>::First()
 	{
 		TPipe* source = static_cast<TPipe*>(this);
-		const TOut* const item = source->NextItem();
+		auto* const item = source->NextItem();
 		EL_ERROR(item == nullptr, TStreamDryException);
 		return *item;
 	}
