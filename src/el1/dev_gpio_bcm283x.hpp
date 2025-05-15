@@ -40,20 +40,33 @@ namespace el1::dev::gpio::bcm283x
 
 	class TBCM283X;
 
-	enum class ECPU : u8_t
+	enum class ESOC : u8_t
 	{
 		BCM283X = 0,
-		BCM2711 = 1
+		BCM2711 = 1,
+		BCM2712 = 2
+	};
+
+	enum class ECPU : u8_t
+	{
+		ARM1176JZF_S = 0,   // BCM2835: ARM11
+		CortexA7     = 1,   // BCM2836: ARMv7
+		CortexA53    = 2,   // BCM2837: ARMv8
+		CortexA72    = 3,   // BCM2711: ARMv8
+		CortexA76    = 4    // BCM2712: ARMv8.2
 	};
 
 	struct model_config_t
 	{
 		const char* const name;
-		const usys_t addr;
-		ECPU cpu;
+		const u32_t peri_base;
+		const ESOC soc;
+		const ECPU cpu;
 	};
 
-	const model_config_t* DetectModel();
+	extern const model_config_t MODEL_CONFIG[];
+	const model_config_t* DetectModel();	// may return nullptr
+	const model_config_t* DetectModelThrow();	// returns a valid pointer or throws an exception
 
 	static const u8_t NUM_GPIO = 54;
 
@@ -97,24 +110,72 @@ namespace el1::dev::gpio::bcm283x
 		friend class TPin;
 
 		protected:
+			// Bitmask tracking which GPIO pins have been claimed
 			u64_t claimed_pins;
-			const model_config_t* const model;
-			TFile file;
-			TMapping map;
 
+			// Pointer to board-specific peripheral base addresses and offsets
+			const model_config_t* const model;
+
+			// File descriptor wrapper for /dev/mem access
+			TFile file;
+
+			// Memory mapping for GPIO registers
+			TMapping gpio_map;
+
+			// Memory mapping for system timer registers
+			TMapping timer_map;
+
+			// Private constructor for singleton pattern
 			TBCM283X();
 
 		public:
+			// Get the board model configuration
 			const model_config_t& Model() const EL_GETTER { return *model; }
 
+			// Claim exclusive access to a GPIO pin and return a pin interface
 			std::unique_ptr<IPin> ClaimPin(const usys_t index) final override;
 
-			// bypasses TPin logic, do not use unless you know what your are doing
+			// ----------------------------------------------------------------
+			// Low-level register access methods (only use when you know what you are doing!)
+			// These methods bypass TPin validation and state tracking.
+			// ----------------------------------------------------------------
+
+			// Configure pull-up/down resistor for a single GPIO pin
+			// index: GPIO pin number
+			// pull: desired pull state (DISABLED, UP, DOWN)
 			void _PullResistor(const unsigned index, const EPull pull);
 
-			static TBCM283X* Instance();
+			// Get pointer to the GPSET register block for a given 32-bit bank.
+			// idx: 0 for pins 0–31, 1 for pins 32–53.
+			// Write a 1 bit to set a pin high.
+			volatile u32_t* _Set(const u8_t idx) EL_SETTER;
 
-			virtual ~TBCM283X() {}
+			// Get pointer to the GPCLR register block for a given 32-bit bank.
+			// idx: 0 for pins 0–31, 1 for pins 32–53.
+			// Write a 1 bit to clear a pin (set low).
+			volatile u32_t* _Clear(const u8_t idx) EL_SETTER;
+
+			// Get pointer to the GPLEV register block for a given 32-bit bank.
+			// idx: 0 for pins 0–31, 1 for pins 32–53.
+			// Read bitmask of current pin levels.
+			volatile const u32_t* _Level(const u8_t idx) const EL_GETTER;
+
+			// ----------------------------------------------------------------
+			// System timer accessors
+			// ----------------------------------------------------------------
+
+			// Get pointer to low 32 bits of the free-running microsecond timer
+			volatile const u32_t* _GpioTimerLow() const EL_GETTER;
+
+			// Get pointer to high 32 bits of the free-running microsecond timer
+			volatile const u32_t* _GpioTimerHigh() const EL_GETTER;
+
+			// Read and return GPIO-timer value
+			TTime GpioTime() const EL_GETTER;
+
+			// Return the singleton instance of this controller
+			static TBCM283X* Instance();
+			virtual ~TBCM283X();
 	};
 }
 
