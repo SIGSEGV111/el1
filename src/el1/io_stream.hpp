@@ -530,11 +530,11 @@ namespace el1::io::stream
 
 
 	template<typename TPipe, typename L>
-	class TMapPipe : public IPipe<TMapPipe<TPipe, L>, std::remove_cv_t<std::remove_reference_t<std::result_of_t<L(const typename TPipe::TOut&)>>>>
+	class TMapPipe : public IPipe<TMapPipe<TPipe, L>, std::remove_cv_t<std::remove_reference_t<std::result_of_t<L(typename TPipe::TOut&)>>>>
 	{
 		public:
 			using TIn = typename TPipe::TOut;
-			using TOut = std::remove_cv_t<std::remove_reference_t<std::result_of_t<L(const TIn&)>>>;
+			using TOut = std::remove_cv_t<std::remove_reference_t<std::result_of_t<L(TIn&)>>>;
 
 		protected:
 			TPipe* source;
@@ -544,7 +544,7 @@ namespace el1::io::stream
 		public:
 			TOut* NextItem() final override
 			{
-				const TIn* const item = source->NextItem();
+				auto item = source->NextItem();
 
 				if(item == nullptr)
 					return nullptr;
@@ -727,7 +727,7 @@ namespace el1::io::stream
 		TPipe* source = static_cast<TPipe*>(this);
 		for(usys_t i = 0; i < n_items_max; i++)
 		{
-			auto* const item = source->NextItem();
+			auto item = source->NextItem();
 			if(item == nullptr)
 				return i;
 			arr_items[i] = *item;
@@ -749,7 +749,7 @@ namespace el1::io::stream
 			usys_t n_read = 0;
 			for(; n_read < sz_buffer; n_read++)
 			{
-				auto* const item = source->NextItem();
+				auto item = source->NextItem();
 				if(item == nullptr)
 					break;
 
@@ -772,7 +772,7 @@ namespace el1::io::stream
 		usys_t i = 0;
 		for(;;)
 		{
-			auto* const item = source->NextItem();
+			auto item = source->NextItem();
 			if(item == nullptr)
 				return i;
 			list.Append(*item);
@@ -788,7 +788,7 @@ namespace el1::io::stream
 		TPipe* source = static_cast<TPipe*>(this);
 		for(;;)
 		{
-			auto* const item = source->NextItem();
+			auto item = source->NextItem();
 			if(item == nullptr)
 				return;
 			callable(*item);
@@ -804,7 +804,7 @@ namespace el1::io::stream
 		TPipe* source = static_cast<TPipe*>(this);
 		for(;;)
 		{
-			auto* const item = source->NextItem();
+			auto item = source->NextItem();
 			if(item == nullptr)
 				break;
 
@@ -830,7 +830,7 @@ namespace el1::io::stream
 	const TOut& IPipe<TPipe, TOut>::First()
 	{
 		TPipe* source = static_cast<TPipe*>(this);
-		auto* const item = source->NextItem();
+		auto item = source->NextItem();
 		EL_ERROR(item == nullptr, TStreamDryException);
 		return *item;
 	}
