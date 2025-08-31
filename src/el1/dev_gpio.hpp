@@ -59,6 +59,8 @@ namespace el1::dev::gpio
 
 		virtual void Commit();
 
+		virtual usys_t Index() const EL_GETTER = 0;
+
 		virtual ~IPin();
 	};
 

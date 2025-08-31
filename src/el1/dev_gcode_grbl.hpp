@@ -105,7 +105,6 @@ namespace el1::dev::gcode::grbl
 		TDecimalVector wcs[6];		///< Work coordinate offsets G54–G59.
 		TDecimal fr_rapid_xy;
 		TDecimal fr_rapid_z;
-		TDecimalVector n_stp_mm;	///< Number of motor steps per mm.
 		TDecimalVector tool_change_pos;	///< Tool change parking position.
 		TDecimalVector pos;	///< Current machine position.
 		TDecimal fr_cmd;	///< Current feedrate for G1 (mm/min).

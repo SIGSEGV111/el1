@@ -102,6 +102,8 @@ namespace el1::dev::gpio::bcm283x
 
 			THandleWaitable& OnInputTrigger() final override;
 
+			usys_t Index() const final override EL_GETTER;
+
 			~TPin();
 	};
 

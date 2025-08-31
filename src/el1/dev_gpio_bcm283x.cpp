@@ -252,6 +252,11 @@ namespace el1::dev::gpio::bcm283x
 		EL_NOT_IMPLEMENTED;
 	}
 
+	usys_t TPin::Index() const
+	{
+		return index;
+	}
+
 	TPin::TPin(TBCM283X* const controller, const u8_t index) : controller(controller), index(index), pull(EPull::UP)
 	{
 		EL_ERROR(index >= NUM_GPIO, TInvalidArgumentException, "index", "index must be < NUM_GPIO");
