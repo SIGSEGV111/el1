@@ -6,7 +6,7 @@ License:        GPLv3
 URL:            https://www.brennecke-it.net
 
 BuildRequires:  clang, go-md2man, krb5-devel, easy-rpm, postgresql-devel, lld, valgrind-devel
-Requires:		krb5-client, libpq5, postgresql
+Requires:		krb5-client, libpq5, postgresql, krb5-devel
 
 %description
 el1 is a C++ Essentials Library focused on IoT and high-level operations.
