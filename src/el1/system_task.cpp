@@ -865,6 +865,7 @@ namespace el1::system::task
 		catch(const IException& e)
 		{
 			proc.Shutdown();
+			(void)proc.Join();
 			if(stdin_feeder.Join())  {}
 			if(stdout_reader.Join()) {}
 			if(stderr_reader.Join()) {}
