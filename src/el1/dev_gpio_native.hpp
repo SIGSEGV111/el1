@@ -18,6 +18,7 @@ namespace el1::dev::gpio::native
 	class TNativeGpioPin : public IPin
 	{
 		private:
+			const usys_t index;
 			TNativeGpioController* const controller;
 			THandleWaitable on_input_trigger;
 			EMode mode;
@@ -48,6 +49,8 @@ namespace el1::dev::gpio::native
 			void Pull(const EPull) final override EL_SETTER;
 
 			THandleWaitable& OnInputTrigger() final override { return on_input_trigger; }
+
+			usys_t Index() const final override EL_GETTER;
 
 			TNativeGpioPin(TNativeGpioController* const controller, const usys_t index);
 			virtual ~TNativeGpioPin();

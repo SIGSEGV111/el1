@@ -115,7 +115,12 @@ namespace el1::dev::gpio::native
 		Configure(this->mode, this->trigger, new_pull, this->debounce_us);
 	}
 
-	TNativeGpioPin::TNativeGpioPin(TNativeGpioController* const controller, const usys_t index) : controller(controller), on_input_trigger({ .read = true, .write = false, .other = false }), mode(EMode::INPUT), trigger(ETrigger::DISABLED), pull(EPull::DISABLED), debounce_us(0)
+	usys_t TNativeGpioPin::Index() const
+	{
+		return index;
+	}
+
+	TNativeGpioPin::TNativeGpioPin(TNativeGpioController* const controller, const usys_t index) : index(index), controller(controller), on_input_trigger({ .read = true, .write = false, .other = false }), mode(EMode::INPUT), trigger(ETrigger::DISABLED), pull(EPull::DISABLED), debounce_us(0)
 	{
 		struct gpio_v2_line_request request = {};
 		request.offsets[0] = index;

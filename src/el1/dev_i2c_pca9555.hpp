@@ -56,6 +56,8 @@ namespace el1::dev::i2c::pca9555
 			// OnInputTrigger() is supported when a IRQ pin is provided to PCA9555
 			system::waitable::TMemoryWaitable<u8_t>& OnInputTrigger() final override EL_GETTER;
 
+			usys_t Index() const final override EL_GETTER;
+
 			TPin(TPCA9555* const controller, const u8_t index);
 			~TPin();
 	};

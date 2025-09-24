@@ -167,6 +167,11 @@ namespace el1::dev::i2c::pca9555
 		return this->waitable;
 	}
 
+	usys_t TPin::Index() const
+	{
+		return index;
+	}
+
 	TPin::TPin(TPCA9555* const controller, const u8_t index) : controller(controller),
 		waitable(controller->reg_ref.arr_input + (index >= 8 ? 1 : 0), &this->state_ref, MakeMask(1, index % 8)),
 		index(index), auto_commit(true), trigger(ETrigger::DISABLED), state_ref(0)
