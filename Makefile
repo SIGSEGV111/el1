@@ -40,7 +40,7 @@ export CXX
 all: $(LIB_NAME) $(SUPER_HEADER)
 
 clean:
-	rm -rf -- $(OUT_DIR)
+	rm -rf -- $(OUT_DIR) *.rpm
 
 $(SUPER_HEADER): $(LIB_HEADERS)
 	@mkdir -p $(@D)
