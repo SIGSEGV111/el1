@@ -132,4 +132,18 @@ namespace
 			TPathArgument(&path, EObjectType::DIRECTORY, ECreateMode::OPEN, 'z', L"path", L"", false, false, L"some path")
 		), TException);
 	}
+
+	TEST(system_cmdline, ParseCmdlineArguments_unknown_path_arg)
+	{
+		TList<const char*> args = { "/path/to/exe", "--path=/etc/passwd", nullptr };
+		TPath path;
+
+		ParseCmdlineArguments(
+			args.Count() - 1,
+			args.ItemPtr(0),
+			TPathArgument(&path, EObjectType::UNKNOWN, ECreateMode::OPEN, 'z', L"path", L"", false, false, L"some path")
+		);
+
+		EXPECT_EQ(path.ToString(), "/etc/passwd");
+	}
 }

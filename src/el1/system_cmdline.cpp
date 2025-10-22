@@ -238,8 +238,10 @@ namespace el1::system::cmdline
 		switch(type)
 		{
 			case EObjectType::NX:
-			case EObjectType::UNKNOWN:
 				return nullptr;
+
+			case EObjectType::UNKNOWN:
+				return "valid path";
 
 			case EObjectType::FILE:
 				return "regular file";
@@ -276,7 +278,13 @@ namespace el1::system::cmdline
 
 		EL_ERROR(create_mode == ECreateMode::EXCLUSIVE && var->Type() != EObjectType::NX, TException, TString::Format("expected to create %q, but it already exists", var->operator TString()));
 
-		EL_ERROR(var->Type() != EObjectType::NX && var->Type() != expected_type, TException, TString::Format("expected %q to be a %s, but it is actually a %s", var->operator TString(), ObjectTypeToString(expected_type), ObjectTypeToString(var->Type())));
+		EL_ERROR(var->Type() != EObjectType::NX && expected_type != EObjectType::UNKNOWN && var->Type() != expected_type,
+				 TException, TString::Format("expected %q to be a %s, but it is actually a %s",
+					var->operator TString(),
+					ObjectTypeToString(expected_type),
+					ObjectTypeToString(var->Type()
+				)
+		));
 	}
 
 	TString TPathArgument::DefaultValue() const
