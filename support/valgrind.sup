@@ -6,44 +6,90 @@
 }
 
 {
-   inet_pton6-1
-   Memcheck:Overlap
-   fun:__memcpy_chk
-   fun:inet_pton6
+	inet_pton6-1
+	Memcheck:Overlap
+	fun:__memcpy_chk
+	fun:inet_pton6
 }
 
 {
-   gss_leak
-   Memcheck:Leak
-   match-leak-kinds: definite
-   fun:calloc
-   fun:gss_acquire_cred_from
-   fun:gss_acquire_cred
+	gss_leak
+	Memcheck:Leak
+	match-leak-kinds: definite
+	fun:calloc
+	fun:gss_acquire_cred_from
+	fun:gss_acquire_cred
 }
 
 {
-   pthread_create_tls
-   Memcheck:Leak
-   match-leak-kinds: possible
-   fun:calloc
-   fun:calloc
-   fun:allocate_dtv
-   fun:_dl_allocate_tls
-   fun:allocate_stack
-   fun:pthread_create@@GLIBC_2.34
+	pthread_create_tls1
+	Memcheck:Leak
+	match-leak-kinds: possible
+	fun:calloc
+	fun:calloc
+	fun:allocate_dtv
+	fun:_dl_allocate_tls
+	fun:allocate_stack
+	fun:pthread_create@@GLIBC_2.34
 }
 
 {
-   libcrypto1
-   Memcheck:Leak
-   match-leak-kinds: definite
-   fun:malloc
-   fun:CRYPTO_malloc
+	libcrypto1
+	Memcheck:Leak
+	match-leak-kinds: definite
+	fun:malloc
+	fun:CRYPTO_malloc
 }
 
 {
-   libcrypto2
-   Memcheck:Leak
-   match-leak-kinds: definite
-   fun:CRYPTO_aligned_alloc
+	libcrypto2
+	Memcheck:Leak
+	match-leak-kinds: definite
+	fun:CRYPTO_aligned_alloc
+}
+
+{
+	gss1
+	Memcheck:Leak
+	match-leak-kinds: definite
+	fun:malloc
+	fun:__vasprintf_internal
+	fun:__asprintf_chk
+	obj:/usr/lib64/libkrb5.so.3.3
+	fun:k5_os_init_context
+	fun:krb5_init_context_profile
+	obj:/usr/lib64/libgssapi_krb5.so.2.2
+}
+
+{
+	libpq2
+	Memcheck:Leak
+	match-leak-kinds: possible
+	fun:malloc
+	fun:_dl_find_object_update
+	fun:dl_open_worker_begin
+	fun:_dl_catch_exception
+	fun:dl_open_worker
+	fun:_dl_catch_exception
+	fun:_dl_open
+	fun:do_dlopen
+	fun:_dl_catch_exception
+	fun:_dl_catch_error
+	fun:dlerror_run
+	fun:__libc_dlopen_mode
+	fun:module_load
+	fun:__nss_module_get_function
+	fun:getaddrinfo
+	fun:PQconnectPoll
+	obj:/usr/lib64/libpq.so.5.18
+}
+
+{
+	pthread_create_tls2
+	Memcheck:Leak
+	match-leak-kinds: possible
+	fun:calloc
+	fun:allocate_dtv
+	fun:_dl_allocate_tls
+	fun:pthread_create@@GLIBC_2.34
 }
