@@ -19,7 +19,6 @@ namespace
 		state.comment = "";
 		state.fr_rapid_xy = 2000;
 		state.fr_rapid_z = 200;
-		state.n_stp_mm = {40,40,100};
 		state.tool_change_pos = {0,0,0};
 		state.pos = {0,0,0};
 		state.fr_cmd = 0;
