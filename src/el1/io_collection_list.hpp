@@ -839,7 +839,7 @@ namespace el1::io::collection::list
 	TList<T>& TList<T>::operator=(const TList& rhs)
 	{
 		EL_ERROR(this == &rhs, TLogicException);
-		EL_ERROR(this->arr_items == rhs.arr_items, TLogicException);
+		EL_ERROR(this->arr_items == rhs.arr_items && rhs.arr_items != nullptr, TLogicException);
 
 		this->Clear();
 		this->CopyConstruct(rhs.arr_items, rhs.n_items);
