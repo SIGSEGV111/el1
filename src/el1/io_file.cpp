@@ -241,11 +241,6 @@ namespace el1::io::file
 		EL_NOT_IMPLEMENTED;
 	}
 
-	void TPath::Delete(const bool recursive) const
-	{
-		EL_NOT_IMPLEMENTED;
-	}
-
 	TPath::TPath(const TString& str) : components(str.Length() == 0 ? TList<TString>() : str.Split(TPath::SEPERATOR))
 	{
 		this->Validate();

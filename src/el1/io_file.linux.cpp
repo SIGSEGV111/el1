@@ -271,7 +271,7 @@ namespace el1::io::file
 		}
 	}
 
-	void TDirectory::Enum(TFunction<bool, const direntry_t&> receiver) const
+	void TDirectory::Enum(TFunction<bool, direntry_t&> receiver) const
 	{
 		TList<byte_t> buffer;
 		buffer.FillInsert(-1, 0, 32 * 1024);

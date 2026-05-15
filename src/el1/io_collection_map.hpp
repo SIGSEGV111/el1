@@ -80,7 +80,7 @@ namespace el1::io::collection::map
 			// receives the value associated with the specified key; return nullptr if the key does not exist
 			const TValue* Get(const TKey& key) const EL_GETTER;
 
-			// receives the value associated with the specified key; return nullptr if the key does not exist
+			// receives the value associated with the specified key; otherwise a default-value is returned, which is NOT inserted
 			const TValue& GetWithDefault(const TKey& key, const TValue& _default) const EL_GETTER;
 
 			bool Contains(const TKey& key) const EL_GETTER;

@@ -58,7 +58,7 @@ namespace el1::io::file
 		UNKNOWN,		// only valid for TDirectory::Enum() (if the file-system did not report the type during enumeration)
 		FILE,			// regular file
 		DIRECTORY,		// directory
-		CHAR_DEVICE,	// character device
+		CHAR_DEVICE ,	// character device
 		BLOCK_DEVICE,	// block device
 		FIFO,			// pipe / fifo
 		SYMLINK,		// symbolic link
@@ -232,7 +232,7 @@ namespace el1::io::file
 
 			// calls receiver for every file found in the path
 			// match_type limits the files returned, if set to NX no filter is applied
-			// unlike TDirectory::Enum() the fields in direntry_t always contain a valid as if QueryInfo() had been called
+			// unlike TDirectory::Enum() the fields in direntry_t are always valid as if QueryInfo() had been called
 			// bool Receiver(const TPath& cwd, const direntry_t& e);
 			u64_t Browse(util::function::TFunction<bool, const TPath&, const direntry_t&> receiver, const bool recursive = false, const EObjectType match_type = EObjectType::NX, const bool include_root = true) const;
 
@@ -322,7 +322,7 @@ namespace el1::io::file
 			// this can be aborted by the receiver by returning false
 			// only direntry_t::name is guaranteed to be valid
 			// fields that have no valid value are set to -1
-			void Enum(util::function::TFunction<bool, const direntry_t&> receiver) const;
+			void Enum(util::function::TFunction<bool, direntry_t&> receiver) const;
 
 			bool Contains(const TString& name) const;
 			bool IsRoot() const;

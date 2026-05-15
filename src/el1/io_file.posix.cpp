@@ -122,22 +122,16 @@ namespace el1::io::file
 		if(recursive)
 		{
 			char* cstr = (char*)(const char*)*this;
-			TList<usys_t> pos;
 
 			for(usys_t i = 0; cstr[i] != 0; i++)
-				if(cstr[i] == '/')
+				if(cstr[i] == '/' && i > 0)
 				{
-					pos.Append(i);
 					cstr[i] = 0;
+					EL_ERROR(mkdir(cstr, 0777) != 0 && errno != EEXIST, TSyscallException, errno);
+					cstr[i] = '/';
 				}
 
 			EL_ERROR(mkdir(cstr, 0777) != 0 && errno != EEXIST, TSyscallException, errno);
-			for(usys_t i = 0; i < pos.Count(); i++)
-			{
-				cstr[pos[i]] = '/';
-				EL_ERROR(mkdir(cstr, 0777) != 0 && errno != EEXIST, TSyscallException, errno);
-			}
-
 			struct stat st = {};
 			EL_SYSERR(stat(cstr, &st));
 			EL_ERROR(!S_ISDIR(st.st_mode), TSyscallException, EEXIST);
@@ -145,6 +139,47 @@ namespace el1::io::file
 		else
 		{
 			EL_SYSERR(mkdir(*this, 0777));
+		}
+	}
+
+	static void DeleteRecursive(const TDirectory& base, direntry_t& e)
+	{
+		if(e.type == EObjectType::UNKNOWN)
+			e = base.QueryInfo(e.name);
+
+		if(e.type == EObjectType::DIRECTORY)
+		{
+			DeleteRecursive(TDirectory(base, e.name), e);
+			EL_SYSERR(unlinkat(base.Handle(), e.name.MakeCStr().get(), AT_REMOVEDIR));
+		}
+		else if(e.type != EObjectType::NX)
+		{
+			EL_SYSERR(unlinkat(base.Handle(), e.name.MakeCStr().get(), 0));
+		}
+	}
+
+	void TPath::Delete(const bool recursive) const
+	{
+		const EObjectType type = Type();
+		if(type == EObjectType::DIRECTORY)
+		{
+			if(recursive)
+			{
+				TDirectory dir(*this);
+				dir.Enum(
+					[&](direntry_t& e)
+					{
+						DeleteRecursive(dir, e);
+						return true;
+					}
+				);
+			}
+
+			EL_SYSERR(rmdir(*this));
+		}
+		else if(type != EObjectType::NX)
+		{
+			EL_SYSERR(unlink(*this));
 		}
 	}
 
