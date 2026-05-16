@@ -100,4 +100,7 @@ test: $(TEST_NAME)
 		$(TEST_NAME)
 # 		--track-fds=yes \
 
+entr: $(LIB_HEADERS) $(LIB_SOURCES) $(TEST_SOURCES) $(TEST_HEADERS)
+	printf '%s\n' $^ | entr bash -c 'clear;reset; make test'
+
 -include $(DEP_FILES)
