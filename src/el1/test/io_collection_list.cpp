@@ -560,4 +560,34 @@ namespace
 
 		EXPECT_EQ(2U, Concat(list.Pipe(), list.Pipe()).Filter([](int x) { return x == 5; }).Count());
 	}
+
+	TEST(io_collection_list, RemoveItems)
+	{
+		{
+			TList<int> a = { 0,1,2,3,4,5,6,7,8,9 };
+			TList<int> b = {   1,2,3,4,5,6,7,8,9 };
+			auto c = a - b;
+			EXPECT_EQ(c.Count(), 1U);
+			EXPECT_EQ(c[0], 0);
+		}
+
+		{
+			TList<int> a = { 0,1,2,3,4,5,6,7,8,9 };
+			TList<int> b = { 0,1,2,3,  5,6,7,8,9 };
+			auto c = a - b;
+			EXPECT_EQ(c.Count(), 1U);
+			EXPECT_EQ(c[0], 4);
+		}
+
+		{
+			TList<int> a = { 0,1,2,2,4,5,2,2,8,9 };
+			TList<int> b = { 0,1,2,2 };
+			auto c = a - b;
+			EXPECT_EQ(c.Count(), 4U);
+			EXPECT_EQ(c[0], 4);
+			EXPECT_EQ(c[1], 5);
+			EXPECT_EQ(c[2], 8);
+			EXPECT_EQ(c[3], 9);
+		}
+	}
 }

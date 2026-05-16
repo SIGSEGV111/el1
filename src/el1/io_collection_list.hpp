@@ -248,6 +248,35 @@ namespace el1::io::collection::list
 			template<typename C = decltype(EqualsComparator<T>)>
 			usys_t RemoveItem(const T& needle, const usys_t n_max = 1U, C comparator = EqualsComparator<T>);
 
+			template<typename C = decltype(EqualsComparator<T>)>
+			usys_t RemoveItems(array_t<const T> items_remove, C comparator = EqualsComparator<T>);
+
+			TList& operator-=(array_t<const T> items_remove)
+			{
+				RemoveItems(items_remove);
+				return *this;
+			}
+
+			TList operator-(array_t<const T> items_remove)
+			{
+				TList l = *this;
+				l -= items_remove;
+				return l;
+			}
+
+			TList& operator+=(array_t<const T> items_append)
+			{
+				AppendItems(items_append);
+				return *this;
+			}
+
+			TList operator+(array_t<const T> items_append)
+			{
+				TList l = *this;
+				l += items_append;
+				return l;
+			}
+
 			TList& operator=(const TList& rhs);
 			TList& operator=(TList&& rhs);
 
@@ -992,6 +1021,23 @@ namespace el1::io::collection::list
 
 		this->Shrink(n_removed);
 		return n_removed;
+	}
+
+	template<typename T>
+	template<typename C>
+	usys_t TList<T>::RemoveItems(array_t<const T> items_remove, C comparator)
+	{
+		usys_t n = 0;
+		for(usys_t i = 0; i < this->n_items; i++)
+			for(auto& j : items_remove)
+				if(comparator(this->arr_items[i], j))
+				{
+					Remove(i);
+					i--;
+					n++;
+					break;
+				}
+		return n;
 	}
 
 	template<typename T>
