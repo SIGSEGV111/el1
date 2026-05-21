@@ -1305,6 +1305,18 @@ namespace el1::io::text::string
 		});
 	}
 
+	usys_t TString::ReplaceChars(array_t<const TUTF32> list, const TUTF32 replacement, const bool whitelist)
+	{
+		usys_t n = 0;
+		for(TUTF32& chr : chars)
+			if(list.Contains(chr) != whitelist)
+			{
+				chr = replacement;
+				n++;
+			}
+		return n;
+	}
+
 	TString& TString::ToLower()
 	{
 		Translate(MAP_LETTER_CASE, true);

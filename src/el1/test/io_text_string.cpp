@@ -728,6 +728,22 @@ namespace
 		}
 	}
 
+	TEST(io_text_string, TString_ReplaceChars)
+	{
+		TList<TUTF32> list = {' '};
+		{
+			TString a = "hello world";
+			a.ReplaceChars(list, '_', false);
+			EXPECT_EQ(a, "hello_world");
+		}
+
+		{
+			TString a = "hello world";
+			a.ReplaceChars(list, '_', true);
+			EXPECT_EQ(a, "_____ _____");
+		}
+	}
+
 	// TEST(io_text_string, TString_Parse)
 	// {
 	// 	const TString str = "%test17.8$";

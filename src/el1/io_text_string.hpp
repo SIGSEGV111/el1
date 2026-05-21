@@ -101,6 +101,17 @@ namespace el1::io::text::string
 			void Truncate(const usys_t n_max_length);
 			void Cut(const usys_t n_begin, const usys_t n_end);
 			void Translate(const array_t<const symbol_map_t> map, const bool reverse = false);
+
+			/**
+			* Replaces characters according to a whitelist or blacklist.
+			*
+			* @param list Characters used as the whitelist or blacklist.
+			* @param replacement Character used to replace matching input characters.
+			* @param whitelist If `false`, replace characters found in `list`. If `true`, replace characters not found in `list`.
+			* @return Number of replaced characters.
+			*/
+			usys_t ReplaceChars(array_t<const TUTF32> list, const TUTF32 replacement, const bool whitelist = false);
+
 			TString& ToLower();
 			TString& ToUpper();
 
