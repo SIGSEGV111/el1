@@ -281,7 +281,7 @@ namespace el1::io::collection::list
 			TList& operator=(TList&& rhs);
 
 			constexpr operator TList<const T>&() { return reinterpret_cast<TList<const T>&>(*this); }
-			constexpr operator const TList<const T>&() const  { return reinterpret_cast<TList<const T>&>(*this); }
+			constexpr operator const TList<const T>&() const  { return reinterpret_cast<const TList<const T>&>(*this); }
 
 			constexpr TList() noexcept {}
 			explicit TList(const usys_t n_prealloc);

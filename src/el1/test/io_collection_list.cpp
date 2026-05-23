@@ -593,8 +593,20 @@ namespace
 
 	TEST(io_collection_list, ConstCast)
 	{
-		TList<std::unique_ptr<int>> list;
-		TList<const std::unique_ptr<int>>& a = list;
-		const TList<const std::unique_ptr<int>>& b = list;
+		{
+			TList<std::unique_ptr<int>> list;
+			TList<const std::unique_ptr<int>>& a = list;
+			const TList<const std::unique_ptr<int>>& b = list;
+			array_t<std::unique_ptr<int>>& c = list;
+			array_t<const std::unique_ptr<int>>& d = list;
+		}
+
+		{
+			const TList<std::unique_ptr<int>> list;
+			const TList<const std::unique_ptr<int>>& a = list;
+			const TList<const std::unique_ptr<int>>& b = list;
+			const array_t<std::unique_ptr<int>>& c = list;
+			const array_t<const std::unique_ptr<int>>& d = list;
+		}
 	}
 }
