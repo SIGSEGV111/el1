@@ -590,4 +590,11 @@ namespace
 			EXPECT_EQ(c[3], 9);
 		}
 	}
+
+	TEST(io_collection_list, ConstCast)
+	{
+		TList<std::unique_ptr<int>> list;
+		TList<const std::unique_ptr<int>>& a = list;
+		const TList<const std::unique_ptr<int>>& b = list;
+	}
 }

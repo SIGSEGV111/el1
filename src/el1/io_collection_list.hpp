@@ -280,6 +280,9 @@ namespace el1::io::collection::list
 			TList& operator=(const TList& rhs);
 			TList& operator=(TList&& rhs);
 
+			constexpr operator TList<const T>&() { return reinterpret_cast<TList<const T>&>(*this); }
+			constexpr operator const TList<const T>&() const  { return reinterpret_cast<TList<const T>&>(*this); }
+
 			constexpr TList() noexcept {}
 			explicit TList(const usys_t n_prealloc);
 			TList(const T* const arr_items, const usys_t n_items, const usys_t n_prealloc = 0);
