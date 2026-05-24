@@ -595,18 +595,145 @@ namespace
 	{
 		{
 			TList<std::unique_ptr<int>> list;
-			TList<const std::unique_ptr<int>>& a = list;
-			const TList<const std::unique_ptr<int>>& b = list;
-			array_t<std::unique_ptr<int>>& c = list;
-			array_t<const std::unique_ptr<int>>& d = list;
+			[[maybe_unused]] TList<const std::unique_ptr<int>>& a = list;
+			[[maybe_unused]] const TList<const std::unique_ptr<int>>& b = list;
+			[[maybe_unused]] array_t<std::unique_ptr<int>>& c = list;
+			[[maybe_unused]] array_t<const std::unique_ptr<int>>& d = list;
 		}
 
 		{
 			const TList<std::unique_ptr<int>> list;
-			const TList<const std::unique_ptr<int>>& a = list;
-			const TList<const std::unique_ptr<int>>& b = list;
-			const array_t<std::unique_ptr<int>>& c = list;
-			const array_t<const std::unique_ptr<int>>& d = list;
+			[[maybe_unused]] const TList<const std::unique_ptr<int>>& a = list;
+			[[maybe_unused]] const TList<const std::unique_ptr<int>>& b = list;
+			[[maybe_unused]] const array_t<std::unique_ptr<int>>& c = list;
+			[[maybe_unused]] const array_t<const std::unique_ptr<int>>& d = list;
+		}
+	}
+
+	TEST(io_collection_list, Sort)
+	{
+		TList<int> list = { 0,9,6,5,2,0,4,7,2,0,4,8,2,5,7,3,9 };
+		list.Sort(ESortOrder::ASCENDING);
+		EXPECT_EQ(list[ 0], 0);
+		EXPECT_EQ(list[ 1], 0);
+		EXPECT_EQ(list[ 2], 0);
+		EXPECT_EQ(list[ 3], 2);
+		EXPECT_EQ(list[ 4], 2);
+		EXPECT_EQ(list[ 5], 2);
+		EXPECT_EQ(list[ 6], 3);
+		EXPECT_EQ(list[ 7], 4);
+		EXPECT_EQ(list[ 8], 4);
+		EXPECT_EQ(list[ 9], 5);
+		EXPECT_EQ(list[10], 5);
+		EXPECT_EQ(list[11], 6);
+		EXPECT_EQ(list[12], 7);
+		EXPECT_EQ(list[13], 7);
+		EXPECT_EQ(list[14], 8);
+		EXPECT_EQ(list[15], 9);
+		EXPECT_EQ(list[16], 9);
+		list.Sort(ESortOrder::DESCENDING);
+		EXPECT_EQ(list[16], 0);
+		EXPECT_EQ(list[15], 0);
+		EXPECT_EQ(list[14], 0);
+		EXPECT_EQ(list[13], 2);
+		EXPECT_EQ(list[12], 2);
+		EXPECT_EQ(list[11], 2);
+		EXPECT_EQ(list[10], 3);
+		EXPECT_EQ(list[ 9], 4);
+		EXPECT_EQ(list[ 8], 4);
+		EXPECT_EQ(list[ 7], 5);
+		EXPECT_EQ(list[ 6], 5);
+		EXPECT_EQ(list[ 5], 6);
+		EXPECT_EQ(list[ 4], 7);
+		EXPECT_EQ(list[ 3], 7);
+		EXPECT_EQ(list[ 2], 8);
+		EXPECT_EQ(list[ 1], 9);
+		EXPECT_EQ(list[ 0], 9);
+	}
+
+	TEST(io_collection_list, RemoveDuplicateItems)
+	{
+		{
+			TList<int> list = { 0,9,6,5,2,0,4,7,2,0,4,8,2,5,7,3,9 };
+			EXPECT_EQ(list.Count(), 17U);
+			list.Sort(ESortOrder::ASCENDING);
+			EXPECT_EQ(list.RemoveDuplicateItems(true), 8U);
+			EXPECT_EQ(list.Count(), 9U);
+			EXPECT_EQ(list[ 0], 0);
+			EXPECT_EQ(list[ 1], 2);
+			EXPECT_EQ(list[ 2], 3);
+			EXPECT_EQ(list[ 3], 4);
+			EXPECT_EQ(list[ 4], 5);
+			EXPECT_EQ(list[ 5], 6);
+			EXPECT_EQ(list[ 6], 7);
+			EXPECT_EQ(list[ 7], 8);
+			EXPECT_EQ(list[ 8], 9);
+			EXPECT_EQ(list.RemoveDuplicateItems(true), 0U);
+			EXPECT_EQ(list.Count(), 9U);
+			EXPECT_EQ(list[ 0], 0);
+			EXPECT_EQ(list[ 1], 2);
+			EXPECT_EQ(list[ 2], 3);
+			EXPECT_EQ(list[ 3], 4);
+			EXPECT_EQ(list[ 4], 5);
+			EXPECT_EQ(list[ 5], 6);
+			EXPECT_EQ(list[ 6], 7);
+			EXPECT_EQ(list[ 7], 8);
+			EXPECT_EQ(list[ 8], 9);
+		}
+
+		{
+			TList<int> list = { 0,9,6,5,2,0,4,7,2,0,4,8,2,5,7,3,9 };
+			EXPECT_EQ(list.Count(), 17U);
+			list.Sort(ESortOrder::ASCENDING);
+			EXPECT_EQ(list.RemoveDuplicateItems(false), 8U);
+			EXPECT_EQ(list.Count(), 9U);
+			EXPECT_EQ(list[ 0], 0);
+			EXPECT_EQ(list[ 1], 2);
+			EXPECT_EQ(list[ 2], 3);
+			EXPECT_EQ(list[ 3], 4);
+			EXPECT_EQ(list[ 4], 5);
+			EXPECT_EQ(list[ 5], 6);
+			EXPECT_EQ(list[ 6], 7);
+			EXPECT_EQ(list[ 7], 8);
+			EXPECT_EQ(list[ 8], 9);
+			EXPECT_EQ(list.RemoveDuplicateItems(false), 0U);
+			EXPECT_EQ(list.Count(), 9U);
+			EXPECT_EQ(list[ 0], 0);
+			EXPECT_EQ(list[ 1], 2);
+			EXPECT_EQ(list[ 2], 3);
+			EXPECT_EQ(list[ 3], 4);
+			EXPECT_EQ(list[ 4], 5);
+			EXPECT_EQ(list[ 5], 6);
+			EXPECT_EQ(list[ 6], 7);
+			EXPECT_EQ(list[ 7], 8);
+			EXPECT_EQ(list[ 8], 9);
+		}
+
+		{
+			TList<int> list = { 0,0,9,6,5,2,0,4,4,7,2,0,4,8,2,5,7,3,9,9 };
+			EXPECT_EQ(list.Count(), 20U);
+			EXPECT_EQ(list.RemoveDuplicateItems(false), 11U);
+			EXPECT_EQ(list.Count(), 9U);
+			EXPECT_EQ(list[ 0], 0);
+			EXPECT_EQ(list[ 1], 9);
+			EXPECT_EQ(list[ 2], 6);
+			EXPECT_EQ(list[ 3], 5);
+			EXPECT_EQ(list[ 4], 2);
+			EXPECT_EQ(list[ 5], 4);
+			EXPECT_EQ(list[ 6], 7);
+			EXPECT_EQ(list[ 7], 8);
+			EXPECT_EQ(list[ 8], 3);
+			EXPECT_EQ(list.RemoveDuplicateItems(false), 0U);
+			EXPECT_EQ(list.Count(), 9U);
+			EXPECT_EQ(list[ 0], 0);
+			EXPECT_EQ(list[ 1], 9);
+			EXPECT_EQ(list[ 2], 6);
+			EXPECT_EQ(list[ 3], 5);
+			EXPECT_EQ(list[ 4], 2);
+			EXPECT_EQ(list[ 5], 4);
+			EXPECT_EQ(list[ 6], 7);
+			EXPECT_EQ(list[ 7], 8);
+			EXPECT_EQ(list[ 8], 3);
 		}
 	}
 }

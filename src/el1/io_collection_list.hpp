@@ -138,7 +138,7 @@ namespace el1::io::collection::list
 			void Apply(L lambda);
 
 			template<typename S = decltype(StdSorter<T>)>
-			void Sort(const ESortOrder order, S sorter = StdSorter<T>);
+			void Sort(const ESortOrder order = ESortOrder::ASCENDING, S sorter = StdSorter<T>);
 
 			TArrayPipe<T> Pipe() const;
 
@@ -250,6 +250,9 @@ namespace el1::io::collection::list
 
 			template<typename C = decltype(EqualsComparator<T>)>
 			usys_t RemoveItems(array_t<const T> items_remove, C comparator = EqualsComparator<T>);
+
+			template<typename C = decltype(EqualsComparator<T>)>
+			usys_t RemoveDuplicateItems(const bool is_sorted, C comparator = EqualsComparator<T>);
 
 			TList& operator-=(array_t<const T> items_remove)
 			{
@@ -565,9 +568,53 @@ namespace el1::io::collection::list
 
 	template<typename T>
 	template<typename S>
-	void array_t<T>::Sort(const ESortOrder, S)
+	void array_t<T>::Sort(const ESortOrder order, S sorter)
 	{
-		EL_NOT_IMPLEMENTED;
+		if(this->n_items <= 1)
+			return;
+
+		auto item_should_follow = [order, sorter](const T& a, const T& b) -> bool
+		{
+			const int result = sorter(a, b);
+
+			if(order == ESortOrder::DESCENDING)
+				return result < 0;
+			else
+				return result > 0;
+		};
+
+		auto sift_down = [this, item_should_follow](usys_t idx_root, const usys_t idx_end)
+		{
+			while(true)
+			{
+				const usys_t idx_child_left = idx_root * 2 + 1;
+				if(idx_child_left >= idx_end)
+					break;
+
+				usys_t idx_swap = idx_root;
+				if(item_should_follow(this->arr_items[idx_child_left], this->arr_items[idx_swap]))
+					idx_swap = idx_child_left;
+
+				const usys_t idx_child_right = idx_child_left + 1;
+				if(idx_child_right < idx_end && item_should_follow(this->arr_items[idx_child_right], this->arr_items[idx_swap]))
+					idx_swap = idx_child_right;
+
+				if(idx_swap == idx_root)
+					break;
+
+				util::Swap(this->arr_items[idx_root], this->arr_items[idx_swap]);
+				idx_root = idx_swap;
+			}
+		};
+
+		for(usys_t idx_start = this->n_items / 2; idx_start > 0; idx_start--)
+			sift_down(idx_start - 1, this->n_items);
+
+		for(usys_t idx_end = this->n_items; idx_end > 1; idx_end--)
+		{
+			util::Swap(this->arr_items[0], this->arr_items[idx_end - 1]);
+			sift_down(0, idx_end - 1);
+		}
 	}
 
 	template<typename T>
@@ -1041,6 +1088,42 @@ namespace el1::io::collection::list
 					break;
 				}
 		return n;
+	}
+
+	template<typename T>
+	template<typename C>
+	usys_t TList<T>::RemoveDuplicateItems(const bool is_sorted, C comparator)
+	{
+		usys_t n_removed = 0;
+
+		if(is_sorted)
+		{
+			for(usys_t i = 1; i < this->n_items; i++)
+			{
+				usys_t j = i;
+				for(; j < this->n_items; j++)
+					if(!comparator(this->arr_items[i - 1], this->arr_items[j]))
+						break;
+				this->Remove(i, j - i);
+				n_removed += j - i;
+			}
+		}
+		else
+		{
+			for(usys_t i = 1; i < this->n_items; i++)
+			{
+				usys_t j = i;
+				for(; j < this->n_items; j++)
+					if(comparator(this->arr_items[i - 1], this->arr_items[j]))
+					{
+						this->Remove(j);
+						j--;
+						n_removed++;
+					}
+			}
+		}
+
+		return n_removed;
 	}
 
 	template<typename T>
