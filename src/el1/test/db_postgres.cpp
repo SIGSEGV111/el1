@@ -61,6 +61,45 @@ namespace
 		}
 	}
 
+
+	TEST(db_postgres, datatype_codecs)
+	{
+		TSortedMap<TString,TString> properties;
+
+		{
+			TPostgresConnection connection(properties);
+			connection.Execute("DROP DOMAIN IF EXISTS public.el1_test_int4_domain CASCADE")->DiscardAllRows();
+			connection.Execute("CREATE DOMAIN public.el1_test_int4_domain AS int4")->DiscardAllRows();
+		}
+
+		{
+			TPostgresConnection connection(properties);
+
+			auto rs = connection.Execute("SELECT 1234::public.el1_test_int4_domain, int4out(5678)");
+			auto [domain_value, cstring_value] = rs->Row<s32_t,TString>();
+			ASSERT_NE(domain_value, nullptr);
+			ASSERT_NE(cstring_value, nullptr);
+			EXPECT_EQ(*domain_value, 1234);
+			EXPECT_TRUE(*cstring_value == "5678");
+
+			TList<byte_t> bytea_value = {0, 1, 2, 3, 255};
+			rs = connection.Execute("SELECT $1::bytea", bytea_value);
+			auto [bytea_result] = rs->Row<TList<byte_t>>();
+			ASSERT_NE(bytea_result, nullptr);
+			ASSERT_EQ(bytea_result->Count(), bytea_value.Count());
+			for(usys_t i = 0; i < bytea_value.Count(); i++)
+				EXPECT_EQ((*bytea_result)[i], bytea_value[i]);
+
+			TList<byte_t> empty_bytea;
+			rs = connection.Execute("SELECT $1::bytea", empty_bytea);
+			auto [empty_bytea_result] = rs->Row<TList<byte_t>>();
+			ASSERT_NE(empty_bytea_result, nullptr);
+			EXPECT_EQ(empty_bytea_result->Count(), 0U);
+
+			connection.Execute("DROP DOMAIN public.el1_test_int4_domain")->DiscardAllRows();
+		}
+	}
+
 	TEST(db_postgres, wrong_column_count)
 	{
 		TSortedMap<TString,TString> properties;

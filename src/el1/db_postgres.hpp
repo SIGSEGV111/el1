@@ -9,6 +9,8 @@
 #include "util_function.hpp"
 #include "util_event.hpp"
 #include "db.hpp"
+#include <cstddef>
+#include <typeinfo>
 
 struct pg_result;
 typedef struct pg_result PGresult;
@@ -26,40 +28,51 @@ namespace el1::db::postgres
 	class TPostgresConnection;
 
 	static const u32_t N_FIFO_ROWS = 1024;
+	using oid_t = u32_t;
 
-	struct oid_type_map_t
+	struct IDatatypeCodec
 	{
-		// ID of the type on the server (see `select * from pg_types`).
-		// We assume these are constant - bad things will happen if they are not.
-		unsigned int oid;
+		const char* const namespace_name;
+		const char* const datatype_name;
+		const std::type_info* const cxx_type_info;
+		const usys_t cxx_size;
+		const usys_t cxx_alignment;
 
-		// the size of the data type in postgres internal binary format
-		// -1 for variable sized types with a size field
-		// -2 for null-terminated strings of variable size
-		s8_t sz_bytes;
+		IDatatypeCodec(const char* namespace_name, const char* datatype_name, const std::type_info& cxx_type_info, usys_t cxx_size, usys_t cxx_alignment);
+		virtual ~IDatatypeCodec() = default;
 
-		// name of the type in PostgreSQL
-		const char* pg_name;
-
-		// `type` specifies the C++ datatype produced by `deserialize()` / is expected by `serialize()`.
-		const std::type_info* type;
-
-		// First arg is a reference to this oid_type_map_t
-		// Second arg is the input buffer.
-		// Third arg the output buffer.
-		// Forth arg is the number of bytes in the input buffer (only `deserialize()`).
-		// `serialize()` returns the number of bytes stored (or would have been stored) in the output buffer.
-		// `serialize()` allows the output buffer to be `nullptr`. In this case no data is written, but the required size of the output buffer is computed and returned. In this case the returned size may be bigger than what is actually required. However when passing an actual output buffer the returned size will always be accurate.
-		// For `deserialize()` the output buffer must be large enough and correctly aligned to hold `type`.
-		// If nullptr is passed as output buffer to `deserialize()` then only error checks are performed.
-		util::function::TFunction<usys_t, const oid_type_map_t&, const void* const, void* const> serialize;
-		util::function::TFunction<void,   const oid_type_map_t&, const void* const, void* const, const usys_t> deserialize;
-		util::function::TFunction<void, void* const> destruct;
+		// If pg_out has no storage, return an upper bound for the encoded size.
+		// Otherwise encode the value and return the exact number of bytes used.
+		virtual usys_t Serialize(const void* const cxx_in, array_t<byte_t> pg_out) const = 0;
+		virtual void Deserialize(array_t<const byte_t> pg_in, void* const cxx_out) const = 0;
+		virtual void Destruct(const void* const cxx_in) const = 0;
 	};
 
-	extern const oid_type_map_t ARR_OID_TYPE_MAP[];
-	extern const usys_t N_OID_TYPE_MAP;
+	class TTypeMap : public io::collection::map::TSortedMap<oid_t, const IDatatypeCodec*>
+	{
+		public:
+			using TBase = io::collection::map::TSortedMap<oid_t, const IDatatypeCodec*>;
+			using TCodecRegistry = io::collection::list::TList<const IDatatypeCodec*>;
+
+			struct TCodecBinding
+			{
+				oid_t oid;
+				const IDatatypeCodec* codec;
+			};
+
+			static TCodecRegistry GLOBAL_CODEC_REGISTRY;
+			static TTypeMap LoadTypeMap(TPostgresConnection& conn, const TCodecRegistry& registry = GLOBAL_CODEC_REGISTRY);
+
+			const IDatatypeCodec& LookupByOid(oid_t oid) const;
+			const TCodecBinding& LookupByCxxType(const std::type_info& cxx_type_info) const;
+			void Clear();
+
+		private:
+			io::collection::list::TList<TCodecBinding> cxx_type_map;
+	};
+
 	static const usys_t SZ_FIELD_BUFFER = sizeof(void*) * 8;
+	static const usys_t ALIGN_FIELD_BUFFER = alignof(std::max_align_t);
 
 	struct TPostgresException : IException
 	{
@@ -74,12 +87,11 @@ namespace el1::db::postgres
 
 	struct TPostgresColumnDescription : TColumnDescription
 	{
-		u16_t idx_typemap;
+		const IDatatypeCodec* codec;
 		bool is_null;
-		alignas(TString) byte_t buffer[SZ_FIELD_BUFFER];
+		alignas(std::max_align_t) byte_t buffer[SZ_FIELD_BUFFER];
 
-		const oid_type_map_t& TypeInfo() const { return ARR_OID_TYPE_MAP[idx_typemap]; }
-
+		TPostgresColumnDescription();
 		~TPostgresColumnDescription();
 	};
 
@@ -90,6 +102,7 @@ namespace el1::db::postgres
 		friend class TPostgresConnection;
 		protected:
 			TPostgresConnection* conn;
+			const TTypeMap type_map;
 			io::stream::fifo::TFifo<void*, N_FIFO_ROWS> fifo;
 			io::collection::list::TList<TPostgresColumnDescription> columns;
 			const TString sql;
@@ -170,8 +183,10 @@ namespace el1::db::postgres
 	{
 		friend class TResultStream;
 		friend class TChannelListener;
+		friend class TTypeMap;
 		protected:
 			void* pg_connection;
+			TTypeMap type_map;
 
 			io::collection::list::TList<TResultStream*> active_queries;
 			io::collection::map::TSortedMap<TString, std::shared_ptr<TNotifyChannel> > notify_channels;
