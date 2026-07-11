@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include <el1/db_postgres.hpp>
 #include <el1/io_format_json.hpp>
+#include <el1/io_path.hpp>
 #include <arpa/inet.h>
 
 using namespace ::testing;
@@ -97,6 +98,40 @@ namespace
 			EXPECT_EQ(empty_bytea_result->Count(), 0U);
 
 			connection.Execute("DROP DOMAIN public.el1_test_int4_domain")->DiscardAllRows();
+		}
+	}
+
+	TEST(db_postgres, ltree)
+	{
+		TSortedMap<TString,TString> properties;
+
+		{
+			TPostgresConnection connection(properties);
+			try
+			{
+				connection.Execute("CREATE EXTENSION IF NOT EXISTS ltree")->DiscardAllRows();
+			}
+			catch(const TPostgresException& e)
+			{
+				GTEST_SKIP() << e.what();
+			}
+		}
+
+		{
+			TPostgresConnection connection(properties);
+			using TGenericPath = el1::io::path::TPath;
+
+			const TGenericPath value("Top.Science.Astronomy", '.');
+			auto rs = connection.Execute("SELECT $1::ltree, subpath($1::ltree, 0, 2), ''::ltree", value);
+			auto [full_path, parent_path, empty_path] = rs->Row<TGenericPath,TGenericPath,TGenericPath>();
+
+			ASSERT_NE(full_path, nullptr);
+			ASSERT_NE(parent_path, nullptr);
+			ASSERT_NE(empty_path, nullptr);
+			EXPECT_TRUE(full_path->ToString() == "Top.Science.Astronomy");
+			EXPECT_TRUE(parent_path->ToString() == "Top.Science");
+			EXPECT_TRUE(empty_path->IsEmpty());
+			EXPECT_EQ(full_path->Separator(), el1::io::text::encoding::TUTF32('.'));
 		}
 	}
 

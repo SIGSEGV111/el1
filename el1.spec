@@ -67,6 +67,7 @@ el1 is a C++ Essentials Library focused on IoT and high-level operations.
 %{_includedir}/el1/io_text_string.hpp
 %{_includedir}/el1/io_text_terminal.hpp
 %{_includedir}/el1/io_types.hpp
+%{_includedir}/el1/io_path.hpp
 %{_includedir}/el1/math.hpp
 %{_includedir}/el1/math_matrix.hpp
 %{_includedir}/el1/math_polygon.hpp

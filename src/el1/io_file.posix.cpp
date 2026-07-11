@@ -39,20 +39,14 @@ namespace el1::io::file
 
 	void TPath::Validate()
 	{
+		TBase::Validate();
+
 		usys_t n_backref = 0;
-
 		for(usys_t i = 0; i < components.Count(); i++)
-		{
-			EL_ERROR(components[i].Find(TPath::SEPERATOR) != NEG1, TInvalidPathException, *this, i, TInvalidPathException::EReason::COMPONENT_CONTAINS_SEPERATOR);
-
 			if(components[i] == TPath::PARENT_DIR)
 				n_backref++;
-		}
 
 		EL_ERROR(IsAbsolute() && n_backref > components.Count() / 2, TInvalidPathException, *this, 0, TInvalidPathException::EReason::POINTS_BEFORE_ROOT);
-
-		for(usys_t i = 1; i < components.Count(); i++)
-			EL_ERROR(components[i].Length() == 0, TInvalidPathException, *this, i, TInvalidPathException::EReason::EMPTY_COMPONENT);
 	}
 
 	void TPath::Simplify()
@@ -77,14 +71,6 @@ namespace el1::io::file
 			}
 
 		this->cached_cstr.reset();
-	}
-
-	bool TPath::IsAbsolute() const
-	{
-		if(this->components.Count() == 0)
-			return false;
-		else
-			return this->components[0].Length() == 0;
 	}
 
 	TPath TPath::CurrentWorkingDirectory()

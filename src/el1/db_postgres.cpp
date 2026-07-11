@@ -3,6 +3,7 @@
 #include "db_postgres.hpp"
 #include "io_collection_list.hpp"
 #include "io_format_json.hpp"
+#include "io_path.hpp"
 #include "io_text_encoding_utf8.hpp"
 #include "error.hpp"
 #include <atomic>
@@ -21,12 +22,13 @@ namespace el1::db::postgres
 	using namespace io::format::json;
 	using namespace io::collection::list;
 
-	IDatatypeCodec::IDatatypeCodec(const char* const namespace_name, const char* const datatype_name, const std::type_info& cxx_type_info, const usys_t cxx_size, const usys_t cxx_alignment) :
+	IDatatypeCodec::IDatatypeCodec(const char* const namespace_name, const char* const datatype_name, const std::type_info& cxx_type_info, const usys_t cxx_size, const usys_t cxx_alignment, const bool required) :
 		namespace_name(namespace_name),
 		datatype_name(datatype_name),
 		cxx_type_info(&cxx_type_info),
 		cxx_size(cxx_size),
-		cxx_alignment(cxx_alignment)
+		cxx_alignment(cxx_alignment),
+		required(required)
 	{
 	}
 
@@ -39,21 +41,21 @@ namespace el1::db::postgres
 	class TTypedDatatypeCodec : public IDatatypeCodec
 	{
 		public:
-			TTypedDatatypeCodec(const char* const namespace_name, const char* const datatype_name) : IDatatypeCodec(namespace_name, datatype_name, typeid(T), sizeof(T), alignof(T))
+			TTypedDatatypeCodec(const char* const namespace_name, const char* const datatype_name, const bool required = true) : IDatatypeCodec(namespace_name, datatype_name, typeid(T), sizeof(T), alignof(T), required)
 			{
 			}
 
-			void Destruct(const void* const cxx_in) const final override
+			void Destruct(void* const cxx_in) const final override
 			{
 				if constexpr(!std::is_trivially_destructible_v<T>)
-					const_cast<T*>(reinterpret_cast<const T*>(cxx_in))->~T();
+					reinterpret_cast<const T*>(cxx_in)->~T();
 			}
 	};
 
 	class TNoOpDatatypeCodec final : public IDatatypeCodec
 	{
 		public:
-			TNoOpDatatypeCodec(const char* const namespace_name, const char* const datatype_name) : IDatatypeCodec(namespace_name, datatype_name, typeid(void), 0, 1)
+			TNoOpDatatypeCodec(const char* const namespace_name, const char* const datatype_name, const bool required = true) : IDatatypeCodec(namespace_name, datatype_name, typeid(void), 0, 1, required)
 			{
 			}
 
@@ -66,7 +68,7 @@ namespace el1::db::postgres
 			{
 			}
 
-			void Destruct(const void* const) const final override
+			void Destruct(void* const) const final override
 			{
 			}
 	};
@@ -349,6 +351,39 @@ namespace el1::db::postgres
 			}
 	};
 
+	class TLTreeDatatypeCodec final : public TTypedDatatypeCodec<io::path::TPath>
+	{
+		public:
+			TLTreeDatatypeCodec(const char* const namespace_name, const char* const datatype_name, const bool required) : TTypedDatatypeCodec<io::path::TPath>(namespace_name, datatype_name, required)
+			{
+			}
+
+			usys_t Serialize(const void* const cxx_in, array_t<byte_t> pg_out) const final override
+			{
+				const io::path::TPath& value = *reinterpret_cast<const io::path::TPath*>(cxx_in);
+				EL_ERROR(value.Separator() != TUTF32('.'), TInvalidArgumentException, "cxx_in", "ltree paths must use '.' as their component separator");
+
+				const TString text = value.ToString();
+				EL_ERROR(text.Length() > (std::numeric_limits<usys_t>::max() - 1U) / 4U, TException, "ltree value is too large to encode as UTF-8");
+				const usys_t estimated_size = 1U + text.Length() * 4U;
+				if(pg_out.Count() == 0)
+					return estimated_size;
+
+				ValidateOutputSize(pg_out, estimated_size);
+				pg_out[0] = 1;
+				array_t<byte_t> payload(pg_out.ItemPtr(1), pg_out.Count() - 1U);
+				const usys_t payload_size = text.chars.Pipe().Transform(io::text::encoding::utf8::TUTF8Encoder()).Read(payload.ItemPtr(0), payload.Count());
+				return 1U + payload_size;
+			}
+
+			void Deserialize(const array_t<const byte_t> pg_in, void* const cxx_out) const final override
+			{
+				EL_ERROR(pg_in.Count() == 0 || pg_in[0] != 1, TException, "unsupported PostgreSQL ltree binary version");
+				const TString text(reinterpret_cast<const char*>(pg_in.ItemPtr(1)), pg_in.Count() - 1U);
+				new (cxx_out) io::path::TPath(text, '.');
+			}
+	};
+
 	static const TBooleanDatatypeCodec CODEC_BOOL("pg_catalog", "bool");
 	static const TByteArrayDatatypeCodec CODEC_BYTEA("pg_catalog", "bytea");
 	static const TCharDatatypeCodec CODEC_CHAR("pg_catalog", "char");
@@ -367,6 +402,7 @@ namespace el1::db::postgres
 	static const TTimestampDatatypeCodec CODEC_TIMESTAMPTZ("pg_catalog", "timestamptz");
 	static const TJsonDatatypeCodec CODEC_JSONB("pg_catalog", "jsonb", true);
 	static const TStringDatatypeCodec CODEC_CSTRING("pg_catalog", "cstring");
+	static const TLTreeDatatypeCodec CODEC_LTREE("*", "ltree", false);
 
 	TTypeMap::TCodecRegistry TTypeMap::GLOBAL_CODEC_REGISTRY = {
 		&CODEC_BOOL,
@@ -387,6 +423,7 @@ namespace el1::db::postgres
 		&CODEC_TIMESTAMPTZ,
 		&CODEC_JSONB,
 		&CODEC_CSTRING,
+		&CODEC_LTREE,
 	};
 
 	void TTypeMap::Clear()
@@ -473,9 +510,10 @@ namespace el1::db::postgres
 			for(usys_t i = 0; i < registry.Count(); i++)
 			{
 				const IDatatypeCodec* const codec = registry[i];
-				if(strcmp(codec->namespace_name, namespace_name) == 0 && strcmp(codec->datatype_name, datatype_name) == 0)
+				const bool namespace_matches = strcmp(codec->namespace_name, "*") == 0 || strcmp(codec->namespace_name, namespace_name) == 0;
+				if(namespace_matches && strcmp(codec->datatype_name, datatype_name) == 0)
 				{
-					EL_ERROR(resolved_oids[i] != 0, TLogicException);
+					EL_ERROR(resolved_oids[i] != 0, TException, TString::Format("PostgreSQL datatype codec %s.%s matches more than one server datatype", codec->namespace_name, codec->datatype_name));
 					resolved_oids[i] = oid;
 					break;
 				}
@@ -487,7 +525,10 @@ namespace el1::db::postgres
 		{
 			const IDatatypeCodec* const codec = registry[i];
 			const oid_t oid = resolved_oids[i];
-			EL_ERROR(oid == 0, TException, TString::Format("PostgreSQL datatype %s.%s is not available on the server", codec->namespace_name, codec->datatype_name));
+			EL_ERROR(oid == 0 && codec->required, TException, TString::Format("PostgreSQL datatype %s.%s is not available on the server", codec->namespace_name, codec->datatype_name));
+			if(oid == 0)
+				continue;
+
 			type_map.Add(oid, codec);
 
 			bool has_preferred_codec = false;

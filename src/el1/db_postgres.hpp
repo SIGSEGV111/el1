@@ -32,20 +32,23 @@ namespace el1::db::postgres
 
 	struct IDatatypeCodec
 	{
+		// A namespace name of "*" matches the datatype name in any schema.
 		const char* const namespace_name;
 		const char* const datatype_name;
 		const std::type_info* const cxx_type_info;
 		const usys_t cxx_size;
 		const usys_t cxx_alignment;
+		// Optional codecs are omitted from a connection's type map when the server does not provide the datatype.
+		const bool required;
 
-		IDatatypeCodec(const char* namespace_name, const char* datatype_name, const std::type_info& cxx_type_info, usys_t cxx_size, usys_t cxx_alignment);
+		IDatatypeCodec(const char* namespace_name, const char* datatype_name, const std::type_info& cxx_type_info, usys_t cxx_size, usys_t cxx_alignment, bool required = true);
 		virtual ~IDatatypeCodec() = default;
 
 		// If pg_out has no storage, return an upper bound for the encoded size.
 		// Otherwise encode the value and return the exact number of bytes used.
 		virtual usys_t Serialize(const void* const cxx_in, array_t<byte_t> pg_out) const = 0;
 		virtual void Deserialize(array_t<const byte_t> pg_in, void* const cxx_out) const = 0;
-		virtual void Destruct(const void* const cxx_in) const = 0;
+		virtual void Destruct(void* const cxx_in) const = 0;
 	};
 
 	class TTypeMap : public io::collection::map::TSortedMap<oid_t, const IDatatypeCodec*>
