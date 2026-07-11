@@ -397,6 +397,7 @@ namespace el1::db::postgres
 	static const TFloatDatatypeCodec<float> CODEC_FLOAT4("pg_catalog", "float4");
 	static const TFloatDatatypeCodec<double> CODEC_FLOAT8("pg_catalog", "float8");
 	static const TNoOpDatatypeCodec CODEC_UNKNOWN("pg_catalog", "unknown");
+	static const TNoOpDatatypeCodec CODEC_VOID("pg_catalog", "void");
 	static const TStringDatatypeCodec CODEC_VARCHAR("pg_catalog", "varchar");
 	static const TTimestampDatatypeCodec CODEC_TIMESTAMP("pg_catalog", "timestamp");
 	static const TTimestampDatatypeCodec CODEC_TIMESTAMPTZ("pg_catalog", "timestamptz");
@@ -418,6 +419,7 @@ namespace el1::db::postgres
 		&CODEC_FLOAT4,
 		&CODEC_FLOAT8,
 		&CODEC_UNKNOWN,
+		&CODEC_VOID,
 		&CODEC_VARCHAR,
 		&CODEC_TIMESTAMP,
 		&CODEC_TIMESTAMPTZ,
@@ -848,6 +850,15 @@ namespace el1::db::postgres
 
 	/**********************************************************************************/
 
+	static TString QuoteIdentifier(TString identifier)
+	{
+		EL_ERROR(identifier.Length() == 0, TInvalidArgumentException, "channel_name", "PostgreSQL notification channel names must not be empty");
+		identifier.Replace("\"", "\"\"");
+		identifier.Insert(0, "\"");
+		identifier += '"';
+		return identifier;
+	}
+
 	TString TChannelListener::Name() const
 	{
 		if(channel->conn != nullptr)
@@ -1136,12 +1147,13 @@ namespace el1::db::postgres
 
 	void TPostgresConnection::StartNotifyChannel(const TString& channel_name)
 	{
-		Execute(TString::Format("LISTEN %s", channel_name))->DiscardAllRows();
+		Execute(TString::Format("LISTEN %s", QuoteIdentifier(channel_name)))->DiscardAllRows();
 	}
 
 	void TPostgresConnection::ShutdownNotifyChannel(const TString& channel_name)
 	{
-		Execute(TString::Format("UNLISTEN %s", channel_name))->DiscardAllRows();
+		Execute(TString::Format("UNLISTEN %s", QuoteIdentifier(channel_name)))->DiscardAllRows();
+		notify_channels.Remove(channel_name);
 	}
 
 	std::unique_ptr<IStatement> TPostgresConnection::Prepare(const TString& sql)
@@ -1210,12 +1222,18 @@ namespace el1::db::postgres
 		if(channel == nullptr)
 		{
 			channel = &notify_channels.Add(channel_name, std::shared_ptr<TNotifyChannel>(new TNotifyChannel(this)));
-			StartNotifyChannel(channel_name);
+			try
+			{
+				StartNotifyChannel(channel_name);
+			}
+			catch(...)
+			{
+				notify_channels.Remove(channel_name);
+				throw;
+			}
 		}
 
-		auto l = std::unique_ptr<TChannelListener>(new TChannelListener(*channel));
-		(*channel)->listeners.Append(l.get());
-		return l;
+		return New<TChannelListener>(*channel);
 	}
 }
 #endif

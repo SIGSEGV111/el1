@@ -83,6 +83,10 @@ namespace
 			EXPECT_EQ(*domain_value, 1234);
 			EXPECT_TRUE(*cstring_value == "5678");
 
+			rs = connection.Execute("SELECT pg_sleep(0)");
+			auto [void_value] = rs->Row<void>();
+			EXPECT_NE(void_value, nullptr);
+
 			TList<byte_t> bytea_value = {0, 1, 2, 3, 255};
 			rs = connection.Execute("SELECT $1::bytea", bytea_value);
 			auto [bytea_result] = rs->Row<TList<byte_t>>();
@@ -133,6 +137,97 @@ namespace
 			EXPECT_TRUE(empty_path->IsEmpty());
 			EXPECT_EQ(full_path->Separator(), el1::io::text::encoding::TUTF32('.'));
 		}
+	}
+
+	TEST(db_postgres, notify_channel)
+	{
+		TSortedMap<TString,TString> properties;
+		TPostgresConnection listener_connection(properties);
+		TPostgresConnection sender_connection(properties);
+		EXPECT_THROW(listener_connection.SubscribeNotifyChannel(""), TInvalidArgumentException);
+
+		auto rs = listener_connection.Execute("SELECT pg_backend_pid()");
+		auto [backend_pid] = rs->Row<s32_t>();
+		ASSERT_NE(backend_pid, nullptr);
+
+		const TString channel_name = TString::Format("el1 notify \"channel\" %d", *backend_pid);
+		const TString first_payload = "first payload";
+		const TString second_payload = "second payload";
+
+		auto listener1 = listener_connection.SubscribeNotifyChannel(channel_name);
+		auto listener2 = listener_connection.SubscribeNotifyChannel(channel_name);
+
+		EXPECT_TRUE(listener1->Name() == channel_name);
+		EXPECT_TRUE(listener2->Name() == channel_name);
+		ASSERT_NE(listener1->OnNotify(), nullptr);
+		ASSERT_NE(listener2->OnNotify(), nullptr);
+		EXPECT_FALSE(listener1->OnNotify()->IsReady());
+		EXPECT_FALSE(listener2->OnNotify()->IsReady());
+		EXPECT_EQ(listener1->Read(), nullptr);
+		EXPECT_EQ(listener2->Read(), nullptr);
+
+		rs = listener_connection.Execute("SELECT EXISTS (SELECT 1 FROM pg_listening_channels() AS channel(name) WHERE name = $1)", channel_name);
+		auto [is_listening] = rs->Row<bool>();
+		ASSERT_NE(is_listening, nullptr);
+		EXPECT_TRUE(*is_listening);
+
+		sender_connection.Execute("SELECT pg_notify($1, $2)", channel_name, first_payload)->DiscardAllRows();
+		ASSERT_TRUE(listener1->OnNotify()->WaitFor(5));
+		ASSERT_TRUE(listener2->OnNotify()->WaitFor(5));
+
+		auto event1 = listener1->Read();
+		auto event2 = listener2->Read();
+		ASSERT_NE(event1, nullptr);
+		ASSERT_NE(event2, nullptr);
+		EXPECT_TRUE(*event1 == first_payload);
+		EXPECT_TRUE(*event2 == first_payload);
+		EXPECT_EQ(listener1->Read(), nullptr);
+		EXPECT_EQ(listener2->Read(), nullptr);
+		EXPECT_FALSE(listener1->OnNotify()->IsReady());
+		EXPECT_FALSE(listener2->OnNotify()->IsReady());
+
+		listener1.reset();
+		sender_connection.Execute("SELECT pg_notify($1, $2)", channel_name, second_payload)->DiscardAllRows();
+		ASSERT_TRUE(listener2->OnNotify()->WaitFor(5));
+
+		event2 = listener2->Read();
+		ASSERT_NE(event2, nullptr);
+		EXPECT_TRUE(*event2 == second_payload);
+		EXPECT_EQ(listener2->Read(), nullptr);
+
+		listener2.reset();
+		rs = listener_connection.Execute("SELECT EXISTS (SELECT 1 FROM pg_listening_channels() AS channel(name) WHERE name = $1)", channel_name);
+		std::tie(is_listening) = rs->Row<bool>();
+		ASSERT_NE(is_listening, nullptr);
+		EXPECT_FALSE(*is_listening);
+
+		auto listener3 = listener_connection.SubscribeNotifyChannel(channel_name);
+		const TString empty_payload;
+		sender_connection.Execute("SELECT pg_notify($1, $2)", channel_name, empty_payload)->DiscardAllRows();
+		ASSERT_TRUE(listener3->OnNotify()->WaitFor(5));
+
+		auto event3 = listener3->Read();
+		ASSERT_NE(event3, nullptr);
+		EXPECT_TRUE(event3->Length() == 0);
+		EXPECT_EQ(listener3->Read(), nullptr);
+	}
+
+	TEST(db_postgres, notify_channel_disconnect)
+	{
+		TSortedMap<TString,TString> properties;
+		std::unique_ptr<TChannelListener> listener;
+
+		{
+			TPostgresConnection connection(properties);
+			listener = connection.SubscribeNotifyChannel("el1_notify_disconnect_test");
+			EXPECT_TRUE(listener->Name() == "el1_notify_disconnect_test");
+			ASSERT_NE(listener->OnNotify(), nullptr);
+		}
+
+		EXPECT_TRUE(listener->Name().Length() == 0);
+		EXPECT_EQ(listener->OnNotify(), nullptr);
+		EXPECT_EQ(listener->Read(), nullptr);
+		listener.reset();
 	}
 
 	TEST(db_postgres, wrong_column_count)
