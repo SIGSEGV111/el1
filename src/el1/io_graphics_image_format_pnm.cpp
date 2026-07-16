@@ -10,6 +10,7 @@ namespace el1::io::graphics::image::format::pnm
 	void SaveP6(const TRasterImage& img, stream::IBinarySink& stream, const u16_t max_value)
 	{
 		using namespace io::text::encoding::utf8;
+		EL_ERROR(max_value == 0, TInvalidArgumentException, "max_value", "max_value must be greater than 0");
 		TString::Format("P6 %d %d %d\n", img.Width(), img.Height(), max_value).chars.Pipe().Transform(TUTF8Encoder()).ToStream(stream);
 
 		const float f_max_value = max_value;
@@ -47,9 +48,16 @@ namespace el1::io::graphics::image::format::pnm
 
 	static byte_t EatWhitespace(stream::IBinarySource& stream)
 	{
-		byte_t buffer;
-		do stream.ReadAll(&buffer, 1); while(IsWhitespace(buffer));
-		return buffer;
+		for(;;)
+		{
+			byte_t buffer;
+			do stream.ReadAll(&buffer, 1); while(IsWhitespace(buffer));
+
+			if(buffer != '#')
+				return buffer;
+
+			do stream.ReadAll(&buffer, 1); while(buffer != '\r' && buffer != '\n');
+		}
 	}
 
 	static TString NextField(stream::IBinarySource& stream)
@@ -76,8 +84,12 @@ namespace el1::io::graphics::image::format::pnm
 
 		const usys_t width = NextField(stream).ToInteger();
 		const usys_t height = NextField(stream).ToInteger();
+		EL_ERROR(width == 0, TInvalidArgumentException, "width", "width must be greater than 0");
+		EL_ERROR(height == 0, TInvalidArgumentException, "height", "height must be greater than 0");
+		EL_ERROR(width > NEG1 / height, TInvalidArgumentException, "size", "image dimensions overflow the pixel count");
 		const usys_t n = width * height;
 		const s64_t max_value = NextField(stream).ToInteger();
+		EL_ERROR(max_value <= 0, TInvalidArgumentException, "max_value", "max_value must be greater than 0");
 		EL_ERROR(max_value > 65535, TInvalidArgumentException, "max_value", "max_value must be <= 65535");
 		const float f_max_value = (float)max_value;
 

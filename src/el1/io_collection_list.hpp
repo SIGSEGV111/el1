@@ -113,6 +113,8 @@ namespace el1::io::collection::list
 			// FIXME: never use Shift() on a TList !
 			void Shift(const usys_t n_items);
 
+			bool IsEmpty() const EL_GETTER { return n_items == 0; }
+
 			system::waitable::TMemoryWaitable<usys_t> MakeItemCountWaitable(const usys_t* const n_expected_count) const;
 
 			usys_t AbsoluteIndex(const ssys_t rel_index, const bool allow_tail) const;
@@ -161,6 +163,7 @@ namespace el1::io::collection::list
 
 			constexpr array_t() noexcept : arr_items(nullptr), n_items(0) {}
 			constexpr array_t(T* const arr_items, const usys_t n_items) noexcept : arr_items(arr_items), n_items(n_items) {}
+			constexpr array_t(array_t arr_items, const usys_t n_items_max) noexcept : arr_items(arr_items.arr_items), n_items(util::Min(n_items_max, arr_items.n_items)) {}
 			constexpr array_t(const array_t&) = default;
 			constexpr array_t(array_t&& other) = default;
 			~array_t() = default;
@@ -195,12 +198,12 @@ namespace el1::io::collection::list
 	{
 		void SetCount(const usys_t new_count);
 
-		T* Insert(const ssys_t index, const array_t<T> array);
+		T* Insert(const ssys_t index, const array_t<const T> array);
 		T* Insert(const ssys_t index, const T* arr_items_insert, const usys_t n_items_insert);
 		T& Insert(const ssys_t index, const T& item);
 		T& Insert(const ssys_t index, T&& item);
 
-		T* Append(const array_t<T> array);
+		T* Append(const array_t<const T> array);
 		T* Append(const T* arr_items_append, const usys_t n_items_append);
 		T& Append(const T& item);
 		T& Append(T&& item);
@@ -708,7 +711,7 @@ namespace el1::io::collection::list
 
 
 	template<typename T>
-	T* TList_Insert_Impl<T, true>::Insert(const ssys_t index, const array_t<T> array)
+	T* TList_Insert_Impl<T, true>::Insert(const ssys_t index, const array_t<const T> array)
 	{
 		if(array.Count() > 0)
 			return Insert(index, &array[0], array.Count());
@@ -744,7 +747,7 @@ namespace el1::io::collection::list
 	}
 
 	template<typename T>
-	T* TList_Insert_Impl<T, true>::Append(const array_t<T> array)
+	T* TList_Insert_Impl<T, true>::Append(const array_t<const T> array)
 	{
 		TList<T>* list = static_cast<TList<T>*>(this);
 		return Insert(list->n_items, array);

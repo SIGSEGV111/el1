@@ -198,12 +198,37 @@ namespace el1::io::graphics::image::format::png
 		this->compression_method = static_cast<ECompressionMethod>(ReadU8(stream));
 		this->filter_method = static_cast<EFilterMethod>(ReadU8(stream));
 		this->interlace_method = static_cast<EInterlaceMethod>(ReadU8(stream));
+
+		EL_ERROR(width == 0, TInvalidArgumentException, "width", "width must be greater than 0");
+		EL_ERROR(height == 0, TInvalidArgumentException, "height", "height must be greater than 0");
+		EL_ERROR(compression_method != ECompressionMethod::DEFLATE, TInvalidArgumentException, "compression_method", "unsupported compression method");
+		EL_ERROR(filter_method != EFilterMethod::ADAPTIVE, TInvalidArgumentException, "filter_method", "unsupported filter method");
+		EL_ERROR(interlace_method != EInterlaceMethod::NONE, TInvalidArgumentException, "interlace_method", "interlaced PNG images are not supported");
+
+		bool valid_bit_depth = false;
+		switch(color_type)
+		{
+			case EColorType::GRAYSCALE:
+				valid_bit_depth = bit_depth == 1 || bit_depth == 2 || bit_depth == 4 || bit_depth == 8 || bit_depth == 16;
+				break;
+			case EColorType::INDEXED_COLOR:
+				valid_bit_depth = bit_depth == 1 || bit_depth == 2 || bit_depth == 4 || bit_depth == 8;
+				break;
+			case EColorType::TRUECOLOR:
+			case EColorType::GRAYSCALE_ALPHA:
+			case EColorType::TRUECOLOR_ALPHA:
+				valid_bit_depth = bit_depth == 8 || bit_depth == 16;
+				break;
+			default:
+				break;
+		}
+		EL_ERROR(!valid_bit_depth, TInvalidArgumentException, "bit_depth", "invalid bit-depth/color-type combination");
 	}
 
 	TPLTEChunk::TPLTEChunk(IBinarySource& stream, const u32_t size, const unsigned bpc) : IChunk(EChunkType::PLTE)
 	{
-		const unsigned n_entries = 1 << bpc;
-		EL_ERROR(n_entries * 3 != size, TException, "PLTE chunk has invalid size");
+		const unsigned n_entries = size / 3;
+		EL_ERROR(size == 0 || size % 3 != 0 || n_entries > (1U << bpc), TException, "PLTE chunk has invalid size");
 		palette.SetCount(n_entries);
 		stream.ReadAll((byte_t*)&palette[0], size);
 	}
@@ -383,6 +408,7 @@ namespace el1::io::graphics::image::format::png
 		static constexpr auto ncc = ComponentsPerPixel(color_type);
 		static constexpr float max_value = (1 << bpc) - 1;
 		const TPLTEChunk* const plte;
+		const usys_t width;
 
 		const scanline_t* scanline;
 		usys_t npx;
@@ -393,9 +419,18 @@ namespace el1::io::graphics::image::format::png
 		{
 			if constexpr (bpc < 8)
 			{
+				auto sample = [this](const usys_t index)
+				{
+					constexpr byte_t mask = (1U << bpc) - 1U;
+					const usys_t bit_index = index * bpc;
+					const usys_t byte_index = bit_index / 8;
+					const unsigned shift = 8U - bpc - (bit_index % 8U);
+					return (byte_t)((scanline->pixel_data[byte_index] >> shift) & mask);
+				};
+
 				if constexpr (color_type == EColorType::INDEXED_COLOR)
 				{
-					auto rgb = plte->palette[util::bits::GetBitField<bpc, usys_t>(&scanline->pixel_data[0], NEG1, ipx)];
+					auto rgb = plte->palette[sample(ipx)];
 					pixel[0] = static_cast<float>(rgb[0]) / 255.0f;
 					pixel[1] = static_cast<float>(rgb[1]) / 255.0f;
 					pixel[2] = static_cast<float>(rgb[2]) / 255.0f;
@@ -404,7 +439,7 @@ namespace el1::io::graphics::image::format::png
 				else
 				{
 					for(unsigned i = 0; i < ncc; i++)
-						pixel[i] = static_cast<float>(util::bits::GetBitField<bpc, u32_t>(&scanline->pixel_data[0], NEG1, ipx * ncc + i)) / max_value;
+						pixel[i] = static_cast<float>(sample(ipx * ncc + i)) / max_value;
 				}
 			}
 			else if constexpr (bpc == 8)
@@ -426,7 +461,11 @@ namespace el1::io::graphics::image::format::png
 			else if constexpr (bpc == 16)
 			{
 				for(unsigned i = 0; i < ncc; i++)
-					pixel[i] = static_cast<float>(be16toh(reinterpret_cast<const u16_t*>(&scanline->pixel_data[0])[ipx * ncc + i])) / max_value;
+				{
+					const usys_t byte_index = (ipx * ncc + i) * 2;
+					const u16_t value = ((u16_t)scanline->pixel_data[byte_index] << 8) | scanline->pixel_data[byte_index + 1];
+					pixel[i] = static_cast<float>(value) / max_value;
+				}
 			}
 
 			if constexpr (color_type == EColorType::GRAYSCALE)
@@ -458,7 +497,7 @@ namespace el1::io::graphics::image::format::png
 				scanline = source->NextItem();
 				if(scanline == nullptr)
 					return nullptr;
-				npx = scanline->pixel_data.Count() / ncc * bpc / 8;
+				npx = width;
 				EL_ERROR(npx == 0, TException, "scanline has 0 pixels");
 				ipx = 0;
 			}
@@ -468,7 +507,7 @@ namespace el1::io::graphics::image::format::png
 			return &pixel;
 		}
 
-		TPixelDecoder(const TPLTEChunk* const plte) : plte(plte), scanline(nullptr), npx(0), ipx(1)
+		TPixelDecoder(const TPLTEChunk* const plte, const usys_t width) : plte(plte), width(width), scanline(nullptr), npx(0), ipx(1)
 		{
 			EL_ERROR(color_type == EColorType::INDEXED_COLOR && plte == nullptr, TInvalidArgumentException, "plte", "platte required");
 		}
@@ -481,7 +520,7 @@ namespace el1::io::graphics::image::format::png
 			if(color_type == color_type_value && bit_depth == bit_depth_value) \
 				return TScanlineReader(pixel_data, sz_scanline) \
 					.Transform(TScanlineUnfilter<bit_depth_value, ComponentsPerPixel(color_type_value)>()) \
-					.Transform(TPixelDecoder<color_type_value, bit_depth_value>(plte)) \
+					.Transform(TPixelDecoder<color_type_value, bit_depth_value>(plte, width)) \
 					.Collect(width * height);
 
 		PNG_DECODE_PIXEL_FORMAT(EColorType::GRAYSCALE, 1);
@@ -567,7 +606,7 @@ namespace el1::io::graphics::image::format::png
 		const unsigned ncc = ComponentsPerPixel(ihdr.color_type);
 		const usys_t sz_scanline = 1 + (ihdr.width * ihdr.bit_depth * ncc  + 7) / 8;
 		const usys_t sz_data = sz_scanline * ihdr.height;
-		EL_ERROR(sz_data != data.Count(), TException, TString::Format("invalid scanline data size - expected %d bytes, but got %d bytes", sz_scanline, data.Count()));
+		EL_ERROR(sz_data != data.Count(), TException, TString::Format("invalid scanline data size - expected %d bytes, but got %d bytes", sz_data, data.Count()));
 
 		return TRasterImage({ihdr.width, ihdr.height}, DecodePixels(data, sz_scanline, ihdr.color_type, ihdr.bit_depth, plte.get(), ihdr.width, ihdr.height));
 	}

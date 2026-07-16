@@ -1,5 +1,6 @@
 #include "io_graphics_image.hpp"
 #include "io_graphics_image_format_png.hpp"
+#include "io_graphics_image_format_pnm.hpp"
 #include <string.h>
 
 namespace el1::io::graphics::image
@@ -68,6 +69,8 @@ namespace el1::io::graphics::image
 		{
 			case EImageFormat::PNG:
 				return New<TRasterImage>(format::png::LoadPNG(stream));
+			case EImageFormat::PPM:
+				return New<TRasterImage>(format::pnm::LoadP6(stream));
 			default:
 				EL_NOT_IMPLEMENTED;
 		}

@@ -9,7 +9,8 @@ namespace el1::io::graphics::plotter
 
 	u32_t TPalette::Select(const pixel_t& color) const
 	{
-		EL_ERROR(tools.Count() >= 4294967295UL, TLogicException);
+		EL_ERROR(tools.Count() == 0, TInvalidArgumentException, "tools", "palette must contain at least one tool");
+		EL_ERROR(tools.Count() > 4294967295UL, TLogicException);
 		float best_dist = tools[0].Distance(color);
 		usys_t select = 0;
 
@@ -36,6 +37,9 @@ namespace el1::io::graphics::plotter
 
 	static TJob FromRasterImage(const TRasterImage& image, const float dpmm, const TPalette* const palette)
 	{
+		EL_ERROR(dpmm <= 0, TInvalidArgumentException, "dpmm", "dpmm must be greater than 0");
+		EL_ERROR(image.Width() == 0 || image.Height() == 0, TInvalidArgumentException, "image", "image must not be empty");
+
 		TJob job;
 		const pos2i_t size = (pos2i_t)image.Size();
 		pos2i_t scan_pos(0,0);
@@ -49,11 +53,16 @@ namespace el1::io::graphics::plotter
 		job.AddCmd<TPenCommand>(TPenCommand::EDirection::UP, stroke_width);
 		AddColorChangeCmd(job, palette, current_color);
 		job.AddCmd<TGotoCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE);
+		if(current_color.Alpha() < 1.0f)
+		{
+			job.AddCmd<TPenCommand>(TPenCommand::EDirection::DOWN, stroke_width * (1.0f - current_color.Alpha()));
+			pen_down = true;
+		}
 
 		for(; scan_pos[1] < size[1]; scan_pos[1]++)
 		{
 			// new line, if we are drawing, we need to move the pen up one line without drawing
-			if(pen_down)
+			if(pen_down && scan_pos[1] > 0)
 			{
 				job.AddCmd<TGotoCommand>(PixelToMm(dpmm, prev_sp), ECoordinateType::ABSOLUTE);
 				job.AddCmd<TPenCommand>(TPenCommand::EDirection::UP, stroke_width);
@@ -112,6 +121,13 @@ namespace el1::io::graphics::plotter
 			// 	job.AddCmd<TGotoCommand>(PixelToMm(dpmm, scan_pos), ECoordinateType::ABSOLUTE);
 			// 	pen_pos = scan_pos;
 			// }
+		}
+
+		if(pen_down)
+		{
+			if(pen_pos != prev_sp)
+				job.AddCmd<TGotoCommand>(PixelToMm(dpmm, prev_sp), ECoordinateType::ABSOLUTE);
+			job.AddCmd<TPenCommand>(TPenCommand::EDirection::UP, stroke_width);
 		}
 
 		return job;
