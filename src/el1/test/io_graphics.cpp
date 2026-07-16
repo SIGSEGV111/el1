@@ -143,59 +143,40 @@ namespace
 		ihdr.Append(compression_method);
 		ihdr.Append(filter_method);
 		ihdr.Append(interlace_method);
-
-		//term.Print("1\n");
 		appendChunk(png, "IHDR", ihdr);
-		//term.Print("2\n");
 
 		if(!palette.IsEmpty())
 			appendChunk(png, "PLTE", palette);
 
-		//term.Print("3\n");
-
 		if(add_unknown_chunk)
 			appendChunk(png, "tEXt", { 'k', 0, 'v' });
-
-		//term.Print("4\n");
 
 		TByteBuffer scanlines;
 		TByteBuffer previous;
 		for(usys_t i = 0; i < rows.Count(); i++)
 		{
-			//term.Print("5\n");
 			const byte_t filter = filters[i];
 			const unsigned components = color_type == 0 || color_type == 3 ? 1 : color_type == 4 ? 2 : color_type == 2 ? 3 : 4;
 			const usys_t bytes_per_pixel = std::max<usys_t>(1, bit_depth * components / 8);
-			//term.Print("6\n");
 			scanlines.Append(filter);
-			//term.Print("6.5\n");
 			const TByteBuffer filtered = filterScanline(filter, rows[i], previous, bytes_per_pixel);
-			//term.Print("7\n");
 			scanlines.Append(filtered);
 			previous = rows[i];
 		}
-		//term.Print("8\n");
 
 		const TByteBuffer compressed = compressBytes(scanlines);
-		//term.Print("9\n");
 		if(split_idat && compressed.Count() > 1)
 		{
 			const usys_t split = compressed.Count() / 2;
-			//term.Print("10\n");
 			appendChunk(png, "IDAT", array_t<const byte_t>(compressed, split));
-			//term.Print("11\n");
 			appendChunk(png, "IDAT", array_t<const byte_t>(compressed.ItemPtr(split), compressed.Count() - split));
 		}
 		else
 		{
-			//term.Print("12\n");
 			appendChunk(png, "IDAT", compressed);
 		}
 
-		//term.Print("13\n");
-
 		appendChunk(png, "IEND");
-		//term.Print("14\n");
 		return png;
 	}
 
