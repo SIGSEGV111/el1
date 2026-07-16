@@ -119,9 +119,8 @@ namespace el1::math::matrix
 			for(unsigned c = 0; c < n; c++)
 				m(r,c) = (r == c) ? 1 : 0;
 
-			m(r,n) = v[r];
+			m(r,n) = (r < n) ? v[r] : 1;
 		}
-		m(n,n) = 1;
 		return m;
 	}
 

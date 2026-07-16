@@ -161,10 +161,11 @@ namespace el1::util::bits
 		const usys_t idx_bit = idx * bits_per_integer;
 		const usys_t idx_byte = idx_bit / 8;
 		const unsigned n_shift = idx_bit - (idx_byte * 8);
-		EL_ERROR(idx_byte + n_bytes + ((n_shift + bits_per_integer > 8) ? 1 : 0) > sz_array_bytes, TIndexOutOfBoundsException, 0, sz_array_bytes - 1, idx_byte + n_bytes);
+		const bool crosses_byte_boundary = n_shift + bits_per_integer > n_bytes * 8;
+		EL_ERROR(idx_byte + n_bytes + (crosses_byte_boundary ? 1 : 0) > sz_array_bytes, TIndexOutOfBoundsException, 0, sz_array_bytes - 1, idx_byte + n_bytes);
 
 		T integer = 0;
-		if(n_shift + bits_per_integer > 8)
+		if(crosses_byte_boundary)
 			FastCopyBytes<n_bytes + 1>(&integer, array + idx_byte);
 		else
 			FastCopyBytes<n_bytes>(&integer, array + idx_byte);

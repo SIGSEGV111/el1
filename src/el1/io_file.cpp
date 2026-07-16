@@ -120,6 +120,12 @@ namespace el1::io::file
 	{
 		if(components.Count() == 0)
 			return TPath::CURRENT_DIR;
+		if(IsAbsolute() && components.Count() == 1)
+		{
+			TString root;
+			root += SEPERATOR;
+			return root;
+		}
 		return TBase::operator TString();
 	}
 

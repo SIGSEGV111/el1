@@ -118,4 +118,80 @@ namespace
 			EXPECT_EQ(RunBinarySearch(arr, n_items, -100), NEG1);
 		}
 	}
+
+	TEST(util, NumericHelpers)
+	{
+		EXPECT_EQ(Abs(-7), 7);
+		EXPECT_EQ(Abs(7), 7);
+		EXPECT_DOUBLE_EQ(Abs(-2.5), 2.5);
+
+		EXPECT_EQ(Max(3), 3);
+		EXPECT_EQ(Max(3, 5), 5);
+		EXPECT_EQ(Max(3, 5, 2, 9, 1), 9);
+		EXPECT_EQ(Min(3), 3);
+		EXPECT_EQ(Min(3, 5), 3);
+		EXPECT_EQ(Min(3, 5, 2, 9, 1), 1);
+
+		EXPECT_EQ(ModCeil(0U, 8U), 0U);
+		EXPECT_EQ(ModCeil(8U, 8U), 8U);
+		EXPECT_EQ(ModCeil(9U, 8U), 16U);
+	}
+
+	TEST(util, SwapAndCoalesce)
+	{
+		int a = 1;
+		int b = 2;
+		Swap(a, b);
+		EXPECT_EQ(a, 2);
+		EXPECT_EQ(b, 1);
+
+		int c = 3;
+		int* const null = nullptr;
+		EXPECT_EQ(Coalesce(null, &a), &a);
+		EXPECT_EQ(Coalesce(&b, &a), &b);
+		EXPECT_EQ(Coalesce(null, null, &c, &a), &c);
+	}
+
+	TEST(util, BitPositionHelpers)
+	{
+		EXPECT_EQ(CountLeadingZeroes((u32_t)0), 32);
+		EXPECT_EQ(CountLeadingZeroes((u32_t)1), 31);
+		EXPECT_EQ(CountLeadingZeroes((u32_t)0x80000000U), 0);
+		EXPECT_EQ(CountLeadingZeroes((u64_t)0), 64);
+		EXPECT_EQ(CountLeadingZeroes((u64_t)1), 63);
+		EXPECT_EQ(CountLeadingZeroes((u64_t)0x8000000000000000ULL), 0);
+
+		EXPECT_EQ(FindFirstSet((u32_t)0), 0);
+		EXPECT_EQ(FindFirstSet((u32_t)8), 4);
+		EXPECT_EQ(FindFirstSet((u64_t)0), 0);
+		EXPECT_EQ(FindFirstSet((u64_t)0x100000000ULL), 33);
+
+		EXPECT_EQ(CountTrailingZeroes((u32_t)0), 32);
+		EXPECT_EQ(CountTrailingZeroes((u32_t)1), 0);
+		EXPECT_EQ(CountTrailingZeroes((u32_t)8), 3);
+		EXPECT_EQ(CountTrailingZeroes((u64_t)0), 64);
+		EXPECT_EQ(CountTrailingZeroes((u64_t)0x100000000ULL), 32);
+
+		EXPECT_EQ(FindLastSet((u32_t)0), 0);
+		EXPECT_EQ(FindLastSet((u32_t)8), 4);
+		EXPECT_EQ(FindLastSet((u64_t)0), 0);
+		EXPECT_EQ(FindLastSet((u64_t)0x100000000ULL), 33);
+	}
+
+	TEST(util, BinarySearchEmptyAndSubrange)
+	{
+		EXPECT_EQ(BinarySearch([](const usys_t) { return 1; }, 0U), (ssys_t)NEG1);
+
+		const int values[] = { 1, 3, 5, 7, 9 };
+		const auto compare = [&](const usys_t index)
+		{
+			if(values[index] < 7)
+				return -1;
+			if(values[index] > 7)
+				return 1;
+			return 0;
+		};
+		EXPECT_EQ(BinarySearch(compare, 2, 4), 3);
+	}
+
 }

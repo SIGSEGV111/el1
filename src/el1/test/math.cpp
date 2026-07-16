@@ -2,6 +2,7 @@
 #include <el1/math.hpp>
 #include <el1/math_vector.hpp>
 #include <el1/math_matrix.hpp>
+#include <el1/math_polygon.hpp>
 
 namespace el1::math
 {
@@ -370,4 +371,126 @@ namespace el1::math
 			EXPECT_EQ(m(2, 2), 1);
 		}
 	}
+
+	TEST(math_vector, CompoundArithmeticAndModulo)
+	{
+		TVector<int, 3> value(10, 20, 30);
+		value += TVector<int, 3>(1, 2, 3);
+		value -= TVector<int, 3>(3, 2, 1);
+		value *= 2;
+		value /= 4;
+		value %= 6;
+
+		EXPECT_EQ(value, (TVector<int, 3>(4, 4, 4)));
+		EXPECT_EQ((TVector<int, 3>(10, 11, 12) % 5), (TVector<int, 3>(0, 1, 2)));
+
+		TVector<double, 2> floating(5.5, -5.5);
+		floating %= 2.0;
+		EXPECT_DOUBLE_EQ(floating[0], 1.5);
+		EXPECT_DOUBLE_EQ(floating[1], -1.5);
+		EXPECT_EQ((TVector<double, 2>(7.5, 8.5) % 2.0), (TVector<double, 2>(1.5, 0.5)));
+	}
+
+	TEST(math_vector, MetricsAndDifferences)
+	{
+		const TVector<int, 2> a(3, 4);
+		const TVector<int, 2> b(-1, 1);
+
+		EXPECT_FLOAT_EQ(a.Magnitude<float>(), 5.0F);
+		EXPECT_DOUBLE_EQ(a.Magnitude<double>(), 5.0);
+		EXPECT_EQ(a.Magnitude<long double>(), 5.0L);
+		EXPECT_DOUBLE_EQ(a.Distance<double>(b), 5.0);
+		EXPECT_EQ(a.AbsoluteDifference(b), (TVector<int, 2>(4, 3)));
+		EXPECT_TRUE(a != b);
+		EXPECT_FALSE((a != TVector<int, 2>(3, 4)));
+	}
+
+	TEST(math_vector, CopyAndConvertingConstructors)
+	{
+		const TVector<short, 3> source(1, -2, 3);
+		const TVector<int, 3> converted(source);
+		TVector<int, 3> copied(converted);
+		TVector<int, 3> assigned;
+		assigned = copied;
+
+		EXPECT_EQ(converted, (TVector<int, 3>(1, -2, 3)));
+		EXPECT_EQ(copied, converted);
+		EXPECT_EQ(assigned, converted);
+	}
+
+	TEST(math_matrix, CompoundArithmeticAndConstAccess)
+	{
+		TMatrix<int, 2, 2> value;
+		value(0, 0) = 1;
+		value(0, 1) = 2;
+		value(1, 0) = 3;
+		value(1, 1) = 4;
+
+		TMatrix<int, 2, 2> operand;
+		operand(0, 0) = 4;
+		operand(0, 1) = 3;
+		operand(1, 0) = 2;
+		operand(1, 1) = 1;
+
+		value += operand;
+		value -= operand;
+		value *= 3;
+
+		const TMatrix<int, 2, 2>& const_value = value;
+		EXPECT_EQ(const_value(0, 0), 3);
+		EXPECT_EQ(const_value(0, 1), 6);
+		EXPECT_EQ(const_value(1, 0), 9);
+		EXPECT_EQ(const_value(1, 1), 12);
+	}
+
+	namespace
+	{
+		class TTestPolygon final : public polygon::TPolygon
+		{
+			public:
+				explicit TTestPolygon(polygon::vertices_t source)
+				{
+					vertices = std::move(source);
+				}
+		};
+	}
+
+	TEST(math_polygon, Orientation)
+	{
+		using namespace polygon;
+		const v2d_t origin(0.0, 0.0);
+		const v2d_t right(1.0, 0.0);
+
+		EXPECT_EQ(Orientation(origin, right, v2d_t(2.0, 0.0)), 0);
+		EXPECT_EQ(Orientation(origin, right, v2d_t(1.0, -1.0)), 1);
+		EXPECT_EQ(Orientation(origin, right, v2d_t(1.0, 1.0)), -1);
+	}
+
+	TEST(math_polygon, TranslatePerimeterAndCentroid)
+	{
+		using namespace polygon;
+		TTestPolygon polygon(vertices_t({
+			v2d_t(0.0, 0.0),
+			v2d_t(3.0, 0.0),
+			v2d_t(3.0, 4.0),
+			v2d_t(0.0, 4.0),
+		}));
+
+		EXPECT_DOUBLE_EQ(polygon.Perimeter(), 14.0);
+		EXPECT_EQ(polygon.Centroid(), v2d_t(1.5, 2.0));
+
+		polygon.Translate(v2d_t(-1.0, 2.0));
+		ASSERT_EQ(polygon.Vertices().Count(), 4U);
+		EXPECT_EQ(polygon.Vertices()[0], v2d_t(-1.0, 2.0));
+		EXPECT_EQ(polygon.Vertices()[2], v2d_t(2.0, 6.0));
+		EXPECT_DOUBLE_EQ(polygon.Perimeter(), 14.0);
+		EXPECT_EQ(polygon.Centroid(), v2d_t(0.5, 4.0));
+	}
+
+	TEST(math_polygon, DefaultConstruction)
+	{
+		const polygon::TPolygon polygon;
+		EXPECT_EQ(polygon.Vertices().Count(), 0U);
+	}
+
 }

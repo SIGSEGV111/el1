@@ -80,8 +80,8 @@ namespace el1::util
 		inline static int FindFirstSet(u64_t v) { return sizeof(long) == 8 ? __builtin_ffsl(v) : __builtin_ffsll(v); }
 
 		//	Returns the number of trailing 0-bits in x, starting at the least significant bit position.
-		inline static int CountTrailingZeroes(u32_t v) { return v == 0 ? 32 : FindFirstSet(v); }
-		inline static int CountTrailingZeroes(u64_t v) { return v == 0 ? 64 : FindFirstSet(v); }
+		inline static int CountTrailingZeroes(u32_t v) { return v == 0 ? 32 : FindFirstSet(v) - 1; }
+		inline static int CountTrailingZeroes(u64_t v) { return v == 0 ? 64 : FindFirstSet(v) - 1; }
 
 		//	Returns one plus the index of the most significant 1-bit of v, or if v is zero, returns zero.
 		inline static int FindLastSet(u32_t v) { return 32 - CountLeadingZeroes(v); }
@@ -98,8 +98,8 @@ namespace el1::util
 		inline static DWORD FindFirstSet(unsigned __int64 v);
 
 		//	Returns the number of trailing 0-bits in x, starting at the least significant bit position.
-		inline static int CountTrailingZeroes(unsigned __int32 v) { return v == 0 ? 32 : FindFirstSet(v); }
-		inline static int CountTrailingZeroes(unsigned __int64 v) { return v == 0 ? 64 : FindFirstSet(v); }
+		inline static int CountTrailingZeroes(unsigned __int32 v) { return v == 0 ? 32 : FindFirstSet(v) - 1; }
+		inline static int CountTrailingZeroes(unsigned __int64 v) { return v == 0 ? 64 : FindFirstSet(v) - 1; }
 
 		//	Returns one plus the index of the most significant 1-bit of v, or if v is zero, returns zero.
 		inline static int FindLastSet(unsigned __int32 v) { return 32 - CountLeadingZeroes(v); }

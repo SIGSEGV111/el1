@@ -4,6 +4,8 @@
 #include <el1/io_format_json.hpp>
 #include <el1/io_path.hpp>
 #include <arpa/inet.h>
+#include <cstring>
+#include <stdexcept>
 
 using namespace ::testing;
 
@@ -15,6 +17,152 @@ namespace
 	using namespace el1::io::collection::list;
 	using namespace el1::io::collection::map;
 	using namespace el1::error;
+
+	const IDatatypeCodec& FindDatatypeCodec(const char* const datatype_name)
+	{
+		for(const IDatatypeCodec* const codec : TTypeMap::GLOBAL_CODEC_REGISTRY)
+			if(strcmp(codec->datatype_name, datatype_name) == 0)
+				return *codec;
+
+		throw std::logic_error("datatype codec not found");
+	}
+
+	template<typename T>
+	T RoundTripCodec(const IDatatypeCodec& codec, const T& input)
+	{
+		const usys_t capacity = codec.Serialize(&input, array_t<byte_t>());
+		TList<byte_t> encoded;
+		encoded.SetCount(capacity);
+		const usys_t size = codec.Serialize(&input, encoded);
+		const array_t<const byte_t> pg_value = size == 0
+			? array_t<const byte_t>()
+			: array_t<const byte_t>(encoded.ItemPtr(0), size);
+
+		alignas(T) byte_t storage[sizeof(T)];
+		codec.Deserialize(pg_value, storage);
+		T* const decoded = reinterpret_cast<T*>(storage);
+		T result = *decoded;
+		codec.Destruct(decoded);
+		return result;
+	}
+
+	TEST(db_postgres_codec, RegistryMetadata)
+	{
+		ASSERT_GE(TTypeMap::GLOBAL_CODEC_REGISTRY.Count(), 20U);
+		const IDatatypeCodec& bool_codec = FindDatatypeCodec("bool");
+		EXPECT_STREQ(bool_codec.namespace_name, "pg_catalog");
+		EXPECT_EQ(*bool_codec.cxx_type_info, typeid(bool));
+		EXPECT_EQ(bool_codec.cxx_size, sizeof(bool));
+		EXPECT_EQ(bool_codec.cxx_alignment, alignof(bool));
+		EXPECT_TRUE(bool_codec.required);
+
+		const IDatatypeCodec& ltree_codec = FindDatatypeCodec("ltree");
+		EXPECT_STREQ(ltree_codec.namespace_name, "*");
+		EXPECT_FALSE(ltree_codec.required);
+	}
+
+	TEST(db_postgres_codec, BooleanAndCharacter)
+	{
+		const IDatatypeCodec& bool_codec = FindDatatypeCodec("bool");
+		EXPECT_TRUE(RoundTripCodec(bool_codec, true));
+		EXPECT_FALSE(RoundTripCodec(bool_codec, false));
+
+		alignas(bool) byte_t bool_storage[sizeof(bool)];
+		const byte_t invalid_bool[] = { 2 };
+		EXPECT_THROW(bool_codec.Deserialize(array_t<const byte_t>(invalid_bool, sizeof(invalid_bool)), bool_storage), TException);
+		EXPECT_THROW(bool_codec.Deserialize(array_t<const byte_t>(), bool_storage), TException);
+
+		const IDatatypeCodec& char_codec = FindDatatypeCodec("char");
+		EXPECT_EQ(RoundTripCodec(char_codec, 'Z'), 'Z');
+		EXPECT_THROW(char_codec.Deserialize(array_t<const byte_t>(), bool_storage), TException);
+	}
+
+	TEST(db_postgres_codec, IntegersAndFloatingPoint)
+	{
+		const IDatatypeCodec& int2_codec = FindDatatypeCodec("int2");
+		const IDatatypeCodec& int4_codec = FindDatatypeCodec("int4");
+		const IDatatypeCodec& int8_codec = FindDatatypeCodec("int8");
+		EXPECT_EQ(RoundTripCodec(int2_codec, (s16_t)-1234), (s16_t)-1234);
+		EXPECT_EQ(RoundTripCodec(int4_codec, (s32_t)0x12345678), (s32_t)0x12345678);
+		EXPECT_EQ(RoundTripCodec(int8_codec, (s64_t)-0x123456789ABCDELL), (s64_t)-0x123456789ABCDELL);
+
+		const s32_t integer = 0x12345678;
+		byte_t integer_buffer[4] = {};
+		EXPECT_EQ(int4_codec.Serialize(&integer, array_t<byte_t>(integer_buffer, sizeof(integer_buffer))), 4U);
+		EXPECT_EQ(integer_buffer[0], 0x12U);
+		EXPECT_EQ(integer_buffer[1], 0x34U);
+		EXPECT_EQ(integer_buffer[2], 0x56U);
+		EXPECT_EQ(integer_buffer[3], 0x78U);
+		EXPECT_THROW(int4_codec.Serialize(&integer, array_t<byte_t>(integer_buffer, 1)), TException);
+		alignas(s32_t) byte_t integer_storage[sizeof(s32_t)];
+		EXPECT_THROW(int4_codec.Deserialize(array_t<const byte_t>(integer_buffer, 3), integer_storage), TException);
+
+		const IDatatypeCodec& float4_codec = FindDatatypeCodec("float4");
+		const IDatatypeCodec& float8_codec = FindDatatypeCodec("float8");
+		EXPECT_FLOAT_EQ(RoundTripCodec(float4_codec, 1.25F), 1.25F);
+		EXPECT_DOUBLE_EQ(RoundTripCodec(float8_codec, -123.5), -123.5);
+		alignas(double) byte_t float_storage[sizeof(double)];
+		EXPECT_THROW(float8_codec.Deserialize(array_t<const byte_t>(integer_buffer, sizeof(integer_buffer)), float_storage), TException);
+	}
+
+	TEST(db_postgres_codec, ByteArrayAndStrings)
+	{
+		const IDatatypeCodec& bytea_codec = FindDatatypeCodec("bytea");
+		const TList<byte_t> bytes = { 0, 1, 2, 127, 255 };
+		const TList<byte_t> decoded_bytes = RoundTripCodec(bytea_codec, bytes);
+		ASSERT_EQ(decoded_bytes.Count(), bytes.Count());
+		for(usys_t i = 0; i < bytes.Count(); i++)
+			EXPECT_EQ(decoded_bytes[i], bytes[i]);
+
+		const IDatatypeCodec& text_codec = FindDatatypeCodec("text");
+		const TString text("Grüße from PostgreSQL");
+		EXPECT_EQ(RoundTripCodec(text_codec, text), text);
+
+		const usys_t capacity = text_codec.Serialize(&text, array_t<byte_t>());
+		ASSERT_GT(capacity, 1U);
+		TList<byte_t> short_buffer;
+		short_buffer.SetCount(capacity - 1U);
+		EXPECT_THROW(text_codec.Serialize(&text, short_buffer), TException);
+	}
+
+	TEST(db_postgres_codec, TimestampJsonAndNoOp)
+	{
+		const IDatatypeCodec& timestamp_codec = FindDatatypeCodec("timestamp");
+		const TTime timestamp = TTime::ConvertFrom(EUnit::MICROSECONDS, 946684800123456LL);
+		EXPECT_EQ(RoundTripCodec(timestamp_codec, timestamp), timestamp);
+
+		const IDatatypeCodec& json_codec = FindDatatypeCodec("json");
+		const IDatatypeCodec& jsonb_codec = FindDatatypeCodec("jsonb");
+		const TJsonValue json = TJsonValue::Parse("{\"answer\":42,\"ok\":true}");
+		EXPECT_EQ(RoundTripCodec(json_codec, json).ToString(), json.ToString());
+		EXPECT_EQ(RoundTripCodec(jsonb_codec, json).ToString(), json.ToString());
+
+		alignas(TJsonValue) byte_t json_storage[sizeof(TJsonValue)];
+		const byte_t invalid_jsonb[] = { 2, '{', '}' };
+		EXPECT_THROW(jsonb_codec.Deserialize(array_t<const byte_t>(invalid_jsonb, sizeof(invalid_jsonb)), json_storage), TException);
+		EXPECT_THROW(jsonb_codec.Deserialize(array_t<const byte_t>(), json_storage), TException);
+
+		const IDatatypeCodec& void_codec = FindDatatypeCodec("void");
+		EXPECT_EQ(void_codec.Serialize(nullptr, array_t<byte_t>()), 0U);
+		void_codec.Deserialize(array_t<const byte_t>(), nullptr);
+		void_codec.Destruct(nullptr);
+	}
+
+	TEST(db_postgres_codec, Ltree)
+	{
+		const IDatatypeCodec& codec = FindDatatypeCodec("ltree");
+		const el1::io::path::TPath path("Top.Science.Astronomy", '.');
+		const el1::io::path::TPath decoded = RoundTripCodec(codec, path);
+		EXPECT_EQ(decoded.ToString(), path.ToString());
+		EXPECT_EQ(decoded.Separator(), path.Separator());
+
+		const el1::io::path::TPath invalid_path("Top/Science", '/');
+		EXPECT_THROW(codec.Serialize(&invalid_path, array_t<byte_t>()), TInvalidArgumentException);
+
+		alignas(el1::io::path::TPath) byte_t storage[sizeof(el1::io::path::TPath)];
+		const byte_t invalid_version[] = { 0, 'T', 'o', 'p' };
+		EXPECT_THROW(codec.Deserialize(array_t<const byte_t>(invalid_version, sizeof(invalid_version)), storage), TException);
+	}
 
 	TEST(db_postgres, TPostgresConnection_connect)
 	{

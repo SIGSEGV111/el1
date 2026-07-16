@@ -199,6 +199,8 @@ namespace el1::io::path
 		separator(separator),
 		allow_absolute(allow_absolute)
 	{
+		if(allow_absolute && str.Length() == 1 && str[0] == separator && components.Count() == 2)
+			components.Remove(-1, 1);
 		Validate();
 	}
 

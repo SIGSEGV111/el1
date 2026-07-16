@@ -135,7 +135,14 @@ namespace el1::io::file
 
 		if(e.type == EObjectType::DIRECTORY)
 		{
-			DeleteRecursive(TDirectory(base, e.name), e);
+			TDirectory directory(base, e.name);
+			directory.Enum(
+				[&](direntry_t& child)
+				{
+					DeleteRecursive(directory, child);
+					return true;
+				}
+			);
 			EL_SYSERR(unlinkat(base.Handle(), e.name.MakeCStr().get(), AT_REMOVEDIR));
 		}
 		else if(e.type != EObjectType::NX)

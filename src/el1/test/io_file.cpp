@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <el1/io_file.hpp>
 #include <string.h>
+#include <fcntl.h>
 
 using namespace ::testing;
 
@@ -467,4 +468,134 @@ namespace
 			EXPECT_THROW(test.Simplify(), TInvalidPathException);
 		}
 	}
+
+	TEST(io_file, TAccess_FileOpenFlags)
+	{
+		EXPECT_EQ(TAccess::NONE.FileOpenFlags(), 0);
+		EXPECT_EQ(TAccess::RO.FileOpenFlags(), O_RDONLY);
+		EXPECT_EQ(TAccess::WO.FileOpenFlags(), O_WRONLY);
+		EXPECT_EQ(TAccess::RW.FileOpenFlags(), O_RDWR);
+	}
+
+	TEST(io_file, TPath_EdgeCases)
+	{
+		const TPath empty;
+		EXPECT_EQ(empty.ToString(), ".");
+		EXPECT_EQ(empty.Parent(), TPath(".."));
+
+		const TPath root("/");
+		EXPECT_TRUE(root.IsAbsolute());
+		EXPECT_EQ(root.Parent(), root);
+		EXPECT_TRUE(root.IsMountpoint());
+
+		const TPath a("alpha/beta/gamma");
+		const TPath b("alpha/beta/delta");
+		EXPECT_EQ(a.CountCommonPrefix(b), 2U);
+		EXPECT_EQ(a.CountCommonPrefix(TPath("other")), 0U);
+	}
+
+	TEST(io_file, TPath_CreateDeleteAndDirectoryInfo)
+	{
+		const TPath root("gen/test1.tmp/io-file-tree");
+		if(root.Exists())
+			root.Delete(true);
+
+		const TPath nested = root + "a" + "b";
+		nested.CreateAsDirectory(true);
+		ASSERT_TRUE(nested.IsDirectory());
+
+		const TPath file_path = nested + "sample.txt";
+		{
+			TFile file = file_path.CreateAsFile(false);
+			const char* const text = "  alpha beta  \n";
+			EXPECT_EQ(file.Write(reinterpret_cast<const byte_t*>(text), strlen(text)), strlen(text));
+		}
+
+		EXPECT_TRUE(file_path.IsFile());
+		EXPECT_EQ(TFile::ReadText(file_path), "alpha beta");
+		EXPECT_EQ(TFile::ReadText(file_path, false), "  alpha beta  \n");
+		EXPECT_EQ(TFile::ReadText(file_path, true, 7), "alpha");
+
+		TDirectory directory(nested);
+		EXPECT_TRUE(directory.Contains("sample.txt"));
+		EXPECT_FALSE(directory.Contains("missing.txt"));
+		EXPECT_GT(directory.ObjectID(), 0U);
+		EXPECT_GT(directory.AproxCount(), 0U);
+		EXPECT_EQ(directory.Path().FullName(), "b");
+		EXPECT_EQ(directory.Parent(), TDirectory(nested.Parent()));
+
+		const direntry_t file_info = directory.QueryInfo("sample.txt");
+		EXPECT_EQ(file_info.type, EObjectType::FILE);
+		EXPECT_EQ(file_info.size, strlen("  alpha beta  \n"));
+		EXPECT_GT(file_info.obj_id, 0U);
+
+		const direntry_t missing_info = directory.QueryInfo("missing.txt");
+		EXPECT_EQ(missing_info.type, EObjectType::NX);
+
+		TPath resolved = file_path;
+		resolved.Resolve();
+		EXPECT_TRUE(resolved.IsAbsolute());
+		EXPECT_EQ(resolved.FullName(), "sample.txt");
+
+		root.Delete(true);
+		EXPECT_EQ(root.Type(), EObjectType::NX);
+	}
+
+	TEST(io_file, TFile_CreateModesIdentityAndMappingRemap)
+	{
+		const TPath root("gen/test1.tmp/io-file-modes");
+		if(root.Exists())
+			root.Delete(true);
+		root.CreateAsDirectory(true);
+		const TPath path = root + "data.bin";
+
+		{
+			TFile file(path, TAccess::RW, ECreateMode::EXCLUSIVE);
+			const byte_t data[] = { 0, 1, 2, 3, 4, 5, 6, 7 };
+			EXPECT_EQ(file.Write(data, sizeof(data)), sizeof(data));
+			EXPECT_THROW(TFile(path, TAccess::RW, ECreateMode::EXCLUSIVE), TException);
+		}
+
+		{
+			TFile first(path, TAccess::RW, ECreateMode::NX);
+			TFile second(path, TAccess::RO, ECreateMode::OPEN);
+			EXPECT_EQ(first, second);
+			EXPECT_EQ(first.ObjectID(), second.ObjectID());
+			EXPECT_EQ(first.Path().FullName(), "data.bin");
+			EXPECT_EQ(first.Size(), 8U);
+
+			TMapping mapping(&first, 0, 4);
+			EXPECT_EQ(mapping.Count(), 4U);
+			mapping.Remap(0, 8);
+			ASSERT_EQ(mapping.Count(), 8U);
+			for(usys_t i = 0; i < mapping.Count(); i++)
+				EXPECT_EQ(mapping[i], i);
+		}
+
+		{
+			TFile file(path, TAccess::RW, ECreateMode::TRUNCATE);
+			EXPECT_EQ(file.Size(), 0U);
+			EXPECT_TRUE(file.Access().read);
+			EXPECT_TRUE(file.Access().write);
+			file.Close();
+			EXPECT_FALSE(file.Access().read);
+			EXPECT_FALSE(file.Access().write);
+		}
+
+		{
+			TFile file(path, TAccess::RW, ECreateMode::DELETE);
+			EXPECT_EQ(file.Size(), 0U);
+		}
+
+		root.Delete(true);
+	}
+
+	TEST(io_file, TDirectory_Root)
+	{
+		const TDirectory root("/");
+		EXPECT_TRUE(root.IsRoot());
+		EXPECT_EQ(root.Parent(), root);
+		EXPECT_GT(root.ObjectID(), 0U);
+	}
+
 }

@@ -9,6 +9,8 @@ namespace
 {
 	using namespace el1::io::types;
 	using namespace el1::util::bits;
+	using namespace el1::system::time;
+	using namespace el1::error;
 
 	TEST(system_bits, MakeBitMask)
 	{
@@ -197,4 +199,60 @@ namespace
 
 		EXPECT_EQ(GetBitField<16>(array, sizeof(array), 0), 0xffabU);
 	}
+
+	TEST(system_bits, MakeBitMaskBounds)
+	{
+		EXPECT_THROW(MakeBitMask8(8), TIndexOutOfBoundsException);
+		EXPECT_THROW(MakeBitMask16(16), TIndexOutOfBoundsException);
+		EXPECT_THROW(MakeBitMask32(32), TIndexOutOfBoundsException);
+		EXPECT_THROW(MakeBitMask64(64), TIndexOutOfBoundsException);
+	}
+
+	TEST(system_bits, RotateAllWidthsAndDirections)
+	{
+		EXPECT_EQ(RotateLeft16((u16_t)0x8001U, 1), (u16_t)0x0003U);
+		EXPECT_EQ(RotateLeft32((u32_t)0x80000001U, 1), (u32_t)0x00000003U);
+		EXPECT_EQ(RotateRight8((u8_t)0x03U, 1), (u8_t)0x81U);
+		EXPECT_EQ(RotateRight16((u16_t)0x0003U, 1), (u16_t)0x8001U);
+		EXPECT_EQ(RotateRight32((u32_t)0x00000003U, 1), (u32_t)0x80000001U);
+		EXPECT_EQ(RotateRight64((u64_t)0x0000000000000003ULL, 1), (u64_t)0x8000000000000001ULL);
+		EXPECT_EQ(RotateRight32((u32_t)0x12345678U, 0), (u32_t)0x12345678U);
+		EXPECT_EQ(RotateRight32((u32_t)0x12345678U, 32), (u32_t)0x12345678U);
+	}
+
+	TEST(system_bits, TimeToBits)
+	{
+		EXPECT_EQ(TimeToBits(1'000.0, TTime::ConvertFrom(EUnit::MILLISECONDS, 1.0)), 1U);
+		EXPECT_EQ(TimeToBits(2'000.0, TTime::ConvertFrom(EUnit::MILLISECONDS, 1.1)), 3U);
+		EXPECT_EQ(TimeToBits(0.0, TTime()), 0U);
+	}
+
+	TEST(system_bits, CollateBitsAllWidths)
+	{
+		EXPECT_EQ(CollateBits8((u8_t)0b11010110U, (u8_t)0b01010101U), (u8_t)0b00001110U);
+		EXPECT_EQ(CollateBits32((u32_t)0xF0F00F0FU, (u32_t)0x00FF00FFU), (u32_t)0x0000F00FU);
+		EXPECT_EQ(CollateBits64((u64_t)0xF00000000000000FULL, (u64_t)0xF00000000000000FULL), (u64_t)0xFFU);
+	}
+
+	TEST(system_bits, CountOneBits)
+	{
+		EXPECT_EQ(CountOneBits((u8_t)0b10101010U), 4U);
+		EXPECT_EQ(CountOneBits((u16_t)0xF00FU), 8U);
+		EXPECT_EQ(CountOneBits((u32_t)0xF0F0F0F0U), 16U);
+		EXPECT_EQ(CountOneBits((u64_t)0xFFFFFFFF00000000ULL), 32U);
+		EXPECT_EQ(CountOneBits((u8_t)0x0FU, (u16_t)0x0003U, (u32_t)0x80000000U), 7U);
+	}
+
+	TEST(system_bits, GetBitFieldBoundaries)
+	{
+		const byte_t aligned[] = { 0x34, 0x12 };
+		EXPECT_EQ(GetBitField<16>(aligned, sizeof(aligned), 0), 0x1234U);
+
+		const byte_t packed[] = { 0b11100100, 0b01011011 };
+		EXPECT_EQ(GetBitField<5>(packed, sizeof(packed), 0), 0b00100U);
+		EXPECT_EQ(GetBitField<5>(packed, sizeof(packed), 1), 0b11111U);
+		EXPECT_EQ(GetBitField<5>(packed, sizeof(packed), 2), 0b10110U);
+		EXPECT_THROW((GetBitField<8>(packed, sizeof(packed), 2)), TIndexOutOfBoundsException);
+	}
+
 }

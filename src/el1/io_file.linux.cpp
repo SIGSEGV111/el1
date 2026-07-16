@@ -440,13 +440,39 @@ namespace el1::io::file
 		EL_THROW(TInvalidArgumentException, "create", "valid values are: OPEN, NX, EXCLUSIVE, TRUNCATE, DELETE");
 	}
 
+	static handle_t OpenTemporaryFile(const char* const directory)
+	{
+		const handle_t direct_handle = open(directory, O_RDWR|O_CLOEXEC|O_TMPFILE, 0666);
+		if(direct_handle >= 0)
+			return direct_handle;
+
+		const int direct_error = errno;
+		if(direct_error != EISDIR && direct_error != EOPNOTSUPP && direct_error != EINVAL && direct_error != ENOSYS)
+			EL_THROW(TSyscallException, direct_error);
+
+		TString filename = directory;
+		filename += "/el1-XXXXXX";
+		auto filename_cstr = filename.MakeCStr();
+		const handle_t fallback_handle = EL_SYSERR(mkostemp(filename_cstr.get(), O_CLOEXEC));
+		if(unlink(filename_cstr.get()) != 0)
+		{
+			const int unlink_error = errno;
+			close(fallback_handle);
+			EL_THROW(TSyscallException, unlink_error);
+		}
+		return fallback_handle;
+	}
+
 	TFile::TFile() : access(TAccess::RW)
 	{
 		const TString* const tmpdir = system::task::EnvironmentVariables().Get("TMPDIR");
 		if(tmpdir == nullptr)
-			this->handle = THandle(EL_SYSERR(open("/tmp", O_RDWR|O_CLOEXEC|O_TMPFILE, 0666)), true);
+			this->handle = THandle(OpenTemporaryFile("/tmp"), true);
 		else
-			this->handle = THandle(EL_SYSERR(open(tmpdir->MakeCStr().get(), O_RDWR|O_CLOEXEC|O_TMPFILE, 0666)), true);
+		{
+			auto tmpdir_cstr = tmpdir->MakeCStr();
+			this->handle = THandle(OpenTemporaryFile(tmpdir_cstr.get()), true);
+		}
 	}
 
 	TFile::TFile(const TDirectory& temp_dir) : access(TAccess::RW)
