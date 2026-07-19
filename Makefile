@@ -267,9 +267,9 @@ install: release
 
 package: rpm
 
-rpm: release $(ARCH_RPM_NAME)
+rpm: $(ARCH_RPM_NAME)
 
-deploy: release $(ARCH_RPM_NAME)
+deploy: $(ARCH_RPM_NAME)
 	ensure-git-clean.sh
 	deploy-rpm.sh --infile="$(SRC_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)" --srpm
 	deploy-rpm.sh --infile="$(ARCH_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
