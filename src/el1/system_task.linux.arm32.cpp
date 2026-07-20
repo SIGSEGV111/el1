@@ -10,6 +10,14 @@
 // https://developer.arm.com/documentation/den0013/d/Instruction-Summary/Instruction-Summary/ADC?lang=en
 // https://sourceforge.net/p/predef/wiki/Architectures/
 
+#if defined(__VFP_FP__) && !defined(__SOFTFP__)
+	#define EL_ARM32_SAVE_VFP_REGISTERS "vstmia r0!, {d8-d15}\n"
+	#define EL_ARM32_LOAD_VFP_REGISTERS "vldmia r1!, {d8-d15}\n"
+#else
+	#define EL_ARM32_SAVE_VFP_REGISTERS ""
+	#define EL_ARM32_LOAD_VFP_REGISTERS ""
+#endif
+
 asm(R"(
 .arm
 .syntax unified
@@ -22,7 +30,7 @@ __SwapRegisters__:
 /* R0 is the first function argument => pointer to destination register buffer */
 /* R1 is the second function argument => pointer to source register buffer */
 
-/* the following registers must be callee saved: r4-r11,r13(SP),r15(PC) - all other registers have to be saved by the caller */
+/* the following registers must be callee saved: r4-r11,r13(SP),r15(PC) and, when VFP is available, d8-d15 */
 
 /* save SP */
 mov r2, r13
@@ -34,15 +42,27 @@ mov r3, lr
 stm r0!, {r4, r5, r6, r7, r8, r9, r10, r11}
 stm r0!, {r2, r3}
 
+/* d8-d15 are callee-saved by AAPCS32 and may contain live floating-point values across the call */
+)"
+EL_ARM32_SAVE_VFP_REGISTERS
+R"(
+
 /* load registers from array at r1 */
 ldm r1!, {r4, r5, r6, r7, r8, r9, r10, r11, r13}
 ldm r1!, {r3}
+
+)"
+EL_ARM32_LOAD_VFP_REGISTERS
+R"(
 
 mov lr, #0
 
 /* return to address in r3 */
 bx r3
 )");
+
+#undef EL_ARM32_SAVE_VFP_REGISTERS
+#undef EL_ARM32_LOAD_VFP_REGISTERS
 
 namespace el1::system::task
 {

@@ -264,7 +264,11 @@ namespace el1::system::task
 			{
 				union
 				{
-					u32_t arr[10];
+					#if defined(__VFP_FP__) && !defined(__SOFTFP__)
+						u32_t arr[26];
+					#else
+						u32_t arr[10];
+					#endif
 					struct
 					{
 						u32_t r4;
@@ -277,6 +281,16 @@ namespace el1::system::task
 						u32_t r11;
 						u32_t r13;
 						u32_t r15;
+						#if defined(__VFP_FP__) && !defined(__SOFTFP__)
+							u64_t d8;
+							u64_t d9;
+							u64_t d10;
+							u64_t d11;
+							u64_t d12;
+							u64_t d13;
+							u64_t d14;
+							u64_t d15;
+						#endif
 					};
 				};
 			};

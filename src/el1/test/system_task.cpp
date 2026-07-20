@@ -210,6 +210,34 @@ namespace
 // 		EXPECT_TRUE(status);
 // 	}
 
+	#if defined(__arm__) && !defined(__aarch64__) && defined(__VFP_FP__) && !defined(__SOFTFP__)
+	TEST(system_task, TFiber_preserves_vfp_callee_saved_registers)
+	{
+		const double expected = 0.123456789012345;
+		const double replacement = 98765.4321098765;
+		double actual = 0.0;
+		TFiber* fiber_b = nullptr;
+
+		TFiber fiber_a([&](){
+			asm volatile("vldr d8, %0" : : "m"(expected) : "d8");
+			fiber_b->SwitchTo();
+			asm volatile("vstr d8, %0" : "=m"(actual));
+		}, false);
+
+		TFiber fiber_b_instance([&](){
+			asm volatile("vldr d8, %0" : : "m"(replacement) : "d8");
+			fiber_a.SwitchTo();
+		}, false);
+
+		fiber_b = &fiber_b_instance;
+		fiber_a.Start();
+		fiber_b_instance.Start();
+		fiber_a.SwitchTo();
+
+		EXPECT_DOUBLE_EQ(actual, expected);
+	}
+	#endif
+
 	TEST(system_task, TFiber_libc_compat)
 	{
 		bool status = false;
