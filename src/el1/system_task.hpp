@@ -264,7 +264,7 @@ namespace el1::system::task
 			{
 				union
 				{
-					#if defined(__VFP_FP__) && !defined(__SOFTFP__)
+					#if defined(__ARM_FP)
 						u32_t arr[26];
 					#else
 						u32_t arr[10];
@@ -281,7 +281,7 @@ namespace el1::system::task
 						u32_t r11;
 						u32_t r13;
 						u32_t r15;
-						#if defined(__VFP_FP__) && !defined(__SOFTFP__)
+						#if defined(__ARM_FP)
 							u64_t d8;
 							u64_t d9;
 							u64_t d10;
@@ -300,7 +300,7 @@ namespace el1::system::task
 			{
 				union
 				{
-					u32_t arr[13];
+					u64_t arr[21];
 					struct
 					{
 						u64_t x19;
@@ -316,6 +316,14 @@ namespace el1::system::task
 						u64_t x29;
 						u64_t lr;
 						u64_t sp;
+						u64_t d8;
+						u64_t d9;
+						u64_t d10;
+						u64_t d11;
+						u64_t d12;
+						u64_t d13;
+						u64_t d14;
+						u64_t d15;
 					};
 				};
 			};
@@ -325,7 +333,13 @@ namespace el1::system::task
 			{
 				union
 				{
-					u64_t arr[14]; // Adjusted for the typical callee-saved registers in RISC-V
+					#if defined(__riscv_float_abi_double)
+						u64_t arr[26];
+					#elif defined(__riscv_float_abi_single)
+						u64_t arr[20];
+					#else
+						u64_t arr[14];
+					#endif
 					struct
 					{
 						u64_t x8;
@@ -341,7 +355,34 @@ namespace el1::system::task
 						u64_t x26;
 						u64_t x27;
 						u64_t sp;
-						u64_t pc;
+						u64_t ra;
+						#if defined(__riscv_float_abi_double)
+							u64_t f8;
+							u64_t f9;
+							u64_t f18;
+							u64_t f19;
+							u64_t f20;
+							u64_t f21;
+							u64_t f22;
+							u64_t f23;
+							u64_t f24;
+							u64_t f25;
+							u64_t f26;
+							u64_t f27;
+						#elif defined(__riscv_float_abi_single)
+							u32_t f8;
+							u32_t f9;
+							u32_t f18;
+							u32_t f19;
+							u32_t f20;
+							u32_t f21;
+							u32_t f22;
+							u32_t f23;
+							u32_t f24;
+							u32_t f25;
+							u32_t f26;
+							u32_t f27;
+						#endif
 					};
 				};
 			};

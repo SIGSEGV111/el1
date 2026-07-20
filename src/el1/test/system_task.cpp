@@ -210,7 +210,7 @@ namespace
 // 		EXPECT_TRUE(status);
 // 	}
 
-	#if defined(__arm__) && !defined(__aarch64__) && defined(__VFP_FP__) && !defined(__SOFTFP__)
+	#if defined(__arm__) && !defined(__aarch64__) && defined(__ARM_FP)
 	TEST(system_task, TFiber_preserves_vfp_callee_saved_registers)
 	{
 		const double expected = 0.123456789012345;
@@ -235,6 +235,104 @@ namespace
 		fiber_a.SwitchTo();
 
 		EXPECT_DOUBLE_EQ(actual, expected);
+	}
+	#endif
+
+	#if defined(__aarch64__)
+	TEST(system_task, TFiber_preserves_aarch64_fp_callee_saved_registers)
+	{
+		const double expected = 0.123456789012345;
+		const double replacement = 98765.4321098765;
+		double actual = 0.0;
+		TFiber* fiber_b = nullptr;
+
+		TFiber fiber_a([&](){
+			asm volatile("ldr d8, %0" : : "m"(expected) : "d8");
+			fiber_b->SwitchTo();
+			asm volatile("str d8, %0" : "=m"(actual));
+		}, false);
+
+		TFiber fiber_b_instance([&](){
+			asm volatile("ldr d8, %0" : : "m"(replacement) : "d8");
+			fiber_a.SwitchTo();
+		}, false);
+
+		fiber_b = &fiber_b_instance;
+		fiber_a.Start();
+		fiber_b_instance.Start();
+		fiber_a.SwitchTo();
+
+		EXPECT_DOUBLE_EQ(actual, expected);
+	}
+	#endif
+
+	#if defined(__riscv) && __riscv_xlen == 64 && defined(__riscv_float_abi_double)
+	TEST(system_task, TFiber_preserves_riscv64_double_fp_callee_saved_registers)
+	{
+		const double expected = 0.123456789012345;
+		const double replacement = 98765.4321098765;
+		double actual = 0.0;
+		TFiber* fiber_b = nullptr;
+
+		TFiber fiber_a([&](){
+			asm volatile("fld f8, %0" : : "m"(expected) : "f8");
+			fiber_b->SwitchTo();
+			asm volatile("fsd f8, %0" : "=m"(actual));
+		}, false);
+
+		TFiber fiber_b_instance([&](){
+			asm volatile("fld f8, %0" : : "m"(replacement) : "f8");
+			fiber_a.SwitchTo();
+		}, false);
+
+		fiber_b = &fiber_b_instance;
+		fiber_a.Start();
+		fiber_b_instance.Start();
+		fiber_a.SwitchTo();
+
+		EXPECT_DOUBLE_EQ(actual, expected);
+	}
+	#elif defined(__riscv) && __riscv_xlen == 64 && defined(__riscv_float_abi_single)
+	TEST(system_task, TFiber_preserves_riscv64_single_fp_callee_saved_registers)
+	{
+		const float expected = 0.123456789f;
+		const float replacement = 98765.4375f;
+		float actual = 0.0f;
+		TFiber* fiber_b = nullptr;
+
+		TFiber fiber_a([&](){
+			asm volatile("flw f8, %0" : : "m"(expected) : "f8");
+			fiber_b->SwitchTo();
+			asm volatile("fsw f8, %0" : "=m"(actual));
+		}, false);
+
+		TFiber fiber_b_instance([&](){
+			asm volatile("flw f8, %0" : : "m"(replacement) : "f8");
+			fiber_a.SwitchTo();
+		}, false);
+
+		fiber_b = &fiber_b_instance;
+		fiber_a.Start();
+		fiber_b_instance.Start();
+		fiber_a.SwitchTo();
+
+		EXPECT_FLOAT_EQ(actual, expected);
+	}
+	#endif
+
+	#if defined(__riscv) && __riscv_xlen == 64
+	TEST(system_task, TFiber_starts_with_abi_aligned_stack)
+	{
+		usys_t stack_pointer = 0;
+
+		TFiber fiber([&](){
+			asm volatile("mv %0, sp" : "=r"(stack_pointer));
+		}, false);
+
+		fiber.Start();
+		fiber.SwitchTo();
+
+		EXPECT_EQ(stack_pointer % 16, 0U);
 	}
 	#endif
 

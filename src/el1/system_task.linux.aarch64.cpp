@@ -16,11 +16,11 @@ __SwapRegisters__:
 /* x0 is the first function argument => pointer to destination register buffer */
 /* x1 is the second function argument => pointer to source register buffer */
 /* x2-x7 are further (unused) arguments */
-/* x8 is the return address */
+/* x8 is an indirect-result location register (unused here) */
 /* x9-x15 caller saved */
 /* x16+x17 scratch registers (ignored) */
 /* x18 platform register (ignored) */
-/* the following registers must be callee saved: x19-x29,x30(lr),x31(SP) - all other registers have to be saved by the caller */
+/* the following registers must be callee saved: x19-x29, x30(lr), SP and the low 64 bits of v8-v15 */
 
 /* store registers to array at x0 */
 str x19, [x0,  0]
@@ -40,6 +40,12 @@ str x30, [x0, 88]
 mov x9, sp
 str x9, [x0, 96]
 
+/* save the low 64 bits of the callee-saved SIMD/FP registers */
+stp d8,  d9,  [x0, 104]
+stp d10, d11, [x0, 120]
+stp d12, d13, [x0, 136]
+stp d14, d15, [x0, 152]
+
 /* load registers from array at x1 */
 ldr x19, [x1,  0]
 ldr x20, [x1,  8]
@@ -56,6 +62,12 @@ ldr x30, [x1, 88]
 
 /* handle SP */
 ldr x9, [x1, 96]
+
+/* restore the low 64 bits of the callee-saved SIMD/FP registers */
+ldp d8,  d9,  [x1, 104]
+ldp d10, d11, [x1, 120]
+ldp d12, d13, [x1, 136]
+ldp d14, d15, [x1, 152]
 
 /* aarch64 bullshit (x31 = x9 + 0) => (x31 = x9) */
 add	sp, x9, 0

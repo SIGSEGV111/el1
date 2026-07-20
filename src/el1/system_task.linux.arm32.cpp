@@ -10,7 +10,7 @@
 // https://developer.arm.com/documentation/den0013/d/Instruction-Summary/Instruction-Summary/ADC?lang=en
 // https://sourceforge.net/p/predef/wiki/Architectures/
 
-#if defined(__VFP_FP__) && !defined(__SOFTFP__)
+#if defined(__ARM_FP)
 	#define EL_ARM32_SAVE_VFP_REGISTERS "vstmia r0!, {d8-d15}\n"
 	#define EL_ARM32_LOAD_VFP_REGISTERS "vldmia r1!, {d8-d15}\n"
 #else
