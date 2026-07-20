@@ -30,6 +30,7 @@ el1 is a C++ Essentials Library focused on IoT and high-level operations.
 %{_includedir}/el1/dev_i2c_native.hpp
 %{_includedir}/el1/dev_i2c_opt3001.hpp
 %{_includedir}/el1/dev_i2c_pca9555.hpp
+%{_includedir}/el1/dev_i2c_ina219.hpp
 %{_includedir}/el1/dev_spi.hpp
 %{_includedir}/el1/dev_spi_hx711.hpp
 %{_includedir}/el1/dev_spi_led.hpp
