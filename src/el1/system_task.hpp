@@ -551,6 +551,9 @@ namespace el1::system::task
 			const TString name;
 			mutable TSimpleMutex mutex;
 			mutable TSimpleSignal on_state_change;
+			#ifdef EL_OS_LINUX
+				THandle signal_handle;
+			#endif
 			void* thread_handle;
 			const process_id_t constructor_pid;
 			volatile process_id_t thread_pid;

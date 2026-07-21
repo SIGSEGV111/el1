@@ -1,4 +1,7 @@
 #include <sched.h>
+#include <atomic>
+#include <signal.h>
+#include <unistd.h>
 #include <gtest/gtest.h>
 #include <el1/system_task.hpp>
 #include <el1/system_time_timer.hpp>
@@ -153,6 +156,60 @@ namespace
 			});
 		}
 		EXPECT_TRUE(status);
+	}
+
+
+	TEST(system_task, TThread_ShutdownWhileWaiting)
+	{
+		std::atomic<bool> waiting(false);
+		TThread thread("shutdown-wait", [&](){
+			waiting.store(true, std::memory_order_release);
+			TFiber::Sleep(1);
+		});
+
+		while(!waiting.load(std::memory_order_acquire))
+			usleep(1000);
+
+		usleep(10000);
+		const TTime ts_start = TTime::Now(EClock::MONOTONIC);
+		EXPECT_TRUE(thread.Shutdown());
+		auto exception = thread.Join();
+		const TTime elapsed = TTime::Now(EClock::MONOTONIC) - ts_start;
+
+		EXPECT_EQ(exception, nullptr);
+		EXPECT_LT(elapsed, TTime(0.5));
+	}
+
+	TEST(system_task, ProcessSignalIsForwardedToMainThread)
+	{
+		std::atomic<bool> waiting(false);
+		TThread worker("signal-wait", [&](){
+			waiting.store(true, std::memory_order_release);
+			TFiber::Sleep(1);
+		});
+
+		while(!waiting.load(std::memory_order_acquire))
+			usleep(1000);
+
+		usleep(10000);
+		EL_SYSERR(kill(getpid(), SIGTERM));
+		usleep(50000);
+
+		bool shutdown_received = false;
+		try
+		{
+			TFiber::Sleep(0.2);
+		}
+		catch(shutdown_t)
+		{
+			shutdown_received = true;
+		}
+
+		EXPECT_TRUE(shutdown_received);
+
+		worker.Shutdown();
+		auto exception = worker.Join();
+		EXPECT_EQ(exception, nullptr);
 	}
 
 	TEST(system_task, TFiber_Construct)

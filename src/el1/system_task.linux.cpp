@@ -20,7 +20,14 @@ namespace el1::system::task
 	using namespace io::file;
 
 	static EL_THREADLOCAL TThread* thread_self = nullptr;
-	static THandle fd_signal;
+
+	static THandle CreateSignalHandle()
+	{
+		sigset_t ss;
+		EL_PTHREAD_ERROR(pthread_sigmask(SIG_SETMASK, nullptr, &ss));
+		EL_SYSERR(sigdelset(&ss, SIGCHLD));
+		return THandle(EL_SYSERR(signalfd(-1, &ss, SFD_CLOEXEC | SFD_NONBLOCK)), true);
+	}
 
 	static TString GetStatusLine(const pid_t thread_pid, io::text::string::TString key)
 	{
@@ -79,8 +86,7 @@ namespace el1::system::task
 			EL_SYSERR(sigprocmask(SIG_SETMASK, &ss, nullptr));
 			EL_PTHREAD_ERROR(pthread_sigmask(SIG_SETMASK, &ss, nullptr));
 
-			EL_SYSERR(sigdelset(&ss, SIGCHLD));
-			fd_signal = EL_SYSERR(signalfd(-1, &ss, SFD_CLOEXEC|SFD_NONBLOCK));
+			this->signal_handle = CreateSignalHandle();
 
 			// EL_SYSERR(signal(SIGCHLD, SIG_IGN));
 		}
@@ -131,6 +137,8 @@ namespace el1::system::task
 
 		try
 		{
+			myself->signal_handle = CreateSignalHandle();
+
 			try
 			{
 				myself->main_fiber.main_func();
@@ -202,8 +210,9 @@ namespace el1::system::task
 			}
 		}
 
+		TThread* const thread = TThread::Self();
 		pfds.Append({
-			.fd = fd_signal,
+			.fd = thread->signal_handle,
 			.events = POLLIN,
 			.revents = 0
 		});
@@ -232,7 +241,7 @@ namespace el1::system::task
 
 				for(;;)
 				{
-					const ssize_t r = read(fd_signal, buffer, sizeof(buffer));
+					const ssize_t r = read(thread->signal_handle, buffer, sizeof(buffer));
 					if(r < 0)
 					{
 						if(errno == EAGAIN || errno == EWOULDBLOCK)
@@ -252,9 +261,20 @@ namespace el1::system::task
 								case SIGINT:
 								case SIGQUIT:
 								case SIGHUP:
-									TThread::Self()->MainFiber().Shutdown();
-									loop = false;
+								{
+									const bool thread_directed = static_cast<s32_t>(buffer[i].ssi_code) == SI_TKILL;
+
+									if(thread_directed || thread == &TThread::MainThread())
+									{
+										thread->MainFiber().Shutdown();
+										loop = false;
+									}
+									else
+									{
+										TThread::MainThread().Shutdown();
+									}
 									break;
+								}
 							}
 						}
 					}

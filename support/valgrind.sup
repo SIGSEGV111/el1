@@ -93,3 +93,22 @@
 	fun:_dl_allocate_tls
 	fun:pthread_create@@GLIBC_2.34
 }
+
+{
+   krb5_kt_resolve1
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   fun:strdup
+   obj:/usr/lib64/libkrb5.so.3.3
+   fun:krb5_kt_resolve
+}
+
+{
+   krb5_kt_resolve2
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:calloc
+   obj:/usr/lib64/libkrb5.so.3.3
+   fun:krb5_kt_resolve
+}
