@@ -85,6 +85,8 @@ namespace el1::dev::i2c::ina219
 			void Config(const config_t& config);
 
 			// The shunt-voltage register has a fixed 10uV LSB.
+			s16_t ShuntVoltageRaw();
+			double ShuntVoltage(const s16_t raw_value) const;
 			double ShuntVoltage();
 
 			// The bus-voltage register has a fixed 4mV LSB.
@@ -92,6 +94,7 @@ namespace el1::dev::i2c::ina219
 
 			// Computes current directly from the measured shunt voltage and the configured shunt resistance.
 			// This does not require programming the INA219 calibration register.
+			double Current(const s16_t shunt_voltage_raw) const;
 			double Current();
 
 			// Programs the calibration register for approximately the requested Current Register LSB.

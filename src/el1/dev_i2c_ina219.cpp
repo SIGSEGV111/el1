@@ -66,9 +66,19 @@ namespace el1::dev::i2c::ina219
 		device->WriteWordRegister(REG_CONFIG, config.Word());
 	}
 
+	s16_t TINA219::ShuntVoltageRaw()
+	{
+		return static_cast<s16_t>(device->ReadWordRegister(REG_SHUNT_VOLTAGE));
+	}
+
+	double TINA219::ShuntVoltage(const s16_t raw_value) const
+	{
+		return raw_value * SHUNT_VOLTAGE_LSB;
+	}
+
 	double TINA219::ShuntVoltage()
 	{
-		return static_cast<s16_t>(device->ReadWordRegister(REG_SHUNT_VOLTAGE)) * SHUNT_VOLTAGE_LSB;
+		return ShuntVoltage(ShuntVoltageRaw());
 	}
 
 	double TINA219::BusVoltage()
@@ -76,9 +86,14 @@ namespace el1::dev::i2c::ina219
 		return static_cast<double>(ReadBusVoltageRegister() >> 3) * BUS_VOLTAGE_LSB;
 	}
 
+	double TINA219::Current(const s16_t shunt_voltage_raw) const
+	{
+		return ShuntVoltage(shunt_voltage_raw) / shunt_resistance;
+	}
+
 	double TINA219::Current()
 	{
-		return ShuntVoltage() / shunt_resistance;
+		return Current(ShuntVoltageRaw());
 	}
 
 	void TINA219::Calibrate(const double requested_current_lsb)

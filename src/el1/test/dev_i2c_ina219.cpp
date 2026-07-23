@@ -13,6 +13,18 @@ namespace
 		EXPECT_EQ(config.Word(), 0x399F);
 	}
 
+	TEST(dev_i2c_ina219, shunt_triggered_16_sample_configuration)
+	{
+		config_t config;
+		config.bus_voltage_range = EBusVoltageRange::V32;
+		config.shunt_voltage_range = EShuntVoltageRange::MV320;
+		config.bus_adc_resolution = EADCResolution::BIT_12;
+		config.shunt_adc_resolution = EADCResolution::AVG_16;
+		config.mode = EMode::SHUNT_TRIGGERED;
+
+		EXPECT_EQ(config.Word(), 0x39E1);
+	}
+
 	TEST(dev_i2c_ina219, config_roundtrip)
 	{
 		config_t config;
