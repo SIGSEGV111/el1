@@ -49,6 +49,7 @@ namespace el1::dev::gpio::native
 			void Pull(const EPull) final override EL_SETTER;
 
 			THandleWaitable& OnInputTrigger() final override { return on_input_trigger; }
+			void AcknowledgeInputTrigger() final override;
 
 			usys_t Index() const final override EL_GETTER;
 

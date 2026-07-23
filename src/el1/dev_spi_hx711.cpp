@@ -122,7 +122,7 @@ namespace el1::dev::spi::hx711
 		if(DEBUG) debug::Hexdump("DEBUG: rx-buffer      ", buffer, sizeof(buffer));
 
 		if(this->irq != nullptr)
-			this->irq->State(); // clear IRQ
+			this->irq->AcknowledgeInputTrigger();
 
 		u32_t v2 = Discard2Bit(buffer);
 		if(DEBUG) debug::Hexdump("DEBUG: after discard  ", &v2, 4);

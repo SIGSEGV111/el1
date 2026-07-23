@@ -56,6 +56,9 @@ namespace el1::dev::gpio
 		virtual void Pull(const EPull) EL_SETTER = 0;
 
 		virtual IWaitable& OnInputTrigger() = 0;
+		// Acknowledge the host-side trigger event after the device interrupt source was handled.
+		// Implementations backed by an event queue may override this to drain queued events.
+		virtual void AcknowledgeInputTrigger() { OnInputTrigger().Reset(); }
 
 		virtual void Commit();
 

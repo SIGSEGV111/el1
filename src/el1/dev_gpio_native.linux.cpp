@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 
 namespace el1::dev::gpio::native
 {
@@ -105,6 +106,29 @@ namespace el1::dev::gpio::native
 	EPull TNativeGpioPin::Pull() const
 	{
 		return this->pull;
+	}
+
+	void TNativeGpioPin::AcknowledgeInputTrigger()
+	{
+		struct gpio_v2_line_event event;
+		for(;;)
+		{
+			const ssize_t n = read(on_input_trigger.Handle(), &event, sizeof(event));
+			if(n == (ssize_t)sizeof(event))
+				continue;
+
+			if(n < 0)
+			{
+				if(errno == EAGAIN || errno == EWOULDBLOCK)
+					break;
+				EL_THROW(TSyscallException, errno);
+			}
+
+			EL_ERROR(n != 0, TException, "short read while acknowledging GPIO input trigger event");
+			break;
+		}
+
+		on_input_trigger.Reset();
 	}
 
 	void TNativeGpioPin::Pull(const EPull new_pull)
