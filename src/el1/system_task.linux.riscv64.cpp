@@ -5,6 +5,13 @@
 #include "system_task.hpp"
 
 #if defined(__riscv_float_abi_double)
+	#define EL_RISCV64_FP_ASM_BEGIN R"(
+.option push
+.option arch, +d
+)"
+	#define EL_RISCV64_FP_ASM_END R"(
+.option pop
+)"
 	#define EL_RISCV64_SAVE_FP_REGISTERS R"(
 fsd  f8, 112(a0)
 fsd  f9, 120(a0)
@@ -34,6 +41,13 @@ fld f26, 192(a1)
 fld f27, 200(a1)
 )"
 #elif defined(__riscv_float_abi_single)
+	#define EL_RISCV64_FP_ASM_BEGIN R"(
+.option push
+.option arch, +f
+)"
+	#define EL_RISCV64_FP_ASM_END R"(
+.option pop
+)"
 	#define EL_RISCV64_SAVE_FP_REGISTERS R"(
 fsw  f8, 112(a0)
 fsw  f9, 116(a0)
@@ -63,6 +77,8 @@ flw f26, 152(a1)
 flw f27, 156(a1)
 )"
 #else
+	#define EL_RISCV64_FP_ASM_BEGIN ""
+	#define EL_RISCV64_FP_ASM_END ""
 	#define EL_RISCV64_SAVE_FP_REGISTERS ""
 	#define EL_RISCV64_LOAD_FP_REGISTERS ""
 #endif
@@ -92,8 +108,12 @@ sd x27, 88(a0)
 sd sp,  96(a0)
 sd ra, 104(a0)
 
-# Save floating-point callee-saved registers for hard-float ABIs
+# Save floating-point callee-saved registers for hard-float ABIs.
+# Clang's integrated assembler can parse file-scope asm without the RISC-V
+# feature state required here. Enable hard-float locally without changing
+# the file attributes.
 )"
+EL_RISCV64_FP_ASM_BEGIN
 EL_RISCV64_SAVE_FP_REGISTERS
 R"(
 
@@ -116,11 +136,14 @@ ld ra, 104(a1)
 # Restore floating-point callee-saved registers for hard-float ABIs
 )"
 EL_RISCV64_LOAD_FP_REGISTERS
+EL_RISCV64_FP_ASM_END
 R"(
 
 ret
 )");
 
+#undef EL_RISCV64_FP_ASM_BEGIN
+#undef EL_RISCV64_FP_ASM_END
 #undef EL_RISCV64_SAVE_FP_REGISTERS
 #undef EL_RISCV64_LOAD_FP_REGISTERS
 
