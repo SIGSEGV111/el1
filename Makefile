@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := all
 
-.PHONY: all release debug clean install package rpm deploy \
+.PHONY: all release debug clean install install-runtime install-devel package rpm deploy \
 	test test-release test-debug coverage-report \
 	check-valgrind check-coverage-tools entr
 
@@ -77,10 +77,10 @@ COMMON_CXXFLAGS := -Wall -Wextra -Wno-unused-command-line-argument \
 	-Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension \
 	-Wno-deprecated-declarations -std=c++20 $(CXXFLAGS)
 COMMON_LDFLAGS := -fuse-ld=lld $(LDFLAGS)
-PACKAGE_CXXFLAGS := $(shell pkg-config --cflags $(PACKAGE_NAMES))
-LIB_CXXFLAGS := -fPIC $(PACKAGE_CXXFLAGS)
+PACKAGE_CXXFLAGS = $(shell pkg-config --cflags $(PACKAGE_NAMES))
+LIB_CXXFLAGS = -fPIC $(PACKAGE_CXXFLAGS)
 EXE_CXXFLAGS := -fPIE
-LIB_LDFLAGS := $(shell pkg-config --libs $(PACKAGE_NAMES)) -Wl,--no-undefined
+LIB_LDFLAGS = $(shell pkg-config --libs $(PACKAGE_NAMES)) -Wl,--no-undefined
 GTEST_CXXFLAGS := -Wno-unused-command-line-argument -fuse-ld=lld -fPIC $(CXXFLAGS) $(TEST_CXXFLAGS)
 
 OUT_DIR ?= gen
@@ -95,13 +95,21 @@ TEST_WORK_DIRS ?= $(OUT_DIR)/test.tmp $(OUT_DIR)/test1.tmp
 
 LIB_DIR ?= /usr/lib
 INCLUDE_DIR ?= /usr/include
+ABI_VERSION ?= 0
 KEYID ?= BE5096C665CA4595AF11DAB010CD9FF74E4565ED
 ARCH_RPM_NAME := el1.$(ARCH).rpm
+DEVEL_RPM_NAME := el1-devel.$(ARCH).rpm
 SRC_RPM_NAME := el1.src.rpm
+DEVEL_SRC_RPM_NAME := el1-devel.src.rpm
 SPEC_NAME := el1.spec
+DEVEL_SPEC_NAME := el1-devel.spec
 
-RELEASE_LIB_NAME := $(RELEASE_DIR)/libel1.so
-DEBUG_LIB_NAME := $(DEBUG_DIR)/libel1.so
+LIB_BASENAME := libel1.so
+LIB_SONAME := $(LIB_BASENAME).$(ABI_VERSION)
+RELEASE_LIB_NAME := $(RELEASE_DIR)/$(LIB_SONAME)
+DEBUG_LIB_NAME := $(DEBUG_DIR)/$(LIB_SONAME)
+RELEASE_LIB_LINK_NAME := $(RELEASE_DIR)/$(LIB_BASENAME)
+DEBUG_LIB_LINK_NAME := $(DEBUG_DIR)/$(LIB_BASENAME)
 RELEASE_TEST_NAME := $(RELEASE_DIR)/gtest.exe
 DEBUG_TEST_NAME := $(DEBUG_DIR)/gtest.exe
 SUPER_HEADER := $(OUT_DIR)/el1.hpp
@@ -147,9 +155,9 @@ export CXX
 
 all: release debug
 
-release: $(RELEASE_LIB_NAME) $(SUPER_HEADER)
+release: $(RELEASE_LIB_NAME) $(RELEASE_LIB_LINK_NAME) $(SUPER_HEADER)
 
-debug: $(DEBUG_LIB_NAME) $(SUPER_HEADER)
+debug: $(DEBUG_LIB_NAME) $(DEBUG_LIB_LINK_NAME) $(SUPER_HEADER)
 
 clean:
 	rm -rf -- "$(OUT_DIR)" *.rpm
@@ -170,11 +178,17 @@ $(DEBUG_DIR)/obj/%.o: src/el1/%.cpp Makefile
 
 $(RELEASE_LIB_NAME): $(RELEASE_LIB_OBJECTS) $(LIB_HEADERS)
 	@mkdir -p "$(@D)"
-	$(CXX) $(COMMON_LDFLAGS) $(RELEASE_CXXFLAGS) -shared -o "$@" $(RELEASE_LIB_OBJECTS) $(LIB_LDFLAGS)
+	$(CXX) $(COMMON_LDFLAGS) $(RELEASE_CXXFLAGS) -shared -Wl,-soname,$(LIB_SONAME) -o "$@" $(RELEASE_LIB_OBJECTS) $(LIB_LDFLAGS)
+
+$(RELEASE_LIB_LINK_NAME): $(RELEASE_LIB_NAME)
+	ln -sfn "$(notdir $(RELEASE_LIB_NAME))" "$@"
 
 $(DEBUG_LIB_NAME): $(DEBUG_LIB_OBJECTS) $(LIB_HEADERS)
 	@mkdir -p "$(@D)"
-	$(CXX) $(COMMON_LDFLAGS) $(DEBUG_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) -shared -o "$@" $(DEBUG_LIB_OBJECTS) $(LIB_LDFLAGS)
+	$(CXX) $(COMMON_LDFLAGS) $(DEBUG_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) -shared -Wl,-soname,$(LIB_SONAME) -o "$@" $(DEBUG_LIB_OBJECTS) $(LIB_LDFLAGS)
+
+$(DEBUG_LIB_LINK_NAME): $(DEBUG_LIB_NAME)
+	ln -sfn "$(notdir $(DEBUG_LIB_NAME))" "$@"
 
 $(RELEASE_DIR)/test/%.o: src/el1/test/%.cpp Makefile
 	@mkdir -p "$(@D)"
@@ -195,12 +209,12 @@ $(GTEST_LIB): Makefile
 $(GTEST_MAIN_LIB): $(GTEST_LIB)
 	@test -f "$@"
 
-$(RELEASE_TEST_NAME): $(RELEASE_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(RELEASE_LIB_NAME) $(SUPER_HEADER)
+$(RELEASE_TEST_NAME): $(RELEASE_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(RELEASE_LIB_LINK_NAME) $(SUPER_HEADER)
 	@mkdir -p "$(@D)"
 	$(CXX) $(COMMON_LDFLAGS) $(TEST_CXXFLAGS) $(EXE_CXXFLAGS) -o "$@" \
 		$(RELEASE_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) -L"$(RELEASE_DIR)" -lel1 $(LIB_LDFLAGS) $(EXEFLAGS)
 
-$(DEBUG_TEST_NAME): $(DEBUG_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(DEBUG_LIB_NAME) $(SUPER_HEADER)
+$(DEBUG_TEST_NAME): $(DEBUG_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(DEBUG_LIB_LINK_NAME) $(SUPER_HEADER)
 	@mkdir -p "$(@D)"
 	$(CXX) $(COMMON_LDFLAGS) $(TEST_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) $(EXE_CXXFLAGS) -o "$@" \
 		$(DEBUG_LIB_OBJECTS) $(DEBUG_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(LIB_LDFLAGS) $(EXEFLAGS)
@@ -256,23 +270,34 @@ coverage-report: test-debug
 	@echo "Coverage disabled (WITH_COVERAGE=0)"
 endif
 
-$(ARCH_RPM_NAME) $(SRC_RPM_NAME): $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile
+$(ARCH_RPM_NAME) $(SRC_RPM_NAME): $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile LICENSE.txt
 	easy-rpm.sh --debug --name el1 --spec "$(SPEC_NAME)" --outdir . --plain --arch "$(ARCH)" -- $^
 
-install: release
+$(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME): $(LIB_HEADERS) $(DEVEL_SPEC_NAME) Makefile LICENSE.txt
+	easy-rpm.sh --debug --name el1-devel --spec "$(DEVEL_SPEC_NAME)" --outdir . --plain --arch "$(ARCH)" -- $^
+
+install: install-runtime install-devel
+
+install-runtime: $(RELEASE_LIB_NAME)
+	mkdir -p "$(LIB_DIR)"
+	install -m 755 "$(RELEASE_LIB_NAME)" "$(LIB_DIR)/$(LIB_SONAME)"
+
+install-devel: $(SUPER_HEADER)
 	rm -rf -- "$(INCLUDE_DIR)/el1"
 	mkdir -p "$(LIB_DIR)" "$(INCLUDE_DIR)/el1"
-	install -m 755 "$(RELEASE_LIB_NAME)" "$(LIB_DIR)/"
+	ln -sfn "$(LIB_SONAME)" "$(LIB_DIR)/$(LIB_BASENAME)"
 	install -m 644 $(LIB_HEADERS) "$(SUPER_HEADER)" "$(INCLUDE_DIR)/el1/"
 
 package: rpm
 
-rpm: $(ARCH_RPM_NAME)
+rpm: $(ARCH_RPM_NAME) $(DEVEL_RPM_NAME)
 
-deploy: $(ARCH_RPM_NAME)
+deploy: $(ARCH_RPM_NAME) $(DEVEL_RPM_NAME)
 	ensure-git-clean.sh
 	deploy-rpm.sh --infile="$(SRC_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
 	deploy-rpm.sh --infile="$(ARCH_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
+	deploy-rpm.sh --infile="$(DEVEL_SRC_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
+	deploy-rpm.sh --infile="$(DEVEL_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
 
 entr: $(LIB_HEADERS) $(LIB_SOURCES) $(TEST_SOURCES) $(TEST_HEADERS)
 	printf '%s\n' $^ | entr bash -c 'clear; reset; make test'
