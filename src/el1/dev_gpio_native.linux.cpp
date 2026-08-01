@@ -21,7 +21,7 @@ namespace el1::dev::gpio::native
 			| ((new_mode != EMode::DISABLED && (new_trigger == ETrigger::FALLING_EDGE || new_trigger == ETrigger::BOTH_EDGES)) ? GPIO_V2_LINE_FLAG_EDGE_FALLING : 0)
 			| ((new_mode != EMode::DISABLED && new_pull == EPull::UP       ) ? GPIO_V2_LINE_FLAG_BIAS_PULL_UP   : 0)
 			| ((new_mode != EMode::DISABLED && new_pull == EPull::DOWN     ) ? GPIO_V2_LINE_FLAG_BIAS_PULL_DOWN : 0)
-			| ((new_mode != EMode::DISABLED || new_pull == EPull::DISABLED ) ? GPIO_V2_LINE_FLAG_BIAS_DISABLED  : 0);
+			| ((new_mode != EMode::DISABLED && new_pull == EPull::DISABLED ) ? GPIO_V2_LINE_FLAG_BIAS_DISABLED  : 0);
 
 		if(new_mode == EMode::INPUT)
 		{
