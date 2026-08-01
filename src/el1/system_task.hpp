@@ -118,18 +118,7 @@ namespace el1::system::task
 
 	};
 
-	class TIpcSignal : public ISignal, public THandleWaitable
-	{
-		protected:
-			mutable TIpcMutex mutex;
-
-		public:
-			TIpcMutex& Mutex() const final override { return mutex; }
-
-			void Raise() final override;
-	};
-
-	class TSimpleMutex : public IMutex
+		class TSimpleMutex : public IMutex
 	{
 		protected:
 			friend class TSimpleSignal;
@@ -182,6 +171,31 @@ namespace el1::system::task
 			TSimpleSignal(TSimpleMutex* const mutex);
 			~TSimpleSignal();
 	};
+
+	// Kernel-backed signal that can be used as an IWaitable by fibers and raised
+	// from another thread. Multiple Raise() calls may be coalesced; users must
+	// keep the actual state separately and use the signal only as a wake-up hint.
+	class TIpcSignal : public ISignal, public IWaitable
+	{
+		protected:
+			mutable TSimpleMutex mutex;
+			THandle signal_handle;
+			mutable THandleWaitable handle_waitable;
+
+		public:
+			TSimpleMutex& Mutex() const final override { return mutex; }
+
+			void Raise() final override;
+			bool IsReady() const final override { return handle_waitable.IsReady(); }
+			void Reset() const final override;
+			const THandleWaitable* HandleWaitable() const final override { return &handle_waitable; }
+
+			TIpcSignal(TIpcSignal&&) = delete;
+			TIpcSignal(const TIpcSignal&) = delete;
+			TIpcSignal();
+	};
+
+	using TSignal = TIpcSignal;
 
 	struct TMutexAutoLock
 	{

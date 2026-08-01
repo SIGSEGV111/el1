@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/signalfd.h>
+#include <sys/eventfd.h>
 #include <poll.h>
 #include <errno.h>
 
@@ -27,6 +28,39 @@ namespace el1::system::task
 		EL_PTHREAD_ERROR(pthread_sigmask(SIG_SETMASK, nullptr, &ss));
 		EL_SYSERR(sigdelset(&ss, SIGCHLD));
 		return THandle(EL_SYSERR(signalfd(-1, &ss, SFD_CLOEXEC | SFD_NONBLOCK)), true);
+	}
+
+	TIpcSignal::TIpcSignal() :
+		mutex(),
+		signal_handle(EL_SYSERR(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)), true),
+		handle_waitable({ .read = true, .write = false, .other = false }, signal_handle)
+	{
+	}
+
+	void TIpcSignal::Raise()
+	{
+		const u64_t value = 1;
+		const ssize_t n = write(signal_handle, &value, sizeof(value));
+		if(n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+			EL_THROW(TSyscallException, errno);
+	}
+
+	void TIpcSignal::Reset() const
+	{
+		handle_waitable.Reset();
+
+		u64_t value;
+		for(;;)
+		{
+			const ssize_t n = read(signal_handle, &value, sizeof(value));
+			if(n == sizeof(value))
+				continue;
+			if(n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+				break;
+			if(n < 0)
+				EL_THROW(TSyscallException, errno);
+			break;
+		}
 	}
 
 	static TString GetStatusLine(const pid_t thread_pid, io::text::string::TString key)
