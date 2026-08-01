@@ -25,6 +25,7 @@ namespace el1::dev::gpio::native
 			ETrigger trigger;
 			EPull pull;
 			u32_t debounce_us;
+			bool hte_enabled;
 
 		public:
 			void Configure(const EMode new_mode, const ETrigger new_trigger, const EPull new_pull, const u32_t new_debounce_us);

@@ -11,10 +11,15 @@
 
 namespace el1::dev::gpio::native
 {
+	static bool IsHteUnsupportedError(const int error_code)
+	{
+		return error_code == ENODEV || error_code == EOPNOTSUPP || error_code == EINVAL;
+	}
+
 	void TNativeGpioPin::Configure(const EMode new_mode, const ETrigger new_trigger, const EPull new_pull, const u32_t new_debounce_us)
 	{
 		struct gpio_v2_line_config config = {};
-		config.flags = GPIO_V2_LINE_FLAG_EVENT_CLOCK_HTE
+		config.flags = (hte_enabled ? GPIO_V2_LINE_FLAG_EVENT_CLOCK_HTE : 0)
 			| (new_mode == EMode::INPUT  ? GPIO_V2_LINE_FLAG_INPUT  : 0)
 			| (new_mode == EMode::OUTPUT ? GPIO_V2_LINE_FLAG_OUTPUT : 0)
 			| ((new_mode != EMode::DISABLED && (new_trigger == ETrigger::RISING_EDGE  || new_trigger == ETrigger::BOTH_EDGES)) ? GPIO_V2_LINE_FLAG_EDGE_RISING  : 0)
@@ -31,7 +36,16 @@ namespace el1::dev::gpio::native
 			config.attrs[0].mask = 1;
 		}
 
-		EL_SYSERR(ioctl(on_input_trigger.Handle(), GPIO_V2_LINE_SET_CONFIG_IOCTL, &config));
+		if(ioctl(on_input_trigger.Handle(), GPIO_V2_LINE_SET_CONFIG_IOCTL, &config) != 0)
+		{
+			EL_ERROR(!hte_enabled || !IsHteUnsupportedError(errno), TSyscallException, errno);
+
+			config.flags &= ~GPIO_V2_LINE_FLAG_EVENT_CLOCK_HTE;
+			EL_SYSERR(ioctl(on_input_trigger.Handle(), GPIO_V2_LINE_SET_CONFIG_IOCTL, &config));
+
+			hte_enabled = false;
+		}
+
 		this->mode = new_mode;
 		this->trigger = new_trigger;
 		this->pull = new_pull;
@@ -144,7 +158,7 @@ namespace el1::dev::gpio::native
 		return index;
 	}
 
-	TNativeGpioPin::TNativeGpioPin(TNativeGpioController* const controller, const usys_t index) : index(index), controller(controller), on_input_trigger({ .read = true, .write = false, .other = false }), mode(EMode::INPUT), trigger(ETrigger::DISABLED), pull(EPull::DISABLED), debounce_us(0)
+	TNativeGpioPin::TNativeGpioPin(TNativeGpioController* const controller, const usys_t index) : index(index), controller(controller), on_input_trigger({ .read = true, .write = false, .other = false }), mode(EMode::INPUT), trigger(ETrigger::DISABLED), pull(EPull::DISABLED), debounce_us(0), hte_enabled(true)
 	{
 		struct gpio_v2_line_request request = {};
 		request.offsets[0] = index;
@@ -153,7 +167,16 @@ namespace el1::dev::gpio::native
 		request.config.num_attrs = 0;
 		request.num_lines = 1;
 		request.event_buffer_size = 16;
-		EL_SYSERR(ioctl(controller->io.Handle(), GPIO_V2_GET_LINE_IOCTL, &request));
+		if(ioctl(controller->io.Handle(), GPIO_V2_GET_LINE_IOCTL, &request) != 0)
+		{
+			EL_ERROR(!IsHteUnsupportedError(errno), TSyscallException, errno);
+
+			request.config.flags &= ~GPIO_V2_LINE_FLAG_EVENT_CLOCK_HTE;
+			EL_SYSERR(ioctl(controller->io.Handle(), GPIO_V2_GET_LINE_IOCTL, &request));
+
+			hte_enabled = false;
+		}
+
 		EL_ERROR(request.fd == -1, TLogicException);
 		on_input_trigger.Handle(request.fd);
 		EL_SYSERR(fcntl(request.fd, F_SETFD, EL_SYSERR(fcntl(request.fd, F_GETFD)) | FD_CLOEXEC));
