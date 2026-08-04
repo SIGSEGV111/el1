@@ -65,6 +65,40 @@ namespace el1::dev::w1
 		return v;
 	}
 
+	uuid_t uuid_t::FromString(const TString& text)
+	{
+		static const usys_t OCTET_POSITIONS[8] = { 0, 3, 6, 9, 12, 15, 18, 21 };
+		EL_ERROR(text.Length() != 23 || text[2].code != '|' || text[5].code != ':' || text[8].code != ':'
+			|| text[11].code != ':' || text[14].code != ':' || text[17].code != ':' || text[20].code != '|',
+			TInvalidArgumentException, "text", "invalid 1-wire ROM; expected xx|xx:xx:xx:xx:xx:xx|xx");
+
+		const auto parse_hex_nibble = [](const u32_t code) -> u8_t
+		{
+			if(code >= '0' && code <= '9')
+				return static_cast<u8_t>(code - '0');
+			if(code >= 'a' && code <= 'f')
+				return static_cast<u8_t>(code - 'a' + 10);
+			if(code >= 'A' && code <= 'F')
+				return static_cast<u8_t>(code - 'A' + 10);
+			EL_THROW(TInvalidArgumentException, "text", "1-wire ROM contains a non-hexadecimal digit");
+		};
+
+		u8_t values[8];
+		for(usys_t i = 0; i < sizeof(values); i++)
+		{
+			const usys_t pos = OCTET_POSITIONS[i];
+			values[i] = static_cast<u8_t>((parse_hex_nibble(text[pos].code) << 4) | parse_hex_nibble(text[pos + 1].code));
+		}
+
+		uuid_t uuid;
+		for(usys_t i = 0; i < sizeof(uuid); i++)
+			uuid.Octet(i) = values[i];
+		const u8_t crc = CalculateCRC(&uuid, sizeof(uuid));
+		EL_ERROR(crc != values[7], TCrcMismatchException, uuid, values[7], crc);
+		return uuid;
+	}
+
+
 	u8_t CalculateCRC(const void* const arr_data, const unsigned n_data)
 	{
 		u8_t crc = 0;

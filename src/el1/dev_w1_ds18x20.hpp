@@ -15,8 +15,7 @@ namespace el1::dev::w1::ds18x20
 
 	struct scratchpad_ds18s20_t
 	{
-		u8_t temp_raw;
-		u8_t sign;
+		s16_t temp_raw;
 		u8_t th;
 		u8_t tl;
 		u8_t __reserved1;
@@ -28,7 +27,7 @@ namespace el1::dev::w1::ds18x20
 
 	struct scratchpad_ds18b20_t
 	{
-		u16_t temp_raw;
+		s16_t temp_raw;
 		u8_t th;
 		u8_t tl;
 		u8_t config;
@@ -47,20 +46,20 @@ namespace el1::dev::w1::ds18x20
 	{
 		protected:
 			std::unique_ptr<IW1Device> w1dev;
-			const u8_t bus_powered;
+			const bool bus_powered;
 
 			union
 			{
 				struct
 				{
-					u8_t temp_raw;
+					s16_t temp_raw;
 					u8_t count_remain;
 					u8_t count_per_degc;
 				} ds18s20;
 
 				struct
 				{
-					u16_t temp_raw;
+					s16_t temp_raw;
 				} ds18b20;
 			};
 

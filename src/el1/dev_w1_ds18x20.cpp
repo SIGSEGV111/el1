@@ -58,7 +58,13 @@ namespace el1::dev::w1::ds18x20
 
 	void TDS18X20::TriggerConversion()
 	{
-		this->w1dev->Write(CMD_TRIGGER_CONVERSION, nullptr, 0);
+		if(!this->bus_powered)
+		{
+			this->w1dev->Write(CMD_TRIGGER_CONVERSION, nullptr, 0);
+			return;
+		}
+
+		this->w1dev->WritePowered(CMD_TRIGGER_CONVERSION, nullptr, 0, TTime(0.75));
 	}
 
 	void TDS18X20::Fetch()
@@ -110,6 +116,9 @@ namespace el1::dev::w1::ds18x20
 		EL_ERROR(this->bus_powered && !this->w1dev->Bus()->HasStrongPullUp(), TException, TString::Format(L"Insufficient power for %s @ %s. W1-Bus lacks strong pullup and sensor is currently bus powered.", this->ModelName(), this->w1dev->UUID().ToString()));
 
 		if(Model() == EModel::DS18B20)
-			this->w1dev->Write(CMD_WRITE_SCRATCHPAD, "\xff\xff\xff", 3); // set 12bit resolution => 750ms conversion time
+		{
+			const byte_t configuration[3] = { 0xFF, 0xFF, 0x7F };
+			this->w1dev->Write(CMD_WRITE_SCRATCHPAD, configuration, sizeof(configuration)); // set 12-bit resolution => 750 ms conversion time
+		}
 	}
 }

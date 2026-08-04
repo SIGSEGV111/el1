@@ -38,6 +38,13 @@ namespace el1::dev::spi::w1bb
 		tr.Execute();
 	}
 
+	void TW1BbDevice::WritePowered(const u8_t cmd, const void* const arr_data, const u8_t n_data, const TTime duration)
+	{
+		EL_ERROR(duration <= TTime(0), TInvalidArgumentException, "duration", "must be greater than zero");
+		this->Write(cmd, arr_data, n_data);
+		this->w1bus->PauseBus(duration);
+	}
+
 	IW1Bus* TW1BbDevice::Bus() const { return w1bus; }
 	uuid_t TW1BbDevice::UUID() const { return uuid; }
 	ESpeed TW1BbDevice::Speed() const { return speed; }

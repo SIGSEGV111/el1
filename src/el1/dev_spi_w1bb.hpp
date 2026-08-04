@@ -84,6 +84,7 @@ namespace el1::dev::spi::w1bb
 		public:
 			void Read(const u8_t cmd, void* const arr_data, const u8_t n_data) final override;
 			void Write(const u8_t cmd, const void* const arr_data, const u8_t n_data) final override;
+			void WritePowered(const u8_t cmd, const void* const arr_data, const u8_t n_data, const system::time::TTime duration) final override;
 
 			IW1Bus* Bus() const final override EL_GETTER;
 			uuid_t UUID() const final override EL_GETTER;

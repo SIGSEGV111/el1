@@ -51,6 +51,7 @@ namespace el1::dev::w1
 		static const uuid_t NULL_VALUE;
 
 		static uuid_t FromInt(const u64_t);
+		static uuid_t FromString(const io::text::string::TString&);
 	};
 
 	struct rom_t
@@ -96,6 +97,12 @@ namespace el1::dev::w1
 		virtual void Speed(const ESpeed) EL_SETTER = 0;
 		virtual void Read(const u8_t cmd, void* const buffer, const u8_t n_bytes) = 0;
 		virtual void Write(const u8_t cmd, const void* const buffer, const u8_t n_bytes) = 0;
+
+		// Writes a command and optional payload, then supplies strong pull-up power
+		// for the requested duration. Implementations which can arm the pull-up
+		// before the final 1-wire time slot must do so.
+		virtual void WritePowered(const u8_t cmd, const void* const buffer, const u8_t n_bytes, const system::time::TTime duration) = 0;
+
 		virtual ~IW1Device() {}
 	};
 
@@ -114,10 +121,10 @@ namespace el1::dev::w1
 		virtual io::collection::list::TList<uuid_t> Scan(const ESpeed speed = ESpeed::REGULAR) = 0;
 
 		// Suspends bus activity for the specified duration.
-		// This is supposed to be used by drivers if their hardware needs to draw power from the bus.
 		// Any function that needs to send or receive data on this bus will block until the end of the pause.
 		// If multiple drivers call PauseBus(), the pause is extended to compensate for the longest duration.
-		// If the bus has a "strong pull-up" feature, it will be activated during the pause.
+		// Device drivers which require power immediately after a command should use
+		// IW1Device::WritePowered().
 		virtual void PauseBus(const system::time::TTime duration) = 0;
 
 		// returns the absolute time measured against EClock::MONOTONIC when the current pause will expire
