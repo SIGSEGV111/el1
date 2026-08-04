@@ -43,6 +43,7 @@ namespace el1::dev::spi
 
 	struct ISpiBus
 	{
+		virtual ~ISpiBus() {}
 		// returns wheter or not the bus is currently locked by a device for data exchange
 		virtual bool IsBusy() const  = 0;
 		virtual const system::waitable::IWaitable& OnBusIdle() const EL_GETTER = 0;

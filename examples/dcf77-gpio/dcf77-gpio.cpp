@@ -1,195 +1,196 @@
-#include <el1/el1.cpp>
-#include <time.h>
+#include <el1/dev_gpio_dcf77.hpp>
+#include <el1/dev_gpio_native.hpp>
+#include <el1/error.hpp>
+#include <el1/io_file.hpp>
+#include <el1/system_cmdline.hpp>
+#include <el1/system_task.hpp>
+#include <el1/system_time.hpp>
+
+#include <cstdio>
+#include <ctime>
 #include <sys/shm.h>
-// 24 => PON
-// 23 => SIGNAL
-// distance = 74000
 
 using namespace el1::io::types;
 using namespace el1::system::time;
 
 static const key_t CHRONY_SHM_KEY = 0x4e545030;
+
 struct chrony_shm_t
 {
-	int mode;   /* 0 - if valid set
-				*       use values,
-				*       clear valid
-				* 1 - if valid set
-				*       if count before and after read of values is equal,
-				*         use values
-				*       clear valid
-				*/
+	int mode;
 	volatile int count;
-#if defined(_TIME_BITS) && 64 == _TIME_BITS
-	/* libc default time_t is 32-bits, but we are using 64-bits.
-	* glibc 2.34 and later.
-	* Lower 31 bits, no sign bit, are here. */
+#if defined(_TIME_BITS) && _TIME_BITS == 64
 	unsigned clockTimeStampSec;
 #else
 	time_t clockTimeStampSec;
 #endif
 	int clockTimeStampUSec;
-#if defined(_TIME_BITS) && 64 == _TIME_BITS
-	/* libc default time_t is 32-bits, but we are using 64-bits.
-	* glibc 2.34 and later.
-	* Lower 31 bits, no sign bit, are here. */
+#if defined(_TIME_BITS) && _TIME_BITS == 64
 	unsigned receiveTimeStampSec;
 #else
 	time_t receiveTimeStampSec;
 #endif
 	int receiveTimeStampUSec;
-	int leap;                   // not leapsecond offset, a notification code
-	int precision;              // log(2) of source jitter
-	int nsamples;               // not used
+	int leap;
+	int precision;
+	int nsamples;
 	volatile int valid;
-	unsigned clockTimeStampNSec;     // Unsigned ns timestamps
-	unsigned receiveTimeStampNSec;   // Unsigned ns timestamps
-	/* Change previous dummy[0,1] to hold top bits.
-	* Zero until 2038.  */
+	unsigned clockTimeStampNSec;
+	unsigned receiveTimeStampNSec;
 	unsigned top_clockTimeStampSec;
 	unsigned top_receiveTimeStampSec;
 	int dummy[6];
 };
 
 static chrony_shm_t* chrony_shm = nullptr;
-static TTime ts_dcf77 = TTime::Now(EClock::REALTIME);
-static TTime ts_systime = 0;
+static TTime timestamp_dcf77 = 0;
+static TTime timestamp_system = 0;
 static bool leap_announce = false;
 
-static void AttachSharedMemory(const key_t unit)
+static void attachSharedMemory(const key_t unit)
 {
+	using namespace el1::error;
+
 	const int id = EL_SYSERR(shmget(CHRONY_SHM_KEY + unit, sizeof(chrony_shm_t), 0));
-	chrony_shm = (chrony_shm_t*)EL_SYSERR(shmat(id, nullptr, 0));
-	EL_ERROR(chrony_shm == nullptr, TLogicException);
+	chrony_shm = static_cast<chrony_shm_t*>(EL_SYSERR(shmat(id, nullptr, 0)));
 	chrony_shm->valid = 0;
 	__sync_synchronize();
 	chrony_shm->mode = 1;
 	chrony_shm->leap = 3;
 	chrony_shm->precision = -20;
 	chrony_shm->nsamples = 1;
-	if(el1::dev::gpio::dcf77::DEBUG)
-		printf("attached shm @ %p, count was %d\n", chrony_shm, chrony_shm->count);
 	chrony_shm->count = 0;
 }
 
-static void UpdateShm()
+static void updateSharedMemory()
 {
+	const s64_t dcf_seconds = timestamp_dcf77.Seconds();
+	const s64_t system_seconds = timestamp_system.Seconds();
+
 	__sync_synchronize();
 	chrony_shm->valid = 0;
-	chrony_shm->count++;
+	chrony_shm->count = chrony_shm->count + 1;
 	__sync_synchronize();
-	chrony_shm->clockTimeStampSec    = ts_dcf77.Seconds();
-	chrony_shm->clockTimeStampUSec   = ts_dcf77.Attoseconds() / 1000000000000LL;
-	chrony_shm->clockTimeStampNSec   = ts_dcf77.Attoseconds() / 1000000000LL;
-	chrony_shm->receiveTimeStampSec  = ts_systime.Seconds();
-	chrony_shm->receiveTimeStampUSec = ts_systime.Attoseconds() / 1000000000000LL;
-	chrony_shm->receiveTimeStampNSec = ts_systime.Attoseconds() / 1000000000LL;
+	chrony_shm->clockTimeStampSec = static_cast<decltype(chrony_shm->clockTimeStampSec)>(dcf_seconds);
+	chrony_shm->clockTimeStampUSec = static_cast<int>(timestamp_dcf77.Attoseconds() / 1000000000000LL);
+	chrony_shm->clockTimeStampNSec = static_cast<unsigned>(timestamp_dcf77.Attoseconds() / 1000000000LL);
+	chrony_shm->receiveTimeStampSec = static_cast<decltype(chrony_shm->receiveTimeStampSec)>(system_seconds);
+	chrony_shm->receiveTimeStampUSec = static_cast<int>(timestamp_system.Attoseconds() / 1000000000000LL);
+	chrony_shm->receiveTimeStampNSec = static_cast<unsigned>(timestamp_system.Attoseconds() / 1000000000LL);
+	chrony_shm->top_clockTimeStampSec = static_cast<unsigned>(static_cast<u64_t>(dcf_seconds) >> 32U);
+	chrony_shm->top_receiveTimeStampSec = static_cast<unsigned>(static_cast<u64_t>(system_seconds) >> 32U);
 	chrony_shm->leap = leap_announce ? 1 : 0;
 	__sync_synchronize();
-	chrony_shm->count++;
-	const int count = chrony_shm->count;
+	chrony_shm->count = chrony_shm->count + 1;
 	__sync_synchronize();
 	chrony_shm->valid = 1;
 	__sync_synchronize();
-
-	if(el1::dev::gpio::dcf77::DEBUG)
-		printf("updated shm (count was %d)\n", count);
 }
 
-static void OnUpdate(const ::tm& t, u64_t ns, bool _leap_announce)
+static void printTimestamp(const char* const label, const ::tm& time, const u64_t nanoseconds)
 {
-	ts_systime = TTime::Now(EClock::REALTIME);
-	leap_announce = _leap_announce;
+	char date_buffer[96];
+	std::strftime(date_buffer, sizeof(date_buffer), "%a, %d %b %Y %T %z", &time);
+	std::printf("%s: %s.%09llu", label, date_buffer, static_cast<unsigned long long>(nanoseconds));
+}
 
-	if(chrony_shm)
+static void onUpdate(const ::tm& decoded_time, const u64_t nanoseconds, const bool new_leap_announce)
+{
+	timestamp_system = TTime::Now(EClock::REALTIME);
+	leap_announce = new_leap_announce;
+
+	::tm mutable_decoded_time = decoded_time;
+	timestamp_dcf77 = TTime(std::mktime(&mutable_decoded_time), static_cast<s64_t>(nanoseconds) * 1000000000LL);
+
+	if(chrony_shm != nullptr)
 	{
-		::tm t2 = t;
-		ts_dcf77 = TTime(mktime(&t2), ns * 1000000000LL);
-		UpdateShm();
+		updateSharedMemory();
 	}
 
-	const TTime delta = ts_dcf77 - ts_systime;
-	char format[64];
-	char buffer[128];
+	const time_t system_seconds = static_cast<time_t>(timestamp_system.Seconds());
+	::tm system_time = {};
+	localtime_r(&system_seconds, &system_time);
+	const TTime delta = timestamp_dcf77 - timestamp_system;
 
-	putchar('\n');
-
-	// print systime with nanoseconds
-	snprintf(format, sizeof(format), "CLOCK: %%a, %%d %%b %%Y %%T.%09llu %%z", ts_systime.Attoseconds() / 1000000000LL);
-	strftime(buffer, sizeof(buffer), format, &t);
-	puts(buffer);
-
-	// print DCF77-time with nanoseconds and delta to systime
-	snprintf(format, sizeof(format), "DCF77: %%a, %%d %%b %%Y %%T.%09llu %%z, ΔT=%fms", ns, delta.ConvertToF(EUnit::MILLISECONDS));
-	strftime(buffer, sizeof(buffer), format, &t);
-	puts(buffer);
+	std::putchar('\n');
+	printTimestamp("CLOCK", system_time, static_cast<u64_t>(timestamp_system.Attoseconds() / 1000000000LL));
+	std::putchar('\n');
+	printTimestamp("DCF77", decoded_time, nanoseconds);
+	std::printf(", delta=%f ms\n", delta.ConvertToF(EUnit::MILLISECONDS));
 }
 
-static void OnTick(const TTime&, int status)
+static void onTick(const TTime&, const int status)
 {
 	switch(status)
 	{
 		case 0:
 		case 1:
-			putchar('.');
+			std::putchar('.');
 			break;
 		case -1:
-			putchar('S');
+			std::putchar('S');
 			break;
 		case -2:
-			putchar('T');
+			std::putchar('T');
 			break;
 		case -3:
-			putchar('G');
+			std::putchar('G');
 			break;
 		default:
-			putchar('?');
+			std::putchar('?');
 			break;
 	}
-	fflush(stdout);
+	std::fflush(stdout);
 }
 
-int main(int argc, char* argv[])
+int main(const int argc, char* argv[])
 {
-	using namespace el1::error;
-	using namespace el1::dev::gpio::native;
 	using namespace el1::dev::gpio::dcf77;
+	using namespace el1::dev::gpio::native;
+	using namespace el1::error;
+	using namespace el1::io::file;
 	using namespace el1::system::cmdline;
 	using namespace el1::system::task;
 
 	try
 	{
-		s64_t idx_signal;
-		s64_t idx_chrony_shm = -1;
-		double distance = 0;
+		TPath path_gpio_chip = "/dev/gpiochip0";
+		s64_t signal_line = -1;
+		s64_t chrony_shm_index = -1;
+		f64_t distance = 0;
 
 		ParseCmdlineArguments(argc, argv,
-			TFlagArgument(&DEBUG, 'd', "debug", "", "Enable debug output"),
-			TIntegerArgument(&idx_signal, 'g', "gpio", "", false, false, "Configures the GPIO pin# used for DCF77 signaling"),
-			TFloatArgument(&distance, 'm', "distance", "", true, false, "Sets the distance in meters from the DCF77 sending station in Mainhausen Germany. This is used to compute the signal runtime."),
-			TIntegerArgument(&idx_chrony_shm, 's', "shm-index", "", true, false, "If set to a positive value it will write the received timestamp to the specified NTP shared-memory location - see gpsd and chronyd manpages for details")
+			THelpArgument("Decode a DCF77 signal from a GPIO line."),
+			TFlagArgument(&DEBUG, 'd', "debug", "", "Enable decoder debug output"),
+			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device"),
+			TIntegerArgument(&signal_line, 'g', "gpio", "", false, false, "GPIO line index carrying the DCF77 signal"),
+			TFloatArgument(&distance, 'm', "distance", "", true, false, "Distance in metres from the DCF77 transmitter"),
+			TIntegerArgument(&chrony_shm_index, 's', "shm-index", "", true, false, "Chrony/NTP shared-memory unit; -1 disables output")
 		);
 
-		if(idx_chrony_shm >= 0)
-			AttachSharedMemory(idx_chrony_shm);
-		TNativeGpioController& gpio_ctrl = *TNativeGpioController::Instance();
-		TDCF77 dcf77(gpio_ctrl.ClaimPin(idx_signal), distance);
-		dcf77.OnUpdate() += OnUpdate;
-		dcf77.OnTick() += OnTick;
-		TFiber::Self()->Stop();
+		EL_ERROR(signal_line < 0, TInvalidArgumentException, "gpio", "non-negative GPIO line index");
+		EL_ERROR(chrony_shm_index < -1, TInvalidArgumentException, "shm-index", "-1 or a non-negative unit number");
+		EL_ERROR(distance < 0, TInvalidArgumentException, "distance", "non-negative distance");
 
+		if(chrony_shm_index >= 0)
+		{
+			attachSharedMemory(static_cast<key_t>(chrony_shm_index));
+		}
+
+		TNativeGpioController gpio_controller(TFile(path_gpio_chip, TAccess::RW));
+		TDCF77 dcf77(gpio_controller.ClaimPin(static_cast<usys_t>(signal_line)), distance);
+		dcf77.OnUpdate() += onUpdate;
+		dcf77.OnTick() += onTick;
+		TFiber::Self()->Stop();
 		return 0;
 	}
-	catch(shutdown_t)
+	catch(const shutdown_t&)
 	{
-		fprintf(stderr, "\nBYE!\n");
 		return 0;
 	}
-	catch(const IException& e)
+	catch(const IException& exception)
 	{
-		e.Print("TOP LEVEL");
+		exception.Print("TOP LEVEL");
 		return 1;
 	}
-
-	return 2;
 }

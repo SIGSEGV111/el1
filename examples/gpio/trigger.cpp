@@ -1,50 +1,73 @@
-#include <iostream>
-#include <unistd.h>
-#include "../../gen/dbg/amalgam/el1.cpp"
+#include <el1/dev_gpio_native.hpp>
+#include <el1/error.hpp>
+#include <el1/io_file.hpp>
+#include <el1/system_cmdline.hpp>
 
-using namespace el1::dev::gpio;
-using namespace el1::dev::gpio::sysfs;
+#include <cstdio>
 
-int main(int argc, char* argv[])
+int main(const int argc, char* argv[])
 {
+	using namespace el1::dev::gpio;
+	using namespace el1::dev::gpio::native;
+	using namespace el1::error;
+	using namespace el1::io::file;
+	using namespace el1::system::cmdline;
+
 	try
 	{
-		if(argc != 4)
-			throw "need exactly three integer arguments (pin# | timeout in ms | repeat count)";
+		TPath gpio_chip = "/dev/gpiochip0";
+		s64_t gpio_line = -1;
+		s64_t timeout_ms = 1000;
+		s64_t repeat_count = 10;
+		s64_t debounce_us = 0;
 
-		const int gpio_num = atoi(argv[1]);
-		const int max_wait_ms = atoi(argv[2]);
-		const int n_repeat = atoi(argv[3]);
-		TController& gpio_controller = *TController::Instance();
+		ParseCmdlineArguments(argc, argv,
+			THelpArgument("Wait for GPIO edge events through the Linux GPIO character-device API."),
+			TPathArgument(&gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device"),
+			TIntegerArgument(&gpio_line, 'g', "gpio", "", false, false, "GPIO line index"),
+			TIntegerArgument(&timeout_ms, 't', "timeout", "", true, false, "Per-event timeout in milliseconds; -1 waits indefinitely"),
+			TIntegerArgument(&repeat_count, 'n', "count", "", true, false, "Number of events or timeouts to process"),
+			TIntegerArgument(&debounce_us, 'd', "debounce", "", true, false, "Hardware debounce interval in microseconds")
+		);
 
-		auto gpio_pin = gpio_controller.ClaimPin(gpio_num);
-		gpio_pin->Mode(EMode::INPUT);
-		gpio_pin->Trigger(ETrigger::BOTH_EDGES);
-		std::cerr<<"state = "<<gpio_pin->State()<<"\n";
+		EL_ERROR(gpio_line < 0, TInvalidArgumentException, "gpio", "non-negative GPIO line index");
+		EL_ERROR(timeout_ms < -1, TInvalidArgumentException, "timeout", "-1 or a non-negative timeout");
+		EL_ERROR(repeat_count < 0, TInvalidArgumentException, "count", "non-negative iteration count");
+		EL_ERROR(debounce_us < 0, TInvalidArgumentException, "debounce", "non-negative debounce interval");
 
-		for(unsigned i = 0; i < n_repeat; i++)
+		TNativeGpioController gpio_controller(TFile(gpio_chip, TAccess::RW));
+		auto gpio_pin = gpio_controller.ClaimPin(static_cast<usys_t>(gpio_line));
+		static_cast<TNativeGpioPin&>(*gpio_pin).Configure(EMode::INPUT, ETrigger::BOTH_EDGES, EPull::DISABLED, static_cast<u32_t>(debounce_us));
+		std::printf("state = %d\n", gpio_pin->State() ? 1 : 0);
+
+		for(s64_t i = 0; i < repeat_count; i++)
 		{
-			std::cerr<<"waiting... ";
-			if(gpio_pin->OnInputTrigger().WaitFor(max_wait_ms / 1000.0))
+			std::printf("waiting... ");
+			std::fflush(stdout);
+			const bool triggered = timeout_ms < 0
+				? gpio_pin->OnInputTrigger().WaitFor(-1)
+				: gpio_pin->OnInputTrigger().WaitFor(static_cast<f64_t>(timeout_ms) / 1000.0);
+
+			if(triggered)
 			{
-				std::cerr<<"TRIGGERED!\nstate = "<<gpio_pin->State()<<"\n";
+				gpio_pin->AcknowledgeInputTrigger();
+				std::printf("triggered, state = %d\n", gpio_pin->State() ? 1 : 0);
 			}
 			else
 			{
-				std::cerr<<"TIMEOUT!\n";
+				std::printf("timeout\n");
 			}
 		}
 
 		return 0;
 	}
-	catch(const TException& e)
+	catch(const shutdown_t&)
 	{
-		std::cerr<<"ERROR: "<<e.what()<<"\n";
+		return 0;
 	}
-	catch(const char* const msg)
+	catch(const IException& exception)
 	{
-		std::cerr<<"ERROR: "<<msg<<"\n";
+		exception.Print("TOP LEVEL");
+		return 1;
 	}
-
-	return 1;
 }

@@ -1,21 +1,30 @@
-#include <el1/el1.cpp>
+#include <el1/dev_gpio_native.hpp>
+#include <el1/dev_i2c_ads111x.hpp>
+#include <el1/dev_i2c_native.hpp>
+#include <el1/error.hpp>
+#include <el1/io_file.hpp>
+#include <el1/io_path.hpp>
+#include <el1/system_cmdline.hpp>
 
-int main(int argc, char* argv[])
+#include <cstdio>
+#include <memory>
+
+int main(const int argc, char* argv[])
 {
-	using namespace el1::error;
-	using namespace el1::io::types;
-	using namespace el1::io::file;
+	using namespace el1;
+	using namespace el1::dev::gpio;
 	using namespace el1::dev::gpio::native;
-	using namespace el1::dev::i2c::native;
 	using namespace el1::dev::i2c::ads111x;
+	using namespace el1::dev::i2c::native;
+	using namespace el1::error;
+	using namespace el1::io::file;
 	using namespace el1::system::cmdline;
-	using namespace el1::io::text;
-	using namespace el1::io::text::string;
-	using namespace el1::io::text::encoding::utf8;
 
 	try
 	{
-		TPath p_i2c = "/dev/i2c-1";
+		TPath path_i2c = "/dev/i2c-1";
+		TPath path_gpio_chip = "/dev/gpiochip0";
+		s64_t i2c_address = 0x48;
 		s64_t idx_datarate = 7;
 		s64_t idx_pga = 0;
 		s64_t idx_channel = 4;
@@ -23,67 +32,80 @@ int main(int argc, char* argv[])
 		s64_t idx_irq = -1;
 
 		ParseCmdlineArguments(argc, argv,
+			THelpArgument("Read samples from an ADS111x ADC."),
 			TFlagArgument(&DEBUG, 'd', "debug", "", "Enable debug output"),
-			TPathArgument(&p_i2c, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', "bus", "", true, false, "The I2C bus device to use"),
-			TIntegerArgument(&idx_datarate, 'r', "datarate", "", true, false, "Datarate of the chip. Range 0-7: [0=>8, 1=>16, 2=>32, 3=>64, 4=>128, 5=>250, 6=>475, 7=>860 samples per second]"),
-			TIntegerArgument(&idx_pga, 'g', "pga", "", true, false, "PGA (amplifier) setting. Configures the full-scale range of the chip. Range 0-5: [0=>6144mV, 1=>4096mV, 2=>2048mV, 3=>1024mV, 4=>512mV, 5=>256mV]"),
-			TIntegerArgument(&idx_channel, 'c', "channel", "", true, false, "Input channel. Range 0-7 [0=>A0-A1, 1=>A0-A3, 2=>A1-A3, 3=>A2-A3, 4=>A0, 5=>A1, 6=>A2, 7=>A3]. 0-3 are two-channel differential modes while 4-7 are single channel absolute modes."),
-			TIntegerArgument(&idx_opmode, 'm', "mode", "", true, false, "Operation mode. Range: 0-1 [0=>continuous, 1=>one shot"),
-			TIntegerArgument(&idx_irq, 'i', "irq", "", true, false, "Configures the GPIO pin# used for IRQ signaling (-1=>disabled). Allows for faster and more reliable data readout from the chip. The IRQ line must have a pull-up resistor (e.g. 10kOhm to Vcc). The IRQ line can NOT be shared with other devices, since the ADS111X has no data ready flag in its registers.")
+			TPathArgument(&path_i2c, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', "bus", "", true, false, "I2C bus device"),
+			TIntegerArgument(&i2c_address, 'a', "address", "", true, false, "7-bit I2C address"),
+			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device used for the optional IRQ"),
+			TIntegerArgument(&idx_datarate, 'r', "datarate", "", true, false, "Datarate index 0-7: 8, 16, 32, 64, 128, 250, 475 or 860 samples/s"),
+			TIntegerArgument(&idx_pga, 'g', "pga", "", true, false, "PGA index 0-5: 6144, 4096, 2048, 1024, 512 or 256 mV full scale"),
+			TIntegerArgument(&idx_channel, 'c', "channel", "", true, false, "Input channel index 0-7"),
+			TIntegerArgument(&idx_opmode, 'm', "mode", "", true, false, "Operation mode: 0=continuous, 1=single-shot"),
+			TIntegerArgument(&idx_irq, 'i', "irq", "", true, false, "GPIO line index for data-ready IRQ; -1 disables IRQ")
 		);
 
+		EL_ERROR(i2c_address < 0x03 || i2c_address > 0x77, TInvalidArgumentException, "address", "valid 7-bit I2C address");
 		EL_ERROR(idx_datarate < 0 || idx_datarate > 7, TInvalidArgumentException, "datarate", "range 0-7");
 		EL_ERROR(idx_pga < 0 || idx_pga > 5, TInvalidArgumentException, "pga", "range 0-5");
 		EL_ERROR(idx_channel < 0 || idx_channel > 7, TInvalidArgumentException, "channel", "range 0-7");
-		EL_ERROR(idx_opmode < 0 || idx_opmode > 1, TInvalidArgumentException, "opmode", "range 0-1");
+		EL_ERROR(idx_opmode < 0 || idx_opmode > 1, TInvalidArgumentException, "mode", "range 0-1");
+		EL_ERROR(idx_irq < -1, TInvalidArgumentException, "irq", "-1 or a non-negative GPIO line index");
 
 		config_t config;
-		config.OpMode((EOpMode)idx_opmode);
-		config.DataRate((EDataRate)idx_datarate);
-		config.PGA((EPGA)idx_pga);
-		config.Channel((EChannel)idx_channel);
+		config.OpMode(static_cast<EOpMode>(idx_opmode));
+		config.DataRate(static_cast<EDataRate>(idx_datarate));
+		config.PGA(static_cast<EPGA>(idx_pga));
+		config.Channel(static_cast<EChannel>(idx_channel));
 
 		if(idx_irq >= 0)
+		{
 			config.ConfigureDataReadyIrq();
+		}
 		else
+		{
 			config.DisableIrq();
+		}
 
-		TBus i2c(p_i2c);
-		TNativeGpioController& gpio_ctrl = *TNativeGpioController::Instance();
-		TADS111X adc(i2c.ClaimDevice(0x48), idx_irq == -1 ? nullptr : gpio_ctrl.ClaimPin(idx_irq));
+		TBus i2c(path_i2c);
+		std::unique_ptr<TNativeGpioController> gpio_controller;
+		std::unique_ptr<IPin> irq_pin;
+
+		if(idx_irq >= 0)
+		{
+			gpio_controller = New<TNativeGpioController>(TFile(path_gpio_chip, TAccess::RW));
+			irq_pin = gpio_controller->ClaimPin(static_cast<usys_t>(idx_irq));
+		}
+
+		TADS111X adc(i2c.ClaimDevice(static_cast<u8_t>(i2c_address)), std::move(irq_pin));
 		adc.Config(config);
 
 		if(config.OpMode() == EOpMode::SINGLE_SHOT)
 		{
 			adc.TriggerConversion();
-
-			s16_t result;
+			s16_t result = 0;
 			adc.ReadAll(&result, 1);
-			printf("%hd\n", result);
+			std::printf("%hd\n", result);
 		}
 		else
 		{
-			s16_t result;
 			for(;;)
 			{
+				s16_t result = 0;
 				adc.ReadAll(&result, 1);
-				printf("%hd\n", result);
+				std::printf("%hd\n", result);
+				std::fflush(stdout);
 			}
 		}
 
-		fflush(stdout);
 		return 0;
 	}
-	catch(shutdown_t)
+	catch(const shutdown_t&)
 	{
-		fprintf(stderr, "\nBYE!\n");
 		return 0;
 	}
-	catch(const IException& e)
+	catch(const IException& exception)
 	{
-		e.Print("TOP LEVEL");
+		exception.Print("TOP LEVEL");
 		return 1;
 	}
-
-	return 2;
 }

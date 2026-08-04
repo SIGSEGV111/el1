@@ -114,8 +114,9 @@ namespace el1::dev::spi::led
 	int TLedStrip<TSpiLed>::TestNumLeds(const unsigned num_leds) const
 	{
 		const byte_t zero[sizeof(TSpiLed)] = {};
-		TSpiLed arr[num_leds + 1];
-		dev->ExchangeBuffers(arr, arr, sizeof(arr), true);
-		return memcmp(arr + num_leds, zero, sizeof(TSpiLed)) == 0 ? -1 : 1;
+		io::collection::list::TList<TSpiLed> leds_test;
+		leds_test.FillInsert(0, TSpiLed(), num_leds + 1);
+		dev->ExchangeBuffers(&leds_test[0], &leds_test[0], sizeof(TSpiLed) * leds_test.Count(), true);
+		return memcmp(&leds_test[num_leds], zero, sizeof(TSpiLed)) == 0 ? -1 : 1;
 	}
 }

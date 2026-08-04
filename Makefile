@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := all
 
 .PHONY: all release debug clean install install-runtime install-devel package rpm deploy \
-	test test-release test-debug coverage-report \
+	test test-release test-debug coverage-report examples examples-test \
 	check-valgrind check-coverage-tools entr
 
 ARCH ?= $(shell rpm --eval '%{_target_cpu}' 2>/dev/null || uname -m)
@@ -158,6 +158,12 @@ all: release debug
 release: $(RELEASE_LIB_NAME) $(RELEASE_LIB_LINK_NAME) $(SUPER_HEADER)
 
 debug: $(DEBUG_LIB_NAME) $(DEBUG_LIB_LINK_NAME) $(SUPER_HEADER)
+
+examples: release
+	$(MAKE) -C examples all
+
+examples-test: release
+	$(MAKE) -C examples smoke-test
 
 clean:
 	rm -rf -- "$(OUT_DIR)" *.rpm

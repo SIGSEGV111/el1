@@ -1,7 +1,7 @@
 .PHONY: all clean test
 
 all:
-	$(MAKE) -C .. neopixel-spi-driver
+	$(MAKE) -C .. gpio-blink gpio-trigger
 
 clean:
 	$(MAKE) -C .. clean

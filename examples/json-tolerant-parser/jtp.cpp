@@ -1,39 +1,42 @@
-#include <el1/el1.cpp>
+#include <el1/error.hpp>
+#include <el1/io_file.hpp>
+#include <el1/io_format_json.hpp>
+#include <el1/io_text_encoding_utf8.hpp>
+#include <el1/io_text_string.hpp>
+#include <el1/system_cmdline.hpp>
 
-int main(int argc, char* argv[])
+int main(const int argc, char* argv[])
 {
 	using namespace el1::error;
-	using namespace el1::system::cmdline;
-	using namespace el1::io::types;
 	using namespace el1::io::file;
-	using namespace el1::io::text;
-	using namespace el1::io::text::string;
-	using namespace el1::io::text::encoding::utf8;
 	using namespace el1::io::format::json;
+	using namespace el1::io::text::encoding::utf8;
+	using namespace el1::system::cmdline;
 
 	try
 	{
-		TPath in;
-		TPath out;
+		TPath input_path;
+		TPath output_path;
 
 		ParseCmdlineArguments(argc, argv,
-			TPathArgument(&in, EObjectType::FILE, ECreateMode::OPEN, 'i', "input-file", "", false, false, "JSON input file"),
-			TPathArgument(&out, EObjectType::FILE, ECreateMode::TRUNCATE, 'o', "output-file", "", false, false, "JSON output file")
+			THelpArgument("Parse tolerant JSON and write normalized JSON."),
+			TPathArgument(&input_path, EObjectType::FILE, ECreateMode::OPEN, 'i', "input-file", "", false, false, "JSON input file"),
+			TPathArgument(&output_path, EObjectType::FILE, ECreateMode::TRUNCATE, 'o', "output-file", "", false, false, "Normalized JSON output file")
 		);
 
-		TFile in_file(in);
-		TMapping map(&in_file, TAccess::RO);
-		TFile out_file(out, TAccess::WO, ECreateMode::TRUNCATE);
-		map.Pipe().Transform(TUTF8Decoder()).Transform(TJsonParser(true)).ForEach([&out_file](auto& j) { j.Pipe().Transform(TUTF8Encoder()).ToStream(out_file); });
+		const el1::io::text::string::TString input = TFile::ReadText(input_path, false);
+		TJsonValue json = TJsonValue::Parse(input, true);
+		TFile output_file(output_path, TAccess::WO, ECreateMode::TRUNCATE);
+		json.Pipe().Transform(TUTF8Encoder()).ToStream(output_file);
+		return 0;
 	}
-	catch(shutdown_t)
+	catch(const shutdown_t&)
 	{
+		return 0;
 	}
-	catch(const IException& e)
+	catch(const IException& exception)
 	{
-		e.Print("TOP LEVEL");
+		exception.Print("TOP LEVEL");
 		return 1;
 	}
-
-	return 0;
 }

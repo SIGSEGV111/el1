@@ -1,14 +1,10 @@
-.PHONY: all clean enable-spidev
+.PHONY: all clean test
 
-all: hx711-test
+all:
+	$(MAKE) -C .. hx711-test
 
 clean:
-	rm -f -- hx711-test
+	$(MAKE) -C .. clean
 
-enable-spidev:
-	modprobe spidev
-	echo spidev > /sys/bus/spi/devices/spi0.0/driver_override
-	echo spi0.0 > /sys/bus/spi/drivers/spidev/bind
-
-hx711-test: hx711-test.cpp Makefile
-	g++ -Wall -Wextra -std=c++20 -flto=4 -O2 -o $@ hx711-test.cpp
+test:
+	$(MAKE) -C .. smoke-test

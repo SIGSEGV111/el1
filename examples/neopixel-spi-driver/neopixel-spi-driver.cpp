@@ -1,74 +1,113 @@
-#include <el1/el1.cpp>
+#include <el1/dev_gpio_native.hpp>
+#include <el1/dev_spi_led.hpp>
+#include <el1/dev_spi_led_neopixel.hpp>
+#include <el1/dev_spi_native.hpp>
+#include <el1/error.hpp>
+#include <el1/io_file.hpp>
+#include <el1/io_format_json.hpp>
+#include <el1/io_net_http.hpp>
+#include <el1/io_net_ip.hpp>
+#include <el1/io_text_encoding_utf8.hpp>
+#include <el1/system_cmdline.hpp>
+#include <el1/system_task.hpp>
 
-using namespace el1::io::types;
-using namespace el1::io::file;
-using namespace el1::io::net::ip;
-using namespace el1::io::net::http;
-using namespace el1::io::format::json;
-using namespace el1::dev::spi::native;
-using namespace el1::dev::spi::led;
-using namespace el1::dev::spi::led::neopixel;
-using namespace el1::dev::gpio;
-using namespace el1::dev::gpio::native;
-using namespace el1::system::cmdline;
-using namespace el1::system::task;
+#include <cstdio>
+#include <memory>
 
-int main(int argc, char* argv[])
+int main(const int argc, char* argv[])
 {
+	using namespace el1;
+	using namespace el1::dev::gpio;
+	using namespace el1::dev::gpio::native;
+	using namespace el1::dev::spi::led;
+	using namespace el1::dev::spi::led::neopixel;
+	using namespace el1::dev::spi::native;
+	using namespace el1::error;
+	using namespace el1::io::file;
+	using namespace el1::io::format::json;
+	using namespace el1::io::net::http;
+	using namespace el1::io::net::ip;
+	using namespace el1::io::text::encoding::utf8;
+	using namespace el1::system::cmdline;
+	using namespace el1::system::task;
+
 	try
 	{
-		TPath path_spi_bus = "/dev/spidev0.0";
-		s64_t idx_ce = -1;
-		s64_t num_leds;
+		TPath path_spi = "/dev/spidev0.0";
+		TPath path_gpio_chip = "/dev/gpiochip0";
+		s64_t chip_enable_line = -1;
+		s64_t led_count = 1;
 		s64_t http_port = 8080;
 
 		ParseCmdlineArguments(argc, argv,
-			TFlagArgument(&THttpServer::DEBUG, 'H', "debug-http", "", "Enable debug output for http-server"),
-			TFlagArgument(&TFiber::DEBUG, 'F', "debug-fiber", "", "Enable debug output for fibers"),
-			TPathArgument(&path_spi_bus, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', "bus", "", true, false, "The SPI bus device to use"),
-			TIntegerArgument(&idx_ce, 'e', "ce", "", true, false, "Configures the GPIO pin# that connects to the level-shifters for the LED strip"),
-			TIntegerArgument(&num_leds, 'c', "count", "", false, false, "Count of LEDs on the strip. -1 to auto-detect."),
-			TIntegerArgument(&http_port, 'p', "port", "", true, false, "HTTP-Server Port")
+			THelpArgument("Control a WS2812B strip through a small HTTP JSON endpoint."),
+			TFlagArgument(&THttpServer::DEBUG, 'H', "debug-http", "", "Enable HTTP server debug output"),
+			TFlagArgument(&TFiber::DEBUG, 'F', "debug-fiber", "", "Enable fiber debug output"),
+			TPathArgument(&path_spi, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', "bus", "", true, false, "SPI device"),
+			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device for optional level-shifter enable"),
+			TIntegerArgument(&chip_enable_line, 'e', "ce", "", true, false, "GPIO line controlling the level shifter; -1 disables it"),
+			TIntegerArgument(&led_count, 'c', "count", "", true, false, "Number of LEDs; -1 enables loopback auto-detection"),
+			TIntegerArgument(&http_port, 'p', "port", "", true, false, "HTTP listen port")
 		);
 
-		TNativeGpioController& gpio_ctrl = *TNativeGpioController::Instance();
-		TNativeSpiBus spi_bus(path_spi_bus);
-		TLedStrip<TWS2812B> led_strip(spi_bus.ClaimDevice((idx_ce < 0) ? std::unique_ptr<IPin>(nullptr) : gpio_ctrl.ClaimPin(idx_ce)), num_leds);
+		EL_ERROR(chip_enable_line < -1, TInvalidArgumentException, "ce", "-1 or a non-negative GPIO line");
+		EL_ERROR(led_count == 0 || led_count < -1, TInvalidArgumentException, "count", "-1 or a positive LED count");
+		EL_ERROR(http_port < 1 || http_port > 65535, TInvalidArgumentException, "port", "range 1-65535");
 
-		TTcpServer tcp_server(http_port);
-		THttpServer http_server(&tcp_server, [&](const THttpServer::request_t& req, THttpServer::response_t& res) {
-			res.status = EStatus::METHOD_NOT_ALLOWED;
-			res.body = nullptr;
+		std::unique_ptr<TNativeGpioController> gpio_controller;
+		std::unique_ptr<IPin> chip_enable_pin;
+		if(chip_enable_line >= 0)
+		{
+			gpio_controller = New<TNativeGpioController>(TFile(path_gpio_chip, TAccess::RW));
+			chip_enable_pin = gpio_controller->ClaimPin(static_cast<usys_t>(chip_enable_line));
+		}
 
-			if(req.method == EMethod::POST)
+		TNativeSpiBus spi_bus(path_spi);
+		TLedStrip<TWS2812B> led_strip(
+			spi_bus.ClaimDevice(std::move(chip_enable_pin)),
+			static_cast<int>(led_count)
+		);
+
+		TTcpServer tcp_server(static_cast<port_t>(http_port));
+		THttpServer http_server(&tcp_server, [&](const THttpServer::request_t& request, THttpServer::response_t& response)
+		{
+			response.status = EStatus::METHOD_NOT_ALLOWED;
+			response.body = nullptr;
+
+			if(request.method != EMethod::POST)
 			{
-				EL_ERROR(req.body == nullptr, TException, "POST request requires a body");
-				auto json = req.body->Pipe().Transform(TUTF8Decoder()).Transform(TJsonParser(false)).First();
-
-				const u8_t r = json["color"]["red"  ].Number() * 255.0;
-				const u8_t g = json["color"]["green"].Number() * 255.0;
-				const u8_t b = json["color"]["blue" ].Number() * 255.0;
-
-				led_strip.UnifiedColor({r,g,b});
-				led_strip.Apply();
-
-				res.status = EStatus::OK;
+				return;
 			}
+
+			EL_ERROR(request.body == nullptr, TInvalidArgumentException, "body", "POST request requires a JSON body");
+			auto json = request.body->Pipe().Transform(TUTF8Decoder()).Transform(TJsonParser(false)).First();
+			const f64_t red = json["color"]["red"].Number();
+			const f64_t green = json["color"]["green"].Number();
+			const f64_t blue = json["color"]["blue"].Number();
+			EL_ERROR(red < 0 || red > 1, TInvalidArgumentException, "red", "range 0-1");
+			EL_ERROR(green < 0 || green > 1, TInvalidArgumentException, "green", "range 0-1");
+			EL_ERROR(blue < 0 || blue > 1, TInvalidArgumentException, "blue", "range 0-1");
+
+			led_strip.UnifiedColor({
+				static_cast<u8_t>(red * 255.0 + 0.5),
+				static_cast<u8_t>(green * 255.0 + 0.5),
+				static_cast<u8_t>(blue * 255.0 + 0.5)
+			});
+			led_strip.Apply();
+			response.status = EStatus::OK;
 		});
 
-		fprintf(stderr, "READY!\n");
+		std::fprintf(stderr, "Listening on port %lld. POST {\"color\":{\"red\":0..1,\"green\":0..1,\"blue\":0..1}}\n", static_cast<long long>(http_port));
 		TFiber::Self()->Stop();
-		fprintf(stderr, "WTF?\n");
+		return 0;
 	}
-	catch(shutdown_t)
+	catch(const shutdown_t&)
 	{
-		fprintf(stderr, "\nBYE!\n");
+		return 0;
 	}
-	catch(const IException& e)
+	catch(const IException& exception)
 	{
-		e.Print("TOP LEVEL");
+		exception.Print("TOP LEVEL");
 		return 1;
 	}
-
-	return 0;
 }

@@ -108,6 +108,7 @@ namespace el1::dev::w1
 
 	struct IW1Bus
 	{
+		virtual ~IW1Bus() {}
 		virtual bool HasStrongPullUp() const EL_GETTER = 0;
 
 		// Returns true if devices were detected on the bus after the reset, false otherwise.

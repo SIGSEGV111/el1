@@ -43,6 +43,7 @@ namespace el1::dev::i2c
 
 	struct II2CBus
 	{
+		virtual ~II2CBus() {}
 		virtual ESpeedClass MaxSupportedSpeed() const EL_GETTER = 0;
 		virtual std::unique_ptr<II2CDevice> ClaimDevice(const u8_t address, const ESpeedClass sc_max = ESpeedClass::STD) = 0;
 	};

@@ -1,62 +1,78 @@
-#include <iostream>
-#include <unistd.h>
-#include "../../gen/dbg/amalgam/el1.cpp"
+#include <el1/dev_gpio_native.hpp>
+#include <el1/error.hpp>
+#include <el1/io_file.hpp>
+#include <el1/system_cmdline.hpp>
+#include <el1/system_task.hpp>
 
-// this example uses the native Raspberry Pi GPIO driver
+#include <cstdio>
 
-using namespace el1::dev::gpio;
-using namespace el1::dev::gpio::bcm283x;
-
-int main(int argc, char* argv[])
+int main(const int argc, char* argv[])
 {
+	using namespace el1::dev::gpio;
+	using namespace el1::dev::gpio::native;
+	using namespace el1::error;
+	using namespace el1::io::file;
+	using namespace el1::system::cmdline;
+	using namespace el1::system::task;
+
 	try
 	{
-		if(argc != 5)
-			throw "need exactly four integer arguments (pin# | delay in ms | repeat count | pull=0/drive=1)";
+		TPath gpio_chip = "/dev/gpiochip0";
+		s64_t gpio_line = -1;
+		s64_t delay_ms = 500;
+		s64_t repeat_count = 10;
+		s64_t mode = 1;
 
-		const int gpio_num = atoi(argv[1]);
-		const int delay_ms = atoi(argv[2]);
-		const int n_repeat = atoi(argv[3]);
-		const int mode = atoi(argv[4]);
-		TBCM283X& gpio_controller = *TBCM283X::Instance();
+		ParseCmdlineArguments(argc, argv,
+			THelpArgument("Toggle a GPIO output or alternate its input pull resistor."),
+			TPathArgument(&gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device"),
+			TIntegerArgument(&gpio_line, 'g', "gpio", "", false, false, "GPIO line index"),
+			TIntegerArgument(&delay_ms, 'd', "delay", "", true, false, "Delay between state changes in milliseconds"),
+			TIntegerArgument(&repeat_count, 'n', "count", "", true, false, "Number of cycles"),
+			TIntegerArgument(&mode, 'm', "mode", "", true, false, "0=alternate input pull-down/up, 1=toggle output low/high")
+		);
 
-		auto gpio_pin = gpio_controller.ClaimPin(gpio_num);
+		EL_ERROR(gpio_line < 0, TInvalidArgumentException, "gpio", "non-negative GPIO line index");
+		EL_ERROR(delay_ms < 0, TInvalidArgumentException, "delay", "non-negative delay");
+		EL_ERROR(repeat_count < 0, TInvalidArgumentException, "count", "non-negative cycle count");
+		EL_ERROR(mode < 0 || mode > 1, TInvalidArgumentException, "mode", "0 or 1");
+
+		TNativeGpioController gpio_controller(TFile(gpio_chip, TAccess::RW));
+		auto gpio_pin = gpio_controller.ClaimPin(static_cast<usys_t>(gpio_line));
+		const f64_t delay_seconds = static_cast<f64_t>(delay_ms) / 1000.0;
 
 		if(mode == 0)
 		{
 			gpio_pin->Mode(EMode::INPUT);
-
-			for(unsigned i = 0; i < n_repeat; i++)
+			for(s64_t i = 0; i < repeat_count; i++)
 			{
 				gpio_pin->Pull(EPull::DOWN);
-				usleep(delay_ms * 1000UL);
+				TFiber::Sleep(delay_seconds);
 				gpio_pin->Pull(EPull::UP);
-				usleep(delay_ms * 1000UL);
+				TFiber::Sleep(delay_seconds);
 			}
 		}
-		else if(mode == 1)
+		else
 		{
 			gpio_pin->Mode(EMode::OUTPUT);
-
-			for(unsigned i = 0; i < n_repeat; i++)
+			for(s64_t i = 0; i < repeat_count; i++)
 			{
 				gpio_pin->State(false);
-				usleep(delay_ms * 1000UL);
+				TFiber::Sleep(delay_seconds);
 				gpio_pin->State(true);
-				usleep(delay_ms * 1000UL);
+				TFiber::Sleep(delay_seconds);
 			}
 		}
 
 		return 0;
 	}
-	catch(const TException& e)
+	catch(const shutdown_t&)
 	{
-		std::cerr<<"ERROR: "<<e.what()<<"\n";
+		return 0;
 	}
-	catch(const char* const msg)
+	catch(const IException& exception)
 	{
-		std::cerr<<"ERROR: "<<msg<<"\n";
+		exception.Print("TOP LEVEL");
+		return 1;
 	}
-
-	return 1;
 }

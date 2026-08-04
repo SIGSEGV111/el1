@@ -1,97 +1,138 @@
-#include <el1/el1.cpp>
-#include <stdio.h>
-#include <math.h>
+#include <el1/dev_gpio_native.hpp>
+#include <el1/dev_spi_hx711.hpp>
+#include <el1/dev_spi_native.hpp>
+#include <el1/error.hpp>
+#include <el1/io_collection_list.hpp>
+#include <el1/io_file.hpp>
+#include <el1/system_cmdline.hpp>
+#include <el1/system_time.hpp>
 
-using namespace el1::io::types;
-using namespace el1::io::collection::list;
-using namespace el1::dev::spi;
-using namespace el1::dev::spi::native;
-using namespace el1::dev::spi::hx711;
-using namespace el1::dev::gpio;
-using namespace el1::dev::gpio::native;
-using namespace el1::error;
-using namespace el1::system::cmdline;
-using namespace el1::system::time;
+#include <cmath>
+#include <cstdio>
+#include <memory>
 
-int main(int argc, char* argv[])
+int main(const int argc, char* argv[])
 {
-	int exit_code = 0;
+	using namespace el1;
+	using namespace el1::dev::gpio;
+	using namespace el1::dev::gpio::native;
+	using namespace el1::dev::spi::hx711;
+	using namespace el1::dev::spi::native;
+	using namespace el1::error;
+	using namespace el1::io::collection::list;
+	using namespace el1::io::file;
+	using namespace el1::io::types;
+	using namespace el1::system::cmdline;
+	using namespace el1::system::time;
 
 	try
 	{
-		s64_t config = 0;
-		s64_t irq_pin = -1;
-		s64_t ce_pin = -1;
-		s64_t hz_clock = HZ_CLOCK_SPI_MAX / 10;
-		s64_t n_capture = -1;
-		s64_t n_avg = 32;
-		double sr = 11.0f;
-		el1::dev::spi::hx711::DEBUG = false;
+		TPath path_spi = "/dev/spidev0.0";
+		TPath path_gpio_chip = "/dev/gpiochip0";
+		s64_t configuration = 0;
+		s64_t irq_line = -1;
+		s64_t chip_enable_line = -1;
+		s64_t clock_hz = HZ_CLOCK_SPI_MAX / 10;
+		s64_t capture_count = -1;
+		s64_t average_count = 32;
+		f64_t sample_rate = 11.0;
+
 		ParseCmdlineArguments(argc, argv,
-			TIntegerArgument(&n_capture, 'n', "count", "", true, false, "number of data samples to capture before quitting (-1 = no limit)"),
-			TIntegerArgument(&config, 'c', "config", "", true, false, "0=Channel A with x128 gain, 1=Channel B with x32 gain, 2=Channel A with x64 gain"),
-			TIntegerArgument(&ce_pin, 'e', "ce", "", true, false, "The GPIO pin that is used as chip-enable control (-1 = none)"),
-			TIntegerArgument(&irq_pin, 'i', "irq", "", true, false, "The GPIO pin that is used as interrupt source (-1 = none)"),
-			TIntegerArgument(&hz_clock, 'f', "clock", "", true, false, "The SPI clock frequency in Hz for data transfers"),
-			TFloatArgument(&sr, 'r', "rate", "", true, false, "The poll-rate of the test program. The HX711 usually has a sample-rate of ~10Hz or ~80Hz (depending on the speed of the HX711's clock and the state of the RATE-pin). This setting optimizes internal timers and is only used when no IRQ is available. The poll-rate should be a bit higher than the sample-rate."),
-			TFlagArgument(&el1::dev::spi::hx711::DEBUG, 'd', "debug", "", "enable debug output"),
-			TIntegerArgument(&n_avg, 'a', "avg", "", true, false, "Number of samples for gliding average computation")
+			THelpArgument("Read samples from an HX711 through an SPI controller."),
+			TPathArgument(&path_spi, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', "bus", "", true, false, "SPI device"),
+			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device for optional CE/IRQ lines"),
+			TIntegerArgument(&capture_count, 'n', "count", "", true, false, "Number of samples; -1 has no limit"),
+			TIntegerArgument(&configuration, 'c', "config", "", true, false, "0=channel A x128, 1=channel B x32, 2=channel A x64"),
+			TIntegerArgument(&chip_enable_line, 'e', "ce", "", true, false, "GPIO line used as chip enable; -1 disables it"),
+			TIntegerArgument(&irq_line, 'i', "irq", "", true, false, "GPIO line used as interrupt source; -1 disables it"),
+			TIntegerArgument(&clock_hz, 'f', "clock", "", true, false, "SPI clock frequency in Hz"),
+			TFloatArgument(&sample_rate, 'r', "rate", "", true, false, "Expected HX711 sample rate used for polling"),
+			TFlagArgument(&DEBUG, 'd', "debug", "", "Enable driver debug output"),
+			TIntegerArgument(&average_count, 'a', "avg", "", true, false, "Number of samples in the moving average; 0 disables averaging")
 		);
 
-		EL_ERROR(config < 0 || config > 2, TInvalidArgumentException, "config", "config must be in the range 0-2");
-		EL_ERROR(n_capture < -1, TInvalidArgumentException, "count", "count must >= -1");
-		EL_ERROR(ce_pin < -1, TInvalidArgumentException, "ce", "CE pin# must be >= -1");
-		EL_ERROR(irq_pin < -1, TInvalidArgumentException, "irq", "IRQ pin# must be >= -1");
-		EL_ERROR(hz_clock < HZ_CLOCK_SPI_MIN || hz_clock > HZ_CLOCK_SPI_MAX, TInvalidArgumentException, "clock", "Clock frequency must be in the range 40KHz to 10MHz");
-		EL_ERROR(sr <= 0, TInvalidArgumentException, "rate", "The sample-rate must be a positive number");
-		EL_ERROR(n_avg < 0, TInvalidArgumentException, "avg", "The number of samples for the gliding average must be >= 0");
+		EL_ERROR(configuration < 0 || configuration > 2, TInvalidArgumentException, "config", "range 0-2");
+		EL_ERROR(capture_count < -1, TInvalidArgumentException, "count", "-1 or a non-negative count");
+		EL_ERROR(chip_enable_line < -1, TInvalidArgumentException, "ce", "-1 or a non-negative GPIO line");
+		EL_ERROR(irq_line < -1, TInvalidArgumentException, "irq", "-1 or a non-negative GPIO line");
+		EL_ERROR(clock_hz < HZ_CLOCK_SPI_MIN || clock_hz > HZ_CLOCK_SPI_MAX, TInvalidArgumentException, "clock", "40 kHz to 10 MHz");
+		EL_ERROR(sample_rate <= 0, TInvalidArgumentException, "rate", "positive sample rate");
+		EL_ERROR(average_count < 0, TInvalidArgumentException, "avg", "non-negative sample count");
 
-		TList<float> arr_avg(n_avg);
-		arr_avg.SetCount(n_avg);
-		ssys_t idx_avg = 0;
-
-		TNativeGpioController& gpioctrl = *TNativeGpioController::Instance();
-		TNativeSpiBus spibus("/dev/spidev0.0");
-		THX711 hx711(spibus.ClaimDevice(ce_pin >= 0 ? gpioctrl.ClaimPin(ce_pin) : nullptr), irq_pin >= 0 ? gpioctrl.ClaimPin(irq_pin) : nullptr, hz_clock, sr);
-
-		TTime ts_last;
-		float value = 0.0f;
-		double f_avg = NAN;
-		hx711.Configuration((THX711::EConfig)config);
-		hx711.ReadAll(&value, 1);
-
-		for(s64_t i = 0; n_capture == -1 || i < n_capture; i++)
+		std::unique_ptr<TNativeGpioController> gpio_controller;
+		std::unique_ptr<IPin> chip_enable_pin;
+		std::unique_ptr<IPin> irq_pin;
+		if(chip_enable_line >= 0 || irq_line >= 0)
 		{
-			hx711.ReadAll(&value, 1);
-			const TTime ts_now = TTime::Now(EClock::MONOTONIC);
-			const TTime t_delta = ts_now - ts_last;
-			ts_last = ts_now;
-
-			if(n_avg >= 1)
+			gpio_controller = New<TNativeGpioController>(TFile(path_gpio_chip, TAccess::RW));
+			if(chip_enable_line >= 0)
 			{
-				arr_avg[idx_avg] = value;
-				idx_avg++;
-				if(idx_avg >= n_avg)
-					idx_avg = 0;
+				chip_enable_pin = gpio_controller->ClaimPin(static_cast<usys_t>(chip_enable_line));
+			}
+			if(irq_line >= 0)
+			{
+				irq_pin = gpio_controller->ClaimPin(static_cast<usys_t>(irq_line));
+			}
+		}
 
-				f_avg = arr_avg[0];
-				for(ssys_t j = 1; j < n_avg; j++)
-					f_avg += (double)arr_avg[j];
-				f_avg /= (double)n_avg;
+		TNativeSpiBus spi_bus(path_spi);
+		THX711 hx711(
+			spi_bus.ClaimDevice(std::move(chip_enable_pin)),
+			std::move(irq_pin),
+			static_cast<u32_t>(clock_hz),
+			static_cast<f32_t>(sample_rate)
+		);
+		hx711.Configuration(static_cast<THX711::EConfig>(configuration));
+
+		TList<f32_t> average_samples;
+		if(average_count > 0)
+		{
+			average_samples.SetCount(static_cast<usys_t>(average_count));
+		}
+		usys_t average_index = 0;
+		usys_t average_valid = 0;
+		TTime timestamp_last = TTime::Now(EClock::MONOTONIC);
+
+		for(s64_t sample_index = 0; capture_count == -1 || sample_index < capture_count; sample_index++)
+		{
+			f32_t value = 0;
+			hx711.ReadAll(&value, 1);
+			const TTime timestamp_now = TTime::Now(EClock::MONOTONIC);
+			const TTime elapsed = timestamp_now - timestamp_last;
+			timestamp_last = timestamp_now;
+
+			f64_t average = NAN;
+			if(average_count > 0)
+			{
+				average_samples[average_index] = value;
+				average_index = (average_index + 1U) % average_samples.Count();
+				if(average_valid < average_samples.Count())
+				{
+					average_valid++;
+				}
+
+				average = 0;
+				for(usys_t i = 0; i < average_valid; i++)
+				{
+					average += average_samples[i];
+				}
+				average /= static_cast<f64_t>(average_valid);
 			}
 
-			fprintf(stderr, "%f (f@% 3.3fHz), avg: %f\n", value, 1.0 / t_delta.ConvertToF(EUnit::SECONDS), f_avg);
+			const f64_t elapsed_seconds = elapsed.ConvertToF(EUnit::SECONDS);
+			const f64_t frequency = elapsed_seconds > 0 ? 1.0 / elapsed_seconds : INFINITY;
+			std::fprintf(stderr, "%f (f@%3.3f Hz), avg: %f\n", static_cast<f64_t>(value), frequency, average);
 		}
-	}
-	catch(shutdown_t)
-	{
-		fprintf(stderr, "\nBYE!\n");
-	}
-	catch(const IException& e)
-	{
-		e.Print("TOP LEVEL");
-		exit_code = 1;
-	}
 
-	return exit_code;
+		return 0;
+	}
+	catch(const shutdown_t&)
+	{
+		return 0;
+	}
+	catch(const IException& exception)
+	{
+		exception.Print("TOP LEVEL");
+		return 1;
+	}
 }
