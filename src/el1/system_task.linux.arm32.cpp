@@ -11,9 +11,12 @@
 // https://sourceforge.net/p/predef/wiki/Architectures/
 
 #if defined(__ARM_FP)
+	// File-scope assembly may need an explicit FPU selection even when the compiler defines __ARM_FP.
+	#define EL_ARM32_FPU_DIRECTIVE ".fpu vfpv2\n"
 	#define EL_ARM32_SAVE_VFP_REGISTERS "vstmia r0!, {d8-d15}\n"
 	#define EL_ARM32_LOAD_VFP_REGISTERS "vldmia r1!, {d8-d15}\n"
 #else
+	#define EL_ARM32_FPU_DIRECTIVE ""
 	#define EL_ARM32_SAVE_VFP_REGISTERS ""
 	#define EL_ARM32_LOAD_VFP_REGISTERS ""
 #endif
@@ -21,6 +24,9 @@
 asm(R"(
 .arm
 .syntax unified
+)"
+EL_ARM32_FPU_DIRECTIVE
+R"(
 .section .text
 .align  2
 .global __SwapRegisters__
@@ -61,6 +67,7 @@ mov lr, #0
 bx r3
 )");
 
+#undef EL_ARM32_FPU_DIRECTIVE
 #undef EL_ARM32_SAVE_VFP_REGISTERS
 #undef EL_ARM32_LOAD_VFP_REGISTERS
 
