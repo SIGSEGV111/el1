@@ -76,14 +76,14 @@ namespace el1::io::net::http
 		switch(status)
 		{
 			case EStatus::OK: return "OK";
-			case EStatus::CREATED: return "CREATED";
-			case EStatus::BAD_REQUEST: return "BAD_REQUEST";
-			case EStatus::UNAUTHORIZED: return "UNAUTHORIZED";
-			case EStatus::FORBIDDEN: return "FORBIDDEN";
-			case EStatus::NOT_FOUND: return "NOT FOUND";
-			case EStatus::METHOD_NOT_ALLOWED: return "METHOD NOT ALLOWED";
-			case EStatus::REQUEST_HEADER_FIELDS_TOO_LARGE: return "REQUEST HEADER FIELDS TOO LARGE";
-			case EStatus::INTERNAL_SERVER_ERROR: return "INTERNAL SERVER ERROR";
+			case EStatus::CREATED: return "Created";
+			case EStatus::BAD_REQUEST: return "Bad Request";
+			case EStatus::UNAUTHORIZED: return "Unauthorized";
+			case EStatus::FORBIDDEN: return "Forbidden";
+			case EStatus::NOT_FOUND: return "Not Found";
+			case EStatus::METHOD_NOT_ALLOWED: return "Method Not Allowed";
+			case EStatus::REQUEST_HEADER_FIELDS_TOO_LARGE: return "Request Header Fields Too Large";
+			case EStatus::INTERNAL_SERVER_ERROR: return "Internal Server Error";
 			case EStatus::EOF: break;
 		}
 
@@ -98,13 +98,15 @@ namespace el1::io::net::http
 
 		if(response.body == nullptr)
 			response.header_fields.ContentLength(0);
+		else if(response.header_fields.ContentLength() == NEG1 && response.version != EVersion::HTTP10)
+			response.header_fields.Set(L"Connection", L"close");
 
 		sink.WriteAll((const byte_t*)str_version, strlen(str_version));
 		sink.WriteAll((const byte_t*)" ", 1);
 		sink.WriteAll((const byte_t*)str_status_code.get(), strlen(str_status_code.get()));
 		sink.WriteAll((const byte_t*)" ", 1);
 		sink.WriteAll((const byte_t*)str_status_text, strlen(str_status_text));
-		sink.WriteAll((const byte_t*)"\n", 1);
+		sink.WriteAll((const byte_t*)"\r\n", 2);
 
 		for(const auto& field : response.header_fields.Items())
 		{
@@ -114,10 +116,10 @@ namespace el1::io::net::http
 			sink.WriteAll((const byte_t*)str_key.get(), strlen(str_key.get()));
 			sink.WriteAll((const byte_t*)": ", 2);
 			sink.WriteAll((const byte_t*)str_value.get(), strlen(str_value.get()));
-			sink.WriteAll((const byte_t*)"\n", 1);
+			sink.WriteAll((const byte_t*)"\r\n", 2);
 		}
 
-		sink.WriteAll((const byte_t*)"\n", 1);
+		sink.WriteAll((const byte_t*)"\r\n", 2);
 
 		if(response.body != nullptr)
 		{
@@ -131,7 +133,9 @@ namespace el1::io::net::http
 
 	usys_t THttpHeaderFields::ContentLength() const
 	{
-		const TString* v = this->Get(L"Content-Length");
+		const TString* v = this->Get(L"content-length");
+		if(v == nullptr)
+			v = this->Get(L"Content-Length");
 		if(v == nullptr)
 			return NEG1;
 		else
@@ -143,7 +147,7 @@ namespace el1::io::net::http
 		this->Set(L"Content-Length", TString::Format("%d", new_content_length));
 	}
 
-	EStatus THttpServer::HandleSingleRequest(ISource<byte_t>& source, ISink<byte_t>& sink, request_handler_t handler)
+	EStatus THttpServer::HandleSingleRequest(ISource<byte_t>& source, ISink<byte_t>& sink, request_handler_t handler, const ipport_t remote_address)
 	{
 		IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): @1\n");
 		bool response_in_progress = false;
@@ -177,6 +181,7 @@ namespace el1::io::net::http
 			EL_ERROR(arr_req.Count() != 3U, THttpProcessingException, EStatus::BAD_REQUEST, "request METHOD/URL/VERSION malformed");
 
 			request_t request;
+			request.remote_address = remote_address;
 			request.method = MethodFromString(arr_req[0]);
 			request.version = VersionFromString(arr_req[2]);
 			request.url = std::move(arr_req[1]);
@@ -245,9 +250,17 @@ namespace el1::io::net::http
 			if(response.body != nullptr && response.header_fields.ContentLength() == NEG1 && (file = dynamic_cast<TFile*>(response.body.get())) != nullptr)
 				response.header_fields.ContentLength(file->Size() - file->Offset());
 
+			// Responses without a declared length are delimited by closing the connection.
+			const bool close_after_response = response.body != nullptr && response.header_fields.ContentLength() == NEG1;
+
 			// send response
 			response_in_progress = true;
 			SendResponse(sink, response);
+			if(close_after_response)
+			{
+				source.Close();
+				sink.Close();
+			}
 
 			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): return response.status\n");
 			return response.status;
@@ -349,7 +362,7 @@ namespace el1::io::net::http
 					// TODO: add some kind of output buffer to prevent excessive amounts of small write()-syscalls
 
 					// process all requests from client
-					while(HandleSingleRequest(*tcp_client.get(), *tcp_client.get(), this->handler) != EStatus::EOF);
+					while(HandleSingleRequest(*tcp_client.get(), *tcp_client.get(), this->handler, tcp_client->RemoteAddress()) != EStatus::EOF);
 
 					// notify controller to cleanup handler
 					cleanup_handlers = 1;

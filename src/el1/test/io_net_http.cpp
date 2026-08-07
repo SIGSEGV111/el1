@@ -42,13 +42,14 @@ namespace
 			EXPECT_EQ(request.method, EMethod::GET);
 			EXPECT_EQ(request.version, EVersion::HTTP11);
 			EXPECT_EQ(request.url, L"/");
+			EXPECT_EQ(request.header_fields.ContentLength(), 0U);
 		});
 
 		EXPECT_TRUE(handler_called);
 
 		fifo_s2c.CloseOutput();
 		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
-		EXPECT_EQ(str_response, L"HTTP/1.1 200 OK\nContent-Length: 0\n\n");
+		EXPECT_EQ(str_response, L"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
 	}
 
 	TEST(io_net_http, HandleSingleRequest_realworld_http2)
@@ -75,7 +76,51 @@ namespace
 
 		fifo_s2c.CloseOutput();
 		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
-		EXPECT_EQ(str_response, L"HTTP/2 200 OK\nContent-Length: 0\n\n");
+		EXPECT_EQ(str_response, L"HTTP/2 200 OK\r\nContent-Length: 0\r\n\r\n");
+	}
+
+	TEST(io_net_http, HandleSingleRequest_content_length_and_remote_address)
+	{
+		const char* str_src = "POST /upload HTTP/1.1\r\nContent-Length: 4\r\n\r\ntest";
+		TFifo<byte_t> fifo_c2s;
+		TFifo<byte_t> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		const ipport_t remote_address = { ipaddr_t(TString(L"127.0.0.42")), 4242 };
+		THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			EXPECT_EQ(request.method, EMethod::POST);
+			EXPECT_EQ(request.header_fields.ContentLength(), 4U);
+			EXPECT_EQ(request.remote_address.ip, ipaddr_t(TString(L"127.0.0.42")));
+			EXPECT_EQ(request.remote_address.port, 4242);
+			byte_t body[8] = {};
+			EXPECT_EQ(request.body->Read(body, sizeof(body)), 4U);
+			EXPECT_EQ(memcmp(body, "test", 4), 0);
+			EXPECT_EQ(request.body->Read(body, sizeof(body)), 0U);
+			response.status = EStatus::OK;
+		}, remote_address);
+
+	}
+
+	TEST(io_net_http, HandleSingleRequest_unknown_length_response_closes_stream)
+	{
+		const char* str_src = "GET /preview HTTP/1.1\r\nContent-Length: 0\r\n\r\n";
+		TFifo<byte_t> fifo_c2s;
+		TFifo<byte_t> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [](const THttpServer::request_t&, THttpServer::response_t& response) {
+			response.status = EStatus::OK;
+			auto body = std::unique_ptr<TFifo<byte_t>>(new TFifo<byte_t>());
+			body->WriteAll(reinterpret_cast<const byte_t*>("stream"), 6);
+			body->CloseOutput();
+			response.body = std::move(body);
+		});
+
+		EXPECT_EQ(fifo_s2c.OnInputReady(), nullptr);
+		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
+		EXPECT_EQ(str_response, L"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nstream");
 	}
 
 	TEST(io_net_http, THttpServer_curl_simple)

@@ -94,6 +94,7 @@ namespace el1::io::net::http
 
 			struct request_t : request_meta_t
 			{
+				ip::ipport_t remote_address;
 				stream::ISource<byte_t>* body;
 			};
 
@@ -114,7 +115,12 @@ namespace el1::io::net::http
 		public:
 
 			// blocking
-			static EStatus HandleSingleRequest(stream::ISource<byte_t>&, stream::ISink<byte_t>&, request_handler_t handler);
+			static EStatus HandleSingleRequest(
+				stream::ISource<byte_t>&,
+				stream::ISink<byte_t>&,
+				request_handler_t handler,
+				const ip::ipport_t remote_address = ip::ipport_t{}
+			);
 
 			THttpServer(ip::TTcpServer* const tcp_server, request_handler_t handler);
 			~THttpServer();
