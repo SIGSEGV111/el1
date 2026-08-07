@@ -8,6 +8,7 @@
 #include <el1/io_collection_map.hpp>
 #include "util.hpp"
 
+
 using namespace ::testing;
 
 namespace
@@ -390,6 +391,84 @@ namespace
 		fiber.SwitchTo();
 
 		EXPECT_EQ(stack_pointer % 16, 0U);
+	}
+	#endif
+
+
+	TEST(system_task, TFiber_stack_allocator_selection)
+	{
+		TFiber malloc_fiber([](){}, false, 16 * 1024, nullptr, EStackAllocator::MALLOC);
+		EXPECT_EQ(malloc_fiber.StackAllocator(), EStackAllocator::MALLOC);
+		EXPECT_EQ(malloc_fiber.StackGuardSize(), 0U);
+
+		TFiber virtual_fiber([](){}, false, 16 * 1024, nullptr, EStackAllocator::VIRTUAL_ALLOC);
+		EXPECT_EQ(virtual_fiber.StackAllocator(), EStackAllocator::VIRTUAL_ALLOC);
+		EXPECT_GE(virtual_fiber.StackGuardSize(), el1::PAGE_SIZE);
+	}
+
+	TEST(system_task, TFiber_debug_does_not_override_malloc_allocator)
+	{
+		const bool debug_old = TFiber::DEBUG;
+		TFiber::DEBUG = true;
+		{
+			TFiber fiber([](){}, false, 16 * 1024, nullptr, EStackAllocator::MALLOC);
+			EXPECT_EQ(fiber.StackAllocator(), EStackAllocator::MALLOC);
+		}
+		TFiber::DEBUG = debug_old;
+	}
+
+	TEST(system_task, TFiber_virtual_allocation_is_independent_of_later_debug_changes)
+	{
+		const bool debug_old = TFiber::DEBUG;
+		TFiber::DEBUG = true;
+		{
+			TFiber fiber([](){}, false, 16 * 1024, nullptr, EStackAllocator::VIRTUAL_ALLOC);
+			EXPECT_GE(fiber.StackGuardSize(), 512U * 1024U);
+			TFiber::DEBUG = false;
+		}
+		TFiber::DEBUG = debug_old;
+	}
+
+	TEST(system_task, TFiber_stack_peak_watermark)
+	{
+		const bool debug_old = TFiber::DEBUG;
+		TFiber::DEBUG = true;
+
+		TFiber fiber([](){
+			volatile byte_t buffer[4096];
+			for(usys_t i = 0; i < sizeof(buffer); i++)
+				buffer[i] = (byte_t)i;
+		}, false, 64 * 1024, nullptr, EStackAllocator::MALLOC);
+
+		fiber.Start();
+		fiber.SwitchTo();
+		EXPECT_GE(fiber.StackPeakUsed(), 4096U);
+
+		TFiber::DEBUG = debug_old;
+	}
+
+	#if defined(EL_OS_LINUX)
+	__attribute__((noinline)) static void OverflowFiberStack(volatile usys_t* const counter, volatile bool* const keep_going)
+	{
+		volatile byte_t buffer[1024];
+		for(usys_t i = 0; i < sizeof(buffer); i++)
+			buffer[i] = (byte_t)i;
+
+		*counter += buffer[*counter % sizeof(buffer)];
+		if(*keep_going)
+			OverflowFiberStack(counter, keep_going);
+		*counter += buffer[0];
+	}
+
+	TEST(system_task, TFiber_virtual_stack_guard_faults)
+	{
+		EXPECT_EXIT({
+			volatile usys_t counter = 1;
+			volatile bool keep_going = true;
+			TFiber fiber([&](){ OverflowFiberStack(&counter, &keep_going); }, false, 16 * 1024, nullptr, EStackAllocator::VIRTUAL_ALLOC);
+			fiber.Start();
+			fiber.SwitchTo();
+		}, KilledBySignal(SIGSEGV), "TFiber stack overflow");
 	}
 	#endif
 

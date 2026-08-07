@@ -412,8 +412,8 @@ namespace el1::system::task
 	enum class EStackAllocator : u8_t
 	{
 		USER, // DO NOT USE - this is only used internally when p_stack and sz_stack were specified
-		MALLOC, // DEFAULT
-		VIRTUAL_ALLOC // SLOWER, but more memory effiecient for large sparsely used stacks
+		MALLOC, // fastest allocator; no guard-page protection, intended for very large fiber populations
+		VIRTUAL_ALLOC // mmap-backed stack with inaccessible guard pages on both sides
 	};
 
 	// fibers are "lightweight threads" that are based on cooperative multitasking
@@ -429,6 +429,10 @@ namespace el1::system::task
 			TFunction<void> main_func;
 			usys_t sz_stack;
 			void* p_stack;
+			void* p_stack_mapping = nullptr;
+			usys_t sz_stack_mapping = 0;
+			usys_t sz_stack_guard = 0;
+			bool stack_watermark_enabled = false;
 			std::unique_ptr<const IException> exception;
 			array_t<const IWaitable*> blocked_by;
 			EFiberState state;
@@ -463,9 +467,12 @@ namespace el1::system::task
 					~TShutdownWaitable();
 			};
 
-			static bool DEBUG; // do NOT change after fibers were created
+			static bool DEBUG;
 			static EStackAllocator DEFAULT_STACK_ALLOCATOR;
 			static usys_t FIBER_DEFAULT_STACK_SIZE_BYTES;
+			static usys_t VIRTUAL_STACK_GUARD_SIZE_BYTES;
+			static usys_t DEBUG_STACK_GUARD_SIZE_BYTES;
+			static usys_t SIGNAL_STACK_SIZE_BYTES;
 
 			TFiber(const TFiber&) = delete;
 			TFiber(TFiber&&) = delete;
@@ -474,7 +481,7 @@ namespace el1::system::task
 			virtual ~TFiber();
 
 			TFiber(); // won't start fiber
-			TFiber(TFunction<void> main_func, const bool autostart = true, const usys_t sz_stack = FIBER_DEFAULT_STACK_SIZE_BYTES, void* const p_stack = nullptr);
+			TFiber(TFunction<void> main_func, const bool autostart = true, const usys_t sz_stack = FIBER_DEFAULT_STACK_SIZE_BYTES, void* const p_stack = nullptr, const EStackAllocator allocator = DEFAULT_STACK_ALLOCATOR);
 
 			TShutdownWaitable OnShutdown() EL_GETTER { return TShutdownWaitable(this); }
 
@@ -485,8 +492,16 @@ namespace el1::system::task
 			// returns the amount of bytes that were allocated for the stack of this fiber
 			usys_t StackTotal() const EL_GETTER { return sz_stack; }
 
-			// returns the amount of bytes that were allocated for the stack of this fiber
+			// returns the amount of bytes that are currently used by the stack of this fiber
 			usys_t StackUsed() const { return StackTotal() - StackFree(); }
+
+			// returns the largest observed stack usage. In DEBUG mode el1 watermarks owned stacks and
+			// reports the high-water mark; without a watermark this falls back to StackUsed().
+			usys_t StackPeakUsed() const;
+
+			EStackAllocator StackAllocator() const EL_GETTER { return stack_allocator; }
+			usys_t StackGuardSize() const EL_GETTER { return sz_stack_guard; }
+			bool IsStackGuardAddress(const void* const p_address) const;
 
 			// waits for multiple waitables at the same time
 			// this will block the active fiber and call the scheduler
@@ -510,7 +525,7 @@ namespace el1::system::task
 
 			// starts a fiber - fails if the fiber is not in CONSTRUCTED state
 			void Start();
-			void Start(TFunction<void> main_func, const usys_t sz_stack = FIBER_DEFAULT_STACK_SIZE_BYTES, void* const p_stack = nullptr);
+			void Start(TFunction<void> main_func, const usys_t sz_stack = FIBER_DEFAULT_STACK_SIZE_BYTES, void* const p_stack = nullptr, const EStackAllocator allocator = DEFAULT_STACK_ALLOCATOR);
 
 			// stops the selected fiber - it will no longer be picked up by the scheduler
 			// the fiber remains alive and can be the target of SwitchTo(), at which point
@@ -567,6 +582,10 @@ namespace el1::system::task
 			mutable TSimpleSignal on_state_change;
 			#ifdef EL_OS_LINUX
 				THandle signal_handle;
+				void* p_signal_stack_mapping = nullptr;
+				usys_t sz_signal_stack_mapping = 0;
+				void SetupSignalStack();
+				void FreeSignalStack();
 			#endif
 			void* thread_handle;
 			const process_id_t constructor_pid;

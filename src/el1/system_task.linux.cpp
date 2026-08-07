@@ -2,6 +2,8 @@
 #ifdef EL_OS_LINUX
 
 #include "system_task.hpp"
+#include "system_memory.hpp"
+#include "util.hpp"
 #include "io_collection_list.hpp"
 #include "io_file.hpp"
 #include "io_text_encoding_utf8.hpp"
@@ -14,6 +16,7 @@
 #include <sys/eventfd.h>
 #include <poll.h>
 #include <errno.h>
+#include <string.h>
 
 namespace el1::system::task
 {
@@ -21,6 +24,90 @@ namespace el1::system::task
 	using namespace io::file;
 
 	static EL_THREADLOCAL TThread* thread_self = nullptr;
+
+	static void FiberStackFaultSignalHandler(const int signal_number, siginfo_t* const info, void*)
+	{
+		TThread* const thread = TThread::Self();
+		TFiber* const fiber = thread != nullptr ? thread->ActiveFiber() : nullptr;
+
+		if(fiber != nullptr && info != nullptr && fiber->IsStackGuardAddress(info->si_addr))
+		{
+			static constexpr char MESSAGE[] = "el1: fatal: TFiber stack overflow (guard page hit)\n";
+			const ssize_t ignored = write(STDERR_FILENO, MESSAGE, sizeof(MESSAGE) - 1);
+			(void)ignored;
+		}
+
+		// SA_RESETHAND restored the default disposition before this handler was entered.
+		// Returning retries the faulting instruction, which then terminates normally with
+		// SIGSEGV/SIGBUS and preserves the usual core-dump behavior.
+		(void)signal_number;
+	}
+
+	static void InstallFiberStackFaultHandler(const int signal_number)
+	{
+		struct sigaction previous = {};
+		EL_SYSERR(sigaction(signal_number, nullptr, &previous));
+
+		if(previous.sa_handler != SIG_DFL)
+			return;
+
+		struct sigaction action = {};
+		action.sa_sigaction = &FiberStackFaultSignalHandler;
+		action.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND;
+		EL_SYSERR(sigemptyset(&action.sa_mask));
+		EL_SYSERR(sigaction(signal_number, &action, nullptr));
+	}
+
+	void TThread::SetupSignalStack()
+	{
+		stack_t current = {};
+		EL_SYSERR(sigaltstack(nullptr, &current));
+
+		if((current.ss_flags & SS_DISABLE) == 0)
+			return;
+
+		using namespace system::memory;
+		const usys_t sz_guard = PAGE_SIZE;
+		const usys_t sz_stack_requested = TFiber::SIGNAL_STACK_SIZE_BYTES < (usys_t)MINSIGSTKSZ ? (usys_t)MINSIGSTKSZ : TFiber::SIGNAL_STACK_SIZE_BYTES;
+		const usys_t sz_stack = util::ModCeil<usys_t>(sz_stack_requested, PAGE_SIZE);
+		const usys_t sz_mapping = sz_guard + sz_stack + sz_guard;
+
+		void* const p_mapping = VirtualAlloc(sz_mapping, false, false, false, false);
+		void* const p_stack = reinterpret_cast<byte_t*>(p_mapping) + sz_guard;
+
+		try
+		{
+			VirtualAllocAt(p_stack, sz_stack, true, true, false, false, true);
+
+			stack_t alternate = {};
+			alternate.ss_sp = p_stack;
+			alternate.ss_size = sz_stack;
+			alternate.ss_flags = 0;
+			EL_SYSERR(sigaltstack(&alternate, nullptr));
+		}
+		catch(...)
+		{
+			VirtualFree(p_mapping, sz_mapping);
+			throw;
+		}
+
+		this->p_signal_stack_mapping = p_mapping;
+		this->sz_signal_stack_mapping = sz_mapping;
+	}
+
+	void TThread::FreeSignalStack()
+	{
+		if(this->p_signal_stack_mapping == nullptr)
+			return;
+
+		stack_t disabled = {};
+		disabled.ss_flags = SS_DISABLE;
+		EL_SYSERR(sigaltstack(&disabled, nullptr));
+
+		system::memory::VirtualFree(this->p_signal_stack_mapping, this->sz_signal_stack_mapping);
+		this->p_signal_stack_mapping = nullptr;
+		this->sz_signal_stack_mapping = 0;
+	}
 
 	static THandle CreateSignalHandle()
 	{
@@ -101,6 +188,9 @@ namespace el1::system::task
 		TMainThread()
 		{
 			thread_self = this;
+			this->SetupSignalStack();
+			InstallFiberStackFaultHandler(SIGSEGV);
+			InstallFiberStackFaultHandler(SIGBUS);
 
 			// get pid of tracer program (if any)
 			const auto tracer_pid = GetStatusLine("TracerPid").ToInteger();
@@ -169,8 +259,15 @@ namespace el1::system::task
 		thread_self = myself;
 		myself->thread_pid = gettid();
 
+		auto finish = [&](void* const result) -> void*
+		{
+			myself->FreeSignalStack();
+			return result;
+		};
+
 		try
 		{
+			myself->SetupSignalStack();
 			myself->signal_handle = CreateSignalHandle();
 
 			try
@@ -179,7 +276,7 @@ namespace el1::system::task
 				const TMutexAutoLock lock(&myself->mutex);
 				myself->state = EChildState::FINISHED;
 				myself->on_state_change.Raise();
-				return nullptr;
+				return finish(nullptr);
 			}
 			catch(const IException& e)
 			{
@@ -194,7 +291,7 @@ namespace el1::system::task
 				const TMutexAutoLock lock(&myself->mutex);
 				myself->state = EChildState::FINISHED;
 				myself->on_state_change.Raise();
-				return nullptr;
+				return finish(nullptr);
 			}
 			catch(...)
 			{
@@ -204,11 +301,11 @@ namespace el1::system::task
 			const TMutexAutoLock lock(&myself->mutex);
 			myself->state = EChildState::KILLED;
 			myself->on_state_change.Raise();
-			return nullptr;
+			return finish(nullptr);
 		}
 		catch(...)
 		{
-			return (void*)1;
+			return finish((void*)1);
 		}
 	}
 

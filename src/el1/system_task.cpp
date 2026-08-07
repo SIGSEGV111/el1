@@ -158,8 +158,11 @@ namespace el1::system::task
 	/***************************************************/
 
 	bool TFiber::DEBUG = false;
-	EStackAllocator TFiber::DEFAULT_STACK_ALLOCATOR = EStackAllocator::MALLOC;
+	EStackAllocator TFiber::DEFAULT_STACK_ALLOCATOR = EStackAllocator::VIRTUAL_ALLOC;
 	usys_t TFiber::FIBER_DEFAULT_STACK_SIZE_BYTES = 16 * 1024;
+	usys_t TFiber::VIRTUAL_STACK_GUARD_SIZE_BYTES = PAGE_SIZE;
+	usys_t TFiber::DEBUG_STACK_GUARD_SIZE_BYTES = 512 * 1024;
+	usys_t TFiber::SIGNAL_STACK_SIZE_BYTES = 64 * 1024;
 
 	usys_t TFiber::StackFree() const
 	{
@@ -175,6 +178,45 @@ namespace el1::system::task
 		}
 
 		return sp - base;
+	}
+
+	usys_t TFiber::StackPeakUsed() const
+	{
+		if(!this->stack_watermark_enabled || this->p_stack == nullptr)
+			return this->StackUsed();
+
+		static constexpr byte_t WATERMARK = 0xa5;
+		const byte_t* const p = reinterpret_cast<const byte_t*>(this->p_stack);
+		usys_t n_free_peak = 0;
+
+		// Memcheck tracks inactive/popped stack areas as inaccessible even though
+		// the backing allocation is still valid. Reading those bytes is intentional
+		// here: this diagnostic scans the watermark of our own stack allocation.
+		// Suppress only the report; do not alter Memcheck's addressability metadata.
+		#ifdef EL1_WITH_VALGRIND
+			VALGRIND_DISABLE_ERROR_REPORTING;
+		#endif
+		while(n_free_peak < this->sz_stack && p[n_free_peak] == WATERMARK)
+			n_free_peak++;
+		#ifdef EL1_WITH_VALGRIND
+			VALGRIND_ENABLE_ERROR_REPORTING;
+		#endif
+
+		return this->sz_stack - n_free_peak;
+	}
+
+	bool TFiber::IsStackGuardAddress(const void* const p_address) const
+	{
+		if(this->stack_allocator != EStackAllocator::VIRTUAL_ALLOC || this->p_stack_mapping == nullptr || p_address == nullptr)
+			return false;
+
+		const usys_t address = reinterpret_cast<usys_t>(p_address);
+		const usys_t mapping_begin = reinterpret_cast<usys_t>(this->p_stack_mapping);
+		const usys_t stack_begin = reinterpret_cast<usys_t>(this->p_stack);
+		const usys_t stack_end = stack_begin + this->sz_stack;
+		const usys_t mapping_end = mapping_begin + this->sz_stack_mapping;
+
+		return (address >= mapping_begin && address < stack_begin) || (address >= stack_end && address < mapping_end);
 	}
 
 	void TFiber::WaitForMany(const std::initializer_list<const IWaitable*> waitables)
@@ -239,37 +281,62 @@ namespace el1::system::task
 	{
 		EL_ERROR(allocator == EStackAllocator::USER, TInvalidArgumentException, "allocator", "allocator can not be set to USER - USER is only used internally when p_stack and sz_stack are set");
 
-		if(p_stack_input != nullptr && sz_stack_input != 0 && !DEBUG)
+		this->p_stack_mapping = nullptr;
+		this->sz_stack_mapping = 0;
+		this->sz_stack_guard = 0;
+		this->stack_watermark_enabled = false;
+
+		if(p_stack_input != nullptr && sz_stack_input != 0)
 		{
 			this->stack_allocator = EStackAllocator::USER;
 			this->sz_stack = sz_stack_input;
 			this->p_stack = p_stack_input;
+			return;
 		}
-		else
-		{
-			if(allocator == EStackAllocator::VIRTUAL_ALLOC || DEBUG)
-			{
-				const usys_t sz_redzone_min = DEBUG ? 512*1024 : 0;
-				const usys_t n_pages_redzone = util::ModCeil<usys_t>(sz_redzone_min, PAGE_SIZE) / PAGE_SIZE;
-				const usys_t sz_redzone = n_pages_redzone * PAGE_SIZE;
-				const usys_t sz_stack = util::ModCeil<usys_t>(sz_stack_input, PAGE_SIZE);
 
-				void* p_redzone_base = VirtualAlloc(sz_stack + 2 * sz_redzone, false, false, false, false);
-				void* p_stack = (byte_t*)p_redzone_base + sz_redzone;
-				this->stack_allocator = EStackAllocator::VIRTUAL_ALLOC;
-				this->sz_stack = sz_stack;
-				this->p_stack = p_stack;
+		if(allocator == EStackAllocator::VIRTUAL_ALLOC)
+		{
+			const usys_t sz_guard_min = DEBUG && DEBUG_STACK_GUARD_SIZE_BYTES > VIRTUAL_STACK_GUARD_SIZE_BYTES ? DEBUG_STACK_GUARD_SIZE_BYTES : VIRTUAL_STACK_GUARD_SIZE_BYTES;
+			const usys_t sz_guard_requested = sz_guard_min < PAGE_SIZE ? PAGE_SIZE : sz_guard_min;
+			const usys_t sz_guard = util::ModCeil<usys_t>(sz_guard_requested, PAGE_SIZE);
+			const usys_t sz_stack = util::ModCeil<usys_t>(sz_stack_input, PAGE_SIZE);
+			const usys_t sz_mapping = sz_guard + sz_stack + sz_guard;
+
+			void* const p_mapping = VirtualAlloc(sz_mapping, false, false, false, false);
+			void* const p_stack = reinterpret_cast<byte_t*>(p_mapping) + sz_guard;
+
+			try
+			{
 				VirtualAllocAt(p_stack, sz_stack, true, true, false, false, true);
 			}
-			else if(allocator == EStackAllocator::MALLOC)
+			catch(...)
 			{
-				this->p_stack = aligned_alloc(16, sz_stack_input);
-				EL_ERROR(this->p_stack == nullptr, TOutOfMemoryException, sz_stack_input);
-				this->stack_allocator = EStackAllocator::MALLOC;
-				this->sz_stack = sz_stack_input;
+				VirtualFree(p_mapping, sz_mapping);
+				throw;
 			}
-			else
-				EL_THROW(TLogicException);
+
+			this->stack_allocator = EStackAllocator::VIRTUAL_ALLOC;
+			this->sz_stack = sz_stack;
+			this->p_stack = p_stack;
+			this->p_stack_mapping = p_mapping;
+			this->sz_stack_mapping = sz_mapping;
+			this->sz_stack_guard = sz_guard;
+		}
+		else if(allocator == EStackAllocator::MALLOC)
+		{
+			this->p_stack = aligned_alloc(16, util::ModCeil<usys_t>(sz_stack_input, 16));
+			EL_ERROR(this->p_stack == nullptr, TOutOfMemoryException, sz_stack_input);
+			this->stack_allocator = EStackAllocator::MALLOC;
+			this->sz_stack = util::ModCeil<usys_t>(sz_stack_input, 16);
+		}
+		else
+			EL_THROW(TLogicException);
+
+		if(DEBUG)
+		{
+			static constexpr byte_t WATERMARK = 0xa5;
+			memset(this->p_stack, WATERMARK, this->sz_stack);
+			this->stack_watermark_enabled = true;
 		}
 	}
 
@@ -278,30 +345,29 @@ namespace el1::system::task
 		switch(this->stack_allocator)
 		{
 			case EStackAllocator::USER:
-				// nothing to do
 				break;
 			case EStackAllocator::MALLOC:
 				free(this->p_stack);
 				break;
 			case EStackAllocator::VIRTUAL_ALLOC:
-			{
-				const usys_t sz_redzone_min = DEBUG ? 512*1024 : 0;
-				const usys_t n_pages_redzone = util::ModCeil<usys_t>(sz_redzone_min, PAGE_SIZE) / PAGE_SIZE;
-				const usys_t sz_redzone = n_pages_redzone * PAGE_SIZE;
-				void* p_redzone_base = (byte_t*)this->p_stack - sz_redzone;
-				VirtualFree(p_redzone_base, this->sz_stack + 2 * sz_redzone);
+				if(this->p_stack_mapping != nullptr)
+					VirtualFree(this->p_stack_mapping, this->sz_stack_mapping);
 				break;
-			}
 		}
 
 		this->p_stack = nullptr;
 		this->sz_stack = 0;
+		this->p_stack_mapping = nullptr;
+		this->sz_stack_mapping = 0;
+		this->sz_stack_guard = 0;
+		this->stack_watermark_enabled = false;
+		this->stack_allocator = EStackAllocator::USER;
 	}
 
-	TFiber::TFiber(TFunction<void> main_func, const bool autostart, const usys_t sz_stack, void* const p_stack) : thread(TThread::Self()), main_func(main_func), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), shutdown(false), block_shutdown(0)
+	TFiber::TFiber(TFunction<void> main_func, const bool autostart, const usys_t sz_stack, void* const p_stack, const EStackAllocator allocator) : thread(TThread::Self()), main_func(main_func), sz_stack(0), p_stack(nullptr), blocked_by(), state(EFiberState::CONSTRUCTED), shutdown(false), block_shutdown(0)
 	{
-		IF_DEBUG_PRINTF("TFiber@%p::TFiber(main_func=?, autostart=%s, sz_stack=%zu, p_stack=%p)\n", this, autostart ? "true":"false", (size_t)sz_stack, p_stack);
-		AllocateStack(p_stack, sz_stack, DEFAULT_STACK_ALLOCATOR);
+		IF_DEBUG_PRINTF("TFiber@%p::TFiber(main_func=?, autostart=%s, sz_stack=%zu, p_stack=%p, allocator=%u)\n", this, autostart ? "true":"false", (size_t)sz_stack, p_stack, (unsigned)allocator);
+		AllocateStack(p_stack, sz_stack, allocator);
 		if(autostart)
 			this->Start();
 	}
@@ -566,16 +632,16 @@ namespace el1::system::task
 		this->thread->fibers.Append(this);
 	}
 
-	void TFiber::Start(TFunction<void> new_main_func, const usys_t sz_stack_input, void* const p_stack_input)
+	void TFiber::Start(TFunction<void> new_main_func, const usys_t sz_stack_input, void* const p_stack_input, const EStackAllocator allocator)
 	{
-		IF_DEBUG_PRINTF("TFiber@%p::Start(main_func=?, sz_stack_input=%zu, p_stack_input=%p)\n", this, (size_t)sz_stack_input, p_stack_input);
+		IF_DEBUG_PRINTF("TFiber@%p::Start(main_func=?, sz_stack_input=%zu, p_stack_input=%p, allocator=%u)\n", this, (size_t)sz_stack_input, p_stack_input, (unsigned)allocator);
 		EL_ERROR(TThread::Self() != this->thread, TLogicException);
 		EL_ERROR(this->state != EFiberState::CONSTRUCTED, TLogicException);	// TODO better exception
 
-		if( (sz_stack_input != this->sz_stack) || (p_stack_input != nullptr) )
+		if( (sz_stack_input != this->sz_stack) || (p_stack_input != nullptr) || (p_stack_input == nullptr && this->stack_allocator != allocator) )
 		{
 			FreeStack();
-			AllocateStack(p_stack_input, sz_stack_input, DEFAULT_STACK_ALLOCATOR);
+			AllocateStack(p_stack_input, sz_stack_input, allocator);
 		}
 
 		this->main_func = new_main_func;
