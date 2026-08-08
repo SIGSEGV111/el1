@@ -72,10 +72,14 @@ namespace
 		auto state = InitState();
 		auto cmds = TFile("testdata/freecad_v1_0_0.gcode").Pipe().Transform(TUTF8Decoder()).Transform(TLineReader()).Transform(TGrblParser(&state)).Collect();
 
-		EXPECT_EQ(state.pos[0], 114.121);
-		EXPECT_EQ(state.pos[1], 278.121);
-		EXPECT_EQ(state.pos[2], 4.000);
-		EXPECT_EQ(state.fr_cmd, 750.000);
+		TString expected_x_string("114.121");
+		TString expected_y_string("278.121");
+		TString expected_z_string("4.000");
+		TString expected_feed_string("750.000");
+		EXPECT_EQ(state.pos[0], TDecimal(expected_x_string));
+		EXPECT_EQ(state.pos[1], TDecimal(expected_y_string));
+		EXPECT_EQ(state.pos[2], TDecimal(expected_z_string));
+		EXPECT_EQ(state.fr_cmd, TDecimal(expected_feed_string));
 	}
 
 	TEST(dev_gcode_grbl, TGrblParser_ToString)

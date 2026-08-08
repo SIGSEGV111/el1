@@ -500,7 +500,22 @@ namespace el1::io::text::string
 
 	TString TNumberFormatter::Format(const bcd::TBCD& _value) const
 	{
-		const bcd::TBCD& value = _value.Base() == config.symbols->Count() ? _value : bcd::TBCD(_value, config.symbols->Count());
+		EL_ERROR(config.symbols->Count() < 2 || config.symbols->Count() > 256, TInvalidArgumentException, "config.symbols", "between 2 and 256 numeric symbols are required");
+		if(_value.IsNaN())
+			return config.prefix + "NAN" + config.suffix;
+		if(_value.IsInfinity())
+		{
+			TString s = config.prefix;
+			if(_value.IsNegative() && config.negative_sign != TUTF32::TERMINATOR)
+				s += config.negative_sign;
+			else if(!_value.IsNegative() && config.positive_sign != TUTF32::TERMINATOR)
+				s += config.positive_sign;
+			s += "INF";
+			s += config.suffix;
+			return s;
+		}
+		const bcd::digit_t output_base = config.symbols->Count() == 256 ? 0 : (bcd::digit_t)config.symbols->Count();
+		const bcd::TBCD& value = _value.Base() == output_base ? _value : bcd::TBCD(_value, output_base);
 		const bool int_pad_is_digit = config.symbols->Contains(config.integer_pad_sign);
 		const int n_significant_integer = value.CountSignificantIntegerDigits();
 		const bool do_grouping = config.grouping_sign != TUTF32::TERMINATOR && config.n_digits_per_group > 0;

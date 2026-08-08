@@ -13,6 +13,7 @@
 namespace el1::io::bcd
 {
 	class TBCD;
+	template<io::types::usys_t N_DIGITS, io::types::u16_t N_INTEGER, io::types::u16_t N_DECIMAL, io::types::u8_t BASE> class TFixedBCD;
 }
 
 namespace el1::io::text::string
@@ -431,6 +432,12 @@ namespace el1::io::text::string
 		virtual TString Format(const u64_t value) const;
 		virtual TString Format(const double value) const;
 		virtual TString Format(const bcd::TBCD& value) const;
+
+		template<usys_t N_DIGITS, u16_t N_INTEGER, u16_t N_DECIMAL, u8_t BASE>
+		TString Format(const bcd::TFixedBCD<N_DIGITS, N_INTEGER, N_DECIMAL, BASE>& value) const
+		{
+			return Format(value.ToBCD());
+		}
 		virtual TString Format(const void* const p_data, const usys_t n_bits) const;
 
 		virtual ~IFormatter();

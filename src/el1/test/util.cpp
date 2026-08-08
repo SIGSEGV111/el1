@@ -32,8 +32,12 @@ namespace el1::io::bcd
 {
 	std::ostream& operator<<(std::ostream& os, const TBCD& v)
 	{
+		if(v.IsNaN())
+			return os<<"NAN";
+		if(v.IsInfinity())
+			return os<<(v.IsNegative() ? "-INF" : "+INF");
 		os<<(v.IsNegative() ? "-" : "+");
-		for(int i = v.CountInteger() - 1; i >= -v.CountDecimal(); i--)
+		for(ssys_t i = (ssys_t)v.CountInteger() - 1; i >= -(ssys_t)v.CountDecimal(); i--)
 		{
 			if(i == -1)
 				os<<".";

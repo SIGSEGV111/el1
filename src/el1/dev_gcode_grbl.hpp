@@ -70,13 +70,16 @@ namespace el1::dev::gcode::grbl
 		R_LEVEL
 	};
 
-	struct TDecimal : TBCD
+	struct TDecimal : TFixedBCD<N_INTEGER + N_DECIMAL, N_INTEGER, N_DECIMAL, 10>
 	{
-		using TBCD::operator=;
-		using TBCD::operator+;
-		using TBCD::operator-;
-		using TBCD::operator+=;
-		using TBCD::operator-=;
+		using TBase = TFixedBCD<N_INTEGER + N_DECIMAL, N_INTEGER, N_DECIMAL, 10>;
+		using TBase::operator=;
+		using TBase::operator+;
+		using TBase::operator-;
+		using TBase::operator+=;
+		using TBase::operator-=;
+		using TBase::operator*=;
+		using TBase::operator/=;
 
 		TDecimal(int v = 0);
 		TDecimal(TString& str);

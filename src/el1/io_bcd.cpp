@@ -1,309 +1,580 @@
 #include "io_bcd.hpp"
+#include "io_collection_list.hpp"
 #include "io_text_string.hpp"
 #include "system_random.hpp"
 #include "util.hpp"
-#include <string.h>
-#include <endian.h>
-#include <math.h>
+
+#include <algorithm>
+#include <bit>
+#include <cmath>
+#include <cstring>
+#include <limits>
+#include <type_traits>
+#include <utility>
 
 namespace el1::io::bcd
 {
 	using namespace error;
 	using namespace math;
+	using namespace io::collection::array;
 	using namespace io::collection::list;
+
+	TList<digit_t> TBCD::BuildMagnitudeDigits(const TBCD& value, const unsigned target_radix)
+	{
+		TList<digit_t> result;
+		if(value.IsZero())
+			return result;
+
+		const auto source = value.Digits();
+		result = TList<digit_t>(source);
+		detail::TrimDigits(result);
+		if(value.Radix() == target_radix)
+			return result;
+		TList<digit_t> converted;
+		detail::ConvertDigitsRadix(converted, result, value.Radix(), target_radix);
+		return converted;
+	}
+
+	bool TBCD::AssignMagnitudeDigits(TBCD& out, const TList<digit_t>& magnitude, const bool is_negative)
+	{
+		out.SetZero();
+		const usys_t n_digits = out.n_integer + out.n_decimal;
+		const usys_t n_copy = util::Min<usys_t>(magnitude.Count(), n_digits);
+		if(n_copy != 0)
+		{
+			out.EnsureDigits();
+			memcpy(out.DigitsPointer(), &magnitude[0], n_copy * sizeof(digit_t));
+			if(n_copy < n_digits)
+				memset(out.DigitsPointer() + n_copy, 0, (n_digits - n_copy) * sizeof(digit_t));
+			out.is_zero = 0;
+			(void)out.IsZero();
+		}
+		out.is_negative = is_negative && !out.IsZero();
+		return magnitude.Count() > n_digits;
+	}
+
+	int TBCD::CompareMagnitude(const TBCD& lhs, const TBCD& rhs)
+	{
+		if(lhs.Base() == rhs.Base())
+		{
+			const ssys_t low = -(ssys_t)util::Max(lhs.CountDecimal(), rhs.CountDecimal());
+			const ssys_t high = (ssys_t)util::Max(lhs.CountInteger(), rhs.CountInteger()) - 1;
+			for(ssys_t i = high; i >= low; i--)
+			{
+				const digit_t l = lhs.Digit(i);
+				const digit_t r = rhs.Digit(i);
+				if(l != r)
+					return l < r ? -1 : 1;
+			}
+			return 0;
+		}
+
+		// Base 256 minimizes scratch size. The denominators remain implicit and are
+		// applied directly to the opposite numerator, so no base^n value is built.
+		TList<digit_t> left = BuildMagnitudeDigits(lhs, 256U);
+		TList<digit_t> right = BuildMagnitudeDigits(rhs, 256U);
+		detail::MultiplyDigitsPower(left, 256U, rhs.Radix(), rhs.CountDecimal());
+		detail::MultiplyDigitsPower(right, 256U, lhs.Radix(), lhs.CountDecimal());
+		return detail::CompareDigits(left, right);
+	}
+
+	int TBCD::AddGeneric(TBCD& out, const TBCD& lhs, const TBCD& rhs, const bool subtract_rhs)
+	{
+		const unsigned radix = out.Radix();
+		TList<digit_t> left = BuildMagnitudeDigits(lhs, radix);
+		TList<digit_t> right = BuildMagnitudeDigits(rhs, radix);
+
+		// Put both finite fractions over the same implicit denominator. Only the
+		// numerators are materialized; powers are repeated small multiplications.
+		detail::MultiplyDigitsPower(left, radix, rhs.Radix(), rhs.CountDecimal());
+		detail::MultiplyDigitsPower(right, radix, lhs.Radix(), lhs.CountDecimal());
+
+		const bool left_negative = lhs.IsNegative() && !detail::IsDigitsZero(left);
+		const bool right_negative = (rhs.IsNegative() != subtract_rhs) && !detail::IsDigitsZero(right);
+		bool result_negative = false;
+		TList<digit_t> result;
+
+		if(left_negative == right_negative)
+		{
+			result = std::move(left);
+			detail::AddDigits(result, right, radix);
+			result_negative = left_negative;
+		}
+		else
+		{
+			const int cmp = detail::CompareDigits(left, right);
+			if(cmp == 0)
+			{
+				out.SetZero();
+				return 0;
+			}
+
+			if(cmp > 0)
+			{
+				result = std::move(left);
+				detail::SubtractDigits(result, right, radix);
+				result_negative = left_negative;
+			}
+			else
+			{
+				result = std::move(right);
+				detail::SubtractDigits(result, left, radix);
+				result_negative = right_negative;
+			}
+		}
+
+		detail::ShiftDigitsLeft(result, out.CountDecimal());
+		detail::DivideDigitsPower(result, radix, lhs.Radix(), lhs.CountDecimal());
+		detail::DivideDigitsPower(result, radix, rhs.Radix(), rhs.CountDecimal());
+		return AssignMagnitudeDigits(out, result, result_negative) ? 1 : 0;
+	}
+
+	void TBCD::MultiplyGeneric(TBCD& out, const TBCD& lhs, const TBCD& rhs)
+	{
+		const unsigned radix = out.Radix();
+		const TList<digit_t> left = BuildMagnitudeDigits(lhs, radix);
+		const TList<digit_t> right = BuildMagnitudeDigits(rhs, radix);
+		TList<digit_t> result;
+		detail::MultiplyDigits(result, left, right, radix);
+		const bool negative = (lhs.IsNegative() != rhs.IsNegative()) && !detail::IsDigitsZero(result);
+
+		detail::ShiftDigitsLeft(result, out.CountDecimal());
+		detail::DivideDigitsPower(result, radix, lhs.Radix(), lhs.CountDecimal());
+		detail::DivideDigitsPower(result, radix, rhs.Radix(), rhs.CountDecimal());
+		AssignMagnitudeDigits(out, result, negative);
+	}
+
+	TBCD TBCD::DivideGeneric(TBCD& out, const TBCD& lhs, const TBCD& rhs)
+	{
+		const unsigned out_radix = out.Radix();
+		const bool same_radix = out_radix == lhs.Radix() && out_radix == rhs.Radix();
+		const unsigned work_radix = same_radix ? out_radix : 256U;
+		TList<digit_t> numerator = BuildMagnitudeDigits(lhs, work_radix);
+		TList<digit_t> denominator = BuildMagnitudeDigits(rhs, work_radix);
+		EL_ERROR(detail::IsDigitsZero(denominator), TInvalidArgumentException, "rhs", "divisor cannot be zero");
+
+		const bool quotient_negative = (lhs.IsNegative() != rhs.IsNegative()) && !detail::IsDigitsZero(numerator);
+		const bool remainder_negative = lhs.IsNegative() && !detail::IsDigitsZero(numerator);
+
+		detail::MultiplyDigitsPower(numerator, work_radix, rhs.Radix(), rhs.CountDecimal());
+		detail::MultiplyDigitsPower(numerator, work_radix, out_radix, out.CountDecimal());
+		detail::MultiplyDigitsPower(denominator, work_radix, lhs.Radix(), lhs.CountDecimal());
+
+		TList<digit_t> quotient;
+		TList<digit_t> remainder_digits;
+		detail::DivideDigits(quotient, remainder_digits, numerator, denominator, work_radix);
+		const bool periodic = !detail::IsDigitsZero(remainder_digits) && detail::IsPeriodicFraction(numerator, denominator, work_radix, out_radix);
+
+		// N = Q*D + R and the common quotient scaling contributes out.Radix()^n_decimal.
+		// Removing only the two input denominators therefore yields the returned
+		// residual already scaled for `out`.
+		detail::DivideDigitsPower(remainder_digits, work_radix, lhs.Radix(), lhs.CountDecimal());
+		detail::DivideDigitsPower(remainder_digits, work_radix, rhs.Radix(), rhs.CountDecimal());
+
+		if(work_radix != out_radix)
+		{
+			TList<digit_t> converted;
+			detail::ConvertDigitsRadix(converted, quotient, work_radix, out_radix);
+			quotient = std::move(converted);
+			TList<digit_t> converted_remainder;
+			detail::ConvertDigitsRadix(converted_remainder, remainder_digits, work_radix, out_radix);
+			remainder_digits = std::move(converted_remainder);
+		}
+
+		TBCD remainder(0, out);
+		AssignMagnitudeDigits(remainder, remainder_digits, remainder_negative);
+		AssignMagnitudeDigits(out, quotient, quotient_negative);
+		out.is_periodic = periodic;
+		return remainder;
+	}
+
+	TList<digit_t> TBCD::BuildIntegerDigits(u64_t value, const unsigned radix)
+	{
+		TList<digit_t> result;
+		while(value != 0)
+		{
+			result.Append((digit_t)(value % radix));
+			value /= radix;
+		}
+		return result;
+	}
+
+	int TBCD::CompareFloatingParts(const detail::TBinaryFloatParts& rhs) const
+	{
+		if(IsNaN() || rhs.value_class == EValueClass::NOT_A_NUMBER)
+			return 2;
+
+		if(IsInfinity() || rhs.value_class == EValueClass::INFINITE)
+		{
+			if(IsInfinity() && rhs.value_class == EValueClass::INFINITE)
+			{
+				if(IsNegative() == rhs.negative)
+					return 0;
+				return IsNegative() ? -1 : 1;
+			}
+			if(IsInfinity())
+				return IsNegative() ? -1 : 1;
+			return rhs.negative ? 1 : -1;
+		}
+
+		const bool lhs_zero = IsZero();
+		const bool rhs_zero = rhs.significand == 0;
+		if(lhs_zero && rhs_zero)
+			return 0;
+
+		const bool lhs_negative = IsNegative() && !lhs_zero;
+		const bool rhs_negative = rhs.negative && !rhs_zero;
+		if(lhs_negative != rhs_negative)
+			return lhs_negative ? -1 : 1;
+
+		TList<digit_t> lhs_digits = BuildMagnitudeDigits(*this, 256U);
+		TList<digit_t> rhs_digits = BuildIntegerDigits(rhs.significand, 256U);
+		if(rhs.exponent >= 0)
+		{
+			detail::MultiplyDigitsPower(rhs_digits, 256U, 2U, (usys_t)rhs.exponent);
+			detail::MultiplyDigitsPower(rhs_digits, 256U, Radix(), CountDecimal());
+		}
+		else
+		{
+			detail::MultiplyDigitsPower(lhs_digits, 256U, 2U, (usys_t)-rhs.exponent);
+			detail::MultiplyDigitsPower(rhs_digits, 256U, Radix(), CountDecimal());
+		}
+
+		int cmp = detail::CompareDigits(lhs_digits, rhs_digits);
+		if(lhs_negative)
+			cmp = -cmp;
+		return cmp;
+	}
+
+	int TBCD::CompareFloating(const double rhs) const
+	{
+		return CompareFloatingParts(detail::DecodeBinaryFloat(rhs));
+	}
+
+	namespace
+	{
+		digit_t RandomDigit(const unsigned radix)
+		{
+			auto& rng = system::random::TSystemRandom::Instance();
+			if(radix == 256U)
+				return rng.Integer<digit_t>();
+
+			const unsigned limit = 256U - (256U % radix);
+			unsigned value;
+			do
+			{
+				value = rng.Integer<digit_t>();
+			}
+			while(value >= limit);
+			return (digit_t)(value % radix);
+		}
+	}
 
 	array_t<const digit_t> TBCD::Digits() const noexcept
 	{
-		return array_t<const digit_t>(DigitsPointer(), DigitsPointer() == nullptr ? 0 : n_decimal + n_integer);
+		if(!IsFinite())
+			return {};
+		const digit_t* const digits = DigitsPointer();
+		return array_t<const digit_t>(digits, digits == nullptr ? 0 : n_decimal + n_integer);
 	}
 
 	array_t<const digit_t> TBCD::IntegerDigits() const noexcept
 	{
-		return array_t<const digit_t>(DigitsPointer() == nullptr ? nullptr : DigitsPointer() + n_decimal, DigitsPointer() == nullptr ? 0 : n_integer);
+		if(!IsFinite())
+			return {};
+		const digit_t* const digits = DigitsPointer();
+		return array_t<const digit_t>(digits == nullptr ? nullptr : digits + n_decimal, digits == nullptr ? 0 : n_integer);
 	}
 
 	array_t<const digit_t> TBCD::DecimalDigits() const noexcept
 	{
-		return array_t<const digit_t>(DigitsPointer(), DigitsPointer() == nullptr ? 0 : n_decimal);
+		if(!IsFinite())
+			return {};
+		const digit_t* const digits = DigitsPointer();
+		return array_t<const digit_t>(digits, digits == nullptr ? 0 : n_decimal);
 	}
 
 	/*****************************************************************/
 	// MATH OPERATIONS
 
-	int  TBCD::AbsAdd(TBCD& out, const TBCD& lhs, const TBCD& rhs)
+	int TBCD::AbsAdd(TBCD& out, const TBCD& lhs, const TBCD& rhs)
 	{
 		EL_ERROR(out.base != lhs.base || out.base != rhs.base, TLogicException);
+		const unsigned radix = out.Radix();
+		const ssys_t low = -(ssys_t)util::Max(out.n_decimal, util::Max(lhs.n_decimal, rhs.n_decimal));
+		const ssys_t high = (ssys_t)util::Max(out.n_integer, util::Max(lhs.n_integer, rhs.n_integer));
+		const ssys_t out_low = -(ssys_t)out.n_decimal;
+		const ssys_t out_high = (ssys_t)out.n_integer;
+		unsigned carry = 0;
+		bool overflow = false;
+
 		out.is_zero = 0;
-
-		int carry = 0;
-		for(int i = -out.n_decimal; i < out.n_integer; i++)
+		for(ssys_t i = low; i < high; i++)
 		{
-			int v = (int)lhs.Digit(i) + (int)rhs.Digit(i) + carry;
+			unsigned value = (unsigned)lhs.Digit(i) + (unsigned)rhs.Digit(i) + carry;
+			carry = value / radix;
+			value %= radix;
 
-			carry = 0;
-			while(v >= out.base)
-			{
-				carry++;
-				v -= out.base;
-			}
-
-			out.Digit(i, (digit_t)v);
+			if(i >= out_low && i < out_high)
+				out.Digit(i, (digit_t)value);
+			else if(i >= out_high && value != 0)
+				overflow = true;
 		}
 
-		return carry;
+		if(carry != 0)
+			overflow = true;
+		(void)out.IsZero();
+		return overflow ? 1 : 0;
 	}
 
-	int  TBCD::AbsSub(TBCD& out, const TBCD& lhs, const TBCD& rhs)
+	int TBCD::AbsSub(TBCD& out, const TBCD& lhs, const TBCD& rhs)
 	{
 		EL_ERROR(out.base != lhs.base || out.base != rhs.base, TLogicException);
+		EL_ERROR(CompareMagnitude(lhs, rhs) < 0, TLogicException);
+		const unsigned radix = out.Radix();
+		const ssys_t low = -(ssys_t)util::Max(out.n_decimal, util::Max(lhs.n_decimal, rhs.n_decimal));
+		const ssys_t high = (ssys_t)util::Max(out.n_integer, util::Max(lhs.n_integer, rhs.n_integer));
+		const ssys_t out_low = -(ssys_t)out.n_decimal;
+		const ssys_t out_high = (ssys_t)out.n_integer;
+		unsigned borrow = 0;
+		bool overflow = false;
+
 		out.is_zero = 0;
-
-		int carry = 0;
-		for(int i = -out.n_decimal; i < out.n_integer; i++)
+		for(ssys_t i = low; i < high; i++)
 		{
-			int v = (int)lhs.Digit(i) - (int)rhs.Digit(i) - carry;
-
-			carry = 0;
-			while(v < 0)
+			int value = (int)lhs.Digit(i) - (int)rhs.Digit(i) - (int)borrow;
+			if(value < 0)
 			{
-				carry++;
-				v += out.base;
+				value += (int)radix;
+				borrow = 1;
+			}
+			else
+			{
+				borrow = 0;
 			}
 
-			out.Digit(i, (digit_t)v);
+			if(i >= out_low && i < out_high)
+				out.Digit(i, (digit_t)value);
+			else if(i >= out_high && value != 0)
+				overflow = true;
 		}
 
-		return carry;
+		EL_ERROR(borrow != 0, TLogicException);
+		(void)out.IsZero();
+		return overflow ? 1 : 0;
 	}
 
 	void TBCD::AbsMul(TBCD& out, const TBCD& lhs, const TBCD& rhs)
 	{
 		EL_ERROR(out.base != lhs.base || out.base != rhs.base, TLogicException);
-		out.is_zero = 0;
-
-		TBCD add(0, out.base, out.n_integer + lhs.n_decimal + rhs.n_decimal, out.n_decimal);
-		TBCD tmp(0, out.base, out.n_integer + lhs.n_decimal + rhs.n_decimal, 0);
-
-		const unsigned cr = rhs.n_decimal + rhs.n_integer;
-		const unsigned cl = lhs.n_decimal + lhs.n_integer;
-		const digit_t* const arr_rhs = rhs.DigitsPointer();
-		const digit_t* const arr_lhs = lhs.DigitsPointer();
-		for(unsigned r = 0; r < cr; r++)
-			for(unsigned l = 0; l < cl; l++)
-			{
-				const int z = (int)(arr_rhs[r]) * (int)(arr_lhs[l]);
-				if(z != 0)
-				{
-					tmp = z;
-					tmp <<= (r + l);
-					add += tmp;
-				}
-			}
-
-		add >>= lhs.n_decimal + rhs.n_decimal;
-
-		bool is_negative = out.is_negative;
-		out = std::move(add);
-		out.is_negative = is_negative;
-	}
-
-	TBCD TBCD::AbsDiv(TBCD& out, const TBCD& lhs, const TBCD& rhs)
-	{
-		EL_ERROR(out.base != lhs.base || out.base != rhs.base, TLogicException);
-		EL_ERROR(rhs.IsZero(), TInvalidArgumentException, "rhs", "divisor cannot be zero");
-
-		TBCD run(lhs, out.base, out.n_integer + 1, out.n_decimal);
-		TBCD div(rhs, out.base, out.n_integer + 1, out.n_decimal);
-		run.is_negative = 0;
-		div.is_negative = 0;
-
-		const bool is_negative = out.is_negative;
-		out.SetZero();
-		out.EnsureDigits();
-		out.is_negative = is_negative;
-
-		int shift = run.IndexMostSignificantNonZeroDigit() - div.IndexMostSignificantNonZeroDigit();
-		digit_t f;
-		div.Shift(shift);
-
-		while(div < run && !div.IsZero())
-		{
-			div <<= 1;
-			shift++;
-		}
-
-		while(!run.IsZero())
-		{
-			while(run < div && !div.IsZero())
-			{
-				div >>= 1;
-				shift--;
-			}
-
-			if(div.IsZero())
-				break;
-
-			if(-shift > (int)out.n_decimal)
-			{
-				return run;
-			}
-
-			// std::cerr<<"run = "<<run<<'\n';
-			// std::cerr<<"div = "<<div<<'\n';
-
-			for(f = 0; run >= div; f++)
-				run -= div;
-
-			if(f < out.base)
-				out.Digit(shift, f);
-			else
-			{
-				TBCD tmp(f, out);
-				tmp.Shift(shift);
-				out += tmp;
-			}
-		}
-
-		// std::cerr<<"end out = "<<out<<'\n';
-		return run;
-	}
-
-	int TBCD::Add(TBCD& out, const TBCD& _lhs, const TBCD& _rhs)
-	{
-		TBCD lhs_copy(0, out);
-		TBCD rhs_copy(0, out);
-		if(out.base != _lhs.base) lhs_copy = _lhs;
-		if(out.base != _rhs.base) rhs_copy = _rhs;
-		const TBCD& lhs = out.base == _lhs.base ? _lhs : lhs_copy;
-		const TBCD& rhs = out.base == _rhs.base ? _rhs : rhs_copy;
-
-		if(lhs.is_negative == rhs.is_negative)
-		{
-			out.is_negative = lhs.is_negative;
-			return AbsAdd(out, lhs, rhs);
-		}
-		else
-		{
-			// -7 +  2 => -(7 - 2)
-			//  7 + -2 => +(7 - 2)
-
-			//  7 + -8 => -(8 - 7)
-			// -7 +  8 => +(8 - 7)
-
-			const int cmp = lhs.Compare(rhs, true);
-			if(cmp > 0)
-			{
-				// no swap
-				return AbsSub(out, lhs, rhs);
-			}
-			else if(cmp < 0)
-			{
-				// swap
-				out.is_negative = rhs.is_negative;
-				return AbsSub(out, rhs, lhs);
-			}
-			else
-			{
-				out.SetZero();
-				return 0;
-			}
-		}
-	}
-
-	int TBCD::Subtract(TBCD& out, const TBCD& _lhs, const TBCD& _rhs)
-	{
-		TBCD lhs_copy(0, out);
-		TBCD rhs_copy(0, out);
-		if(out.base != _lhs.base) lhs_copy = _lhs;
-		if(out.base != _rhs.base) rhs_copy = _rhs;
-		const TBCD& lhs = out.base == _lhs.base ? _lhs : lhs_copy;
-		const TBCD& rhs = out.base == _rhs.base ? _rhs : rhs_copy;
-
-		// -7 -  2 => -(7 + 2) [DONE]
-		//  7 - -2 => +(7 + 2) [DONE]
-		// -7 - -2 => -(7 - 2) [DONE]
-		//  7 -  2 => +(7 - 2) [DONE]
-
-		// -5 -  8 => -(5 + 8) [DONE]
-		//  5 - -8 => +(5 + 8) [DONE]
-		// -5 - -8 => +(8 - 5) [DONE]
-		//  5 -  8 => -(8 - 5) [DONE]
-
-		// 122 - 277 => -(277 - 122)
-
-		const int cmp = lhs.Compare(rhs, true);
-		if(cmp > 0 || (cmp == 0 && lhs.is_negative != rhs.is_negative))
-		{
-			// do not assign to out.is_negative here (lhs or rhs might shadow out)
-			if(lhs.is_negative != rhs.is_negative)
-			{
-				// one of the two numbers is negative the other positive
-				out.is_negative = !rhs.is_negative;
-				return AbsAdd(out, lhs, rhs);
-			}
-			else
-			{
-				out.is_negative = rhs.is_negative;
-				return AbsSub(out, lhs, rhs);
-			}
-		}
-		else if(cmp < 0)
-		{
-			if(lhs.is_negative != rhs.is_negative)
-			{
-				out.is_negative = !rhs.is_negative;
-				return AbsAdd(out, lhs, rhs);
-			}
-			else
-			{
-				// swap
-				out.is_negative = !rhs.is_negative;
-				return AbsSub(out, rhs, lhs);
-			}
-		}
-		else
-		{
-			out.SetZero();
-			return 0;
-		}
-	}
-
-	void TBCD::Multiply(TBCD& out, const TBCD& _lhs, const TBCD& _rhs)
-	{
-		if(_lhs.IsZero() || _rhs.IsZero())
+		if(lhs.IsZero() || rhs.IsZero())
 		{
 			out.SetZero();
 			return;
 		}
 
-		TBCD lhs_copy(0, out);
-		TBCD rhs_copy(0, out);
-		if(out.base != _lhs.base) lhs_copy = _lhs;
-		if(out.base != _rhs.base) rhs_copy = _rhs;
-		const TBCD& lhs = out.base == _lhs.base ? _lhs : lhs_copy;
-		const TBCD& rhs = out.base == _rhs.base ? _rhs : rhs_copy;
-
-		out.is_negative = lhs.is_negative != rhs.is_negative;
-		AbsMul(out, lhs, rhs);
+		const unsigned radix = out.Radix();
+		TList<digit_t> left(lhs.Digits());
+		TList<digit_t> right(rhs.Digits());
+		detail::TrimDigits(left);
+		detail::TrimDigits(right);
+		TList<digit_t> product;
+		detail::MultiplyDigits(product, left, right, radix);
+		const usys_t source_decimal = lhs.n_decimal + rhs.n_decimal;
+		if(out.n_decimal >= source_decimal)
+			detail::ShiftDigitsLeft(product, out.n_decimal - source_decimal);
+		else
+			detail::DivideDigitsPower(product, radix, radix, source_decimal - out.n_decimal);
+		AssignMagnitudeDigits(out, product, false);
 	}
 
-	TBCD TBCD::Divide(TBCD& out, const TBCD& _lhs, const TBCD& _rhs)
+	int TBCD::Add(TBCD& out, const TBCD& lhs, const TBCD& rhs)
 	{
-		if(_lhs.IsZero())
+		EL_ERROR(lhs.IsInvalid(), TInvalidArgumentException, "lhs", "value is not valid");
+		EL_ERROR(rhs.IsInvalid(), TInvalidArgumentException, "rhs", "value is not valid");
+		EL_ERROR(out.IsInvalid(), TInvalidArgumentException, "out", "value is not valid");
+		if(lhs.IsNaN() || rhs.IsNaN())
 		{
+			out.SetNaN();
+			return 0;
+		}
+		if(lhs.IsInfinity() || rhs.IsInfinity())
+		{
+			if(lhs.IsInfinity() && rhs.IsInfinity() && lhs.IsNegative() != rhs.IsNegative())
+				out.SetNaN();
+			else
+				out.SetInfinity(lhs.IsInfinity() ? lhs.IsNegative() : rhs.IsNegative());
+			return 0;
+		}
+		if(!out.IsFinite())
 			out.SetZero();
-			return out;
+		out.is_periodic = 0;
+
+		if(out.base != lhs.base || out.base != rhs.base)
+			return AddGeneric(out, lhs, rhs, false);
+
+		const bool lhs_negative = lhs.is_negative && !lhs.IsZero();
+		const bool rhs_negative = rhs.is_negative && !rhs.IsZero();
+		if(lhs_negative == rhs_negative)
+		{
+			const int carry = AbsAdd(out, lhs, rhs);
+			out.is_negative = lhs_negative;
+			return carry;
 		}
 
-		TBCD lhs_copy(0, out);
-		TBCD rhs_copy(0, out);
-		if(out.base != _lhs.base) lhs_copy = _lhs;
-		if(out.base != _rhs.base) rhs_copy = _rhs;
-		const TBCD& lhs = out.base == _lhs.base ? _lhs : lhs_copy;
-		const TBCD& rhs = out.base == _rhs.base ? _rhs : rhs_copy;
+		const int cmp = CompareMagnitude(lhs, rhs);
+		if(cmp == 0)
+		{
+			out.SetZero();
+			return 0;
+		}
 
-		out.is_negative = lhs.is_negative != rhs.is_negative;
-		return AbsDiv(out, lhs, rhs);
+		if(cmp > 0)
+		{
+			const int carry = AbsSub(out, lhs, rhs);
+			out.is_negative = lhs_negative;
+			return carry;
+		}
+
+		const int carry = AbsSub(out, rhs, lhs);
+		out.is_negative = rhs_negative;
+		return carry;
+	}
+
+	int TBCD::Subtract(TBCD& out, const TBCD& lhs, const TBCD& rhs)
+	{
+		EL_ERROR(lhs.IsInvalid(), TInvalidArgumentException, "lhs", "value is not valid");
+		EL_ERROR(rhs.IsInvalid(), TInvalidArgumentException, "rhs", "value is not valid");
+		EL_ERROR(out.IsInvalid(), TInvalidArgumentException, "out", "value is not valid");
+		if(lhs.IsNaN() || rhs.IsNaN())
+		{
+			out.SetNaN();
+			return 0;
+		}
+		if(lhs.IsInfinity() || rhs.IsInfinity())
+		{
+			if(lhs.IsInfinity() && rhs.IsInfinity() && lhs.IsNegative() == rhs.IsNegative())
+				out.SetNaN();
+			else if(lhs.IsInfinity())
+				out.SetInfinity(lhs.IsNegative());
+			else
+				out.SetInfinity(!rhs.IsNegative());
+			return 0;
+		}
+		if(!out.IsFinite())
+			out.SetZero();
+		out.is_periodic = 0;
+
+		if(out.base != lhs.base || out.base != rhs.base)
+			return AddGeneric(out, lhs, rhs, true);
+
+		const bool lhs_negative = lhs.is_negative && !lhs.IsZero();
+		const bool rhs_negative = rhs.is_negative && !rhs.IsZero();
+		if(lhs_negative != rhs_negative)
+		{
+			const int carry = AbsAdd(out, lhs, rhs);
+			out.is_negative = lhs_negative;
+			return carry;
+		}
+
+		const int cmp = CompareMagnitude(lhs, rhs);
+		if(cmp == 0)
+		{
+			out.SetZero();
+			return 0;
+		}
+
+		if(cmp > 0)
+		{
+			const int carry = AbsSub(out, lhs, rhs);
+			out.is_negative = lhs_negative;
+			return carry;
+		}
+
+		const int carry = AbsSub(out, rhs, lhs);
+		out.is_negative = !rhs_negative;
+		return carry;
+	}
+
+	void TBCD::Multiply(TBCD& out, const TBCD& lhs, const TBCD& rhs)
+	{
+		EL_ERROR(lhs.IsInvalid(), TInvalidArgumentException, "lhs", "value is not valid");
+		EL_ERROR(rhs.IsInvalid(), TInvalidArgumentException, "rhs", "value is not valid");
+		EL_ERROR(out.IsInvalid(), TInvalidArgumentException, "out", "value is not valid");
+		if(lhs.IsNaN() || rhs.IsNaN() || ((lhs.IsInfinity() && rhs.IsZero()) || (rhs.IsInfinity() && lhs.IsZero())))
+		{
+			out.SetNaN();
+			return;
+		}
+		if(lhs.IsInfinity() || rhs.IsInfinity())
+		{
+			out.SetInfinity(lhs.IsNegative() != rhs.IsNegative());
+			return;
+		}
+		if(!out.IsFinite())
+			out.SetZero();
+		out.is_periodic = 0;
+
+		if(lhs.IsZero() || rhs.IsZero())
+		{
+			out.SetZero();
+			return;
+		}
+
+		const bool negative = lhs.is_negative != rhs.is_negative;
+		if(out.base == lhs.base && out.base == rhs.base)
+			AbsMul(out, lhs, rhs);
+		else
+			MultiplyGeneric(out, lhs, rhs);
+		out.is_negative = negative;
+	}
+
+	TBCD TBCD::Divide(TBCD& out, const TBCD& lhs, const TBCD& rhs)
+	{
+		EL_ERROR(lhs.IsInvalid(), TInvalidArgumentException, "lhs", "value is not valid");
+		EL_ERROR(rhs.IsInvalid(), TInvalidArgumentException, "rhs", "value is not valid");
+		EL_ERROR(out.IsInvalid(), TInvalidArgumentException, "out", "value is not valid");
+		if(lhs.IsNaN() || rhs.IsNaN())
+		{
+			out.SetNaN();
+			TBCD remainder(0, out);
+			remainder.SetNaN();
+			return remainder;
+		}
+		if(lhs.IsInfinity() && rhs.IsInfinity())
+		{
+			out.SetNaN();
+			TBCD remainder(0, out);
+			remainder.SetNaN();
+			return remainder;
+		}
+		if(rhs.IsInfinity())
+		{
+			TBCD remainder(lhs, out);
+			out.SetZero();
+			return remainder;
+		}
+		if(lhs.IsInfinity())
+		{
+			out.SetInfinity(lhs.IsNegative() != rhs.IsNegative());
+			TBCD remainder(0, out);
+			remainder.SetNaN();
+			return remainder;
+		}
+		if(rhs.IsZero())
+		{
+			TBCD remainder(0, out);
+			if(lhs.IsZero())
+				out.SetNaN();
+			else
+				out.SetInfinity(lhs.IsNegative() != rhs.IsNegative());
+			remainder.SetNaN();
+			return remainder;
+		}
+		if(!out.IsFinite())
+			out.SetZero();
+		out.is_periodic = 0;
+		return DivideGeneric(out, lhs, rhs);
 	}
 
 	TBCD& TBCD::operator+=(const TBCD& rhs)
@@ -338,269 +609,412 @@ namespace el1::io::bcd
 
 	TBCD& TBCD::operator<<=(const unsigned n_shift)
 	{
-		if(n_shift == 0)
+		if(!IsFinite())
+			return *this;
+		if(n_shift == 0 || IsZero())
 			return *this;
 
-		if(n_shift >= n_decimal + n_integer)
+		const usys_t n_digits = n_decimal + n_integer;
+		if(n_shift >= n_digits)
 		{
 			SetZero();
 			return *this;
 		}
 
-		// shift up
-		if(DigitsPointer())
-		{
-			memmove(DigitsPointer() + n_shift, DigitsPointer(), (n_decimal + n_integer - n_shift) * sizeof(digit_t));
-			memset(DigitsPointer(), 0, n_shift * sizeof(digit_t));
-		}
-
+		digit_t* const digits = DigitsPointer();
+		memmove(digits + n_shift, digits, n_digits - n_shift);
+		memset(digits, 0, n_shift);
+		is_zero = 0;
+		(void)IsZero();
 		return *this;
 	}
 
 	TBCD& TBCD::operator>>=(const unsigned n_shift)
 	{
-		if(n_shift == 0)
+		if(!IsFinite())
+			return *this;
+		if(n_shift == 0 || IsZero())
 			return *this;
 
-		if(n_shift >= n_decimal + n_integer)
+		const usys_t n_digits = n_decimal + n_integer;
+		if(n_shift >= n_digits)
 		{
 			SetZero();
 			return *this;
 		}
 
-		// shift down
-		if(DigitsPointer())
-		{
-			memmove(DigitsPointer(), DigitsPointer() + n_shift, (n_decimal + n_integer - n_shift) * sizeof(digit_t));
-			memset(DigitsPointer() + (n_decimal + n_integer - n_shift) * sizeof(digit_t), 0, n_shift * sizeof(digit_t));
-		}
-
+		digit_t* const digits = DigitsPointer();
+		memmove(digits, digits + n_shift, n_digits - n_shift);
+		memset(digits + n_digits - n_shift, 0, n_shift);
+		is_zero = 0;
+		(void)IsZero();
 		return *this;
 	}
 
 	/*****************************************************************/
 	// COMPARISON
 
-	int TBCD::Compare(const TBCD& _rhs, const bool absolute) const
+	int TBCD::Compare(const TBCD& rhs, const bool absolute) const
 	{
-		if(this->IsZero() && _rhs.IsZero())
+		EL_ERROR(IsInvalid(), TInvalidArgumentException, "this", "value is not valid");
+		EL_ERROR(rhs.IsInvalid(), TInvalidArgumentException, "rhs", "value is not valid");
+		EL_ERROR(IsNaN() || rhs.IsNaN(), TInvalidArgumentException, "rhs", "comparison with NaN is unordered");
+
+		if(IsInfinity() || rhs.IsInfinity())
+		{
+			if(IsInfinity() && rhs.IsInfinity())
+			{
+				if(absolute)
+					return 0;
+				if(IsNegative() == rhs.IsNegative())
+					return 0;
+				return IsNegative() ? -1 : 1;
+			}
+			if(absolute)
+				return IsInfinity() ? 1 : -1;
+			if(IsInfinity())
+				return IsNegative() ? -1 : 1;
+			return rhs.IsNegative() ? 1 : -1;
+		}
+
+		const bool lhs_zero = IsZero();
+		const bool rhs_zero = rhs.IsZero();
+		if(lhs_zero && rhs_zero)
 			return 0;
 
-		if(!absolute)
-		{
-			if(this->is_negative == 0 && _rhs.is_negative == 1)
-				return 1;
+		const bool lhs_negative = is_negative && !lhs_zero;
+		const bool rhs_negative = rhs.is_negative && !rhs_zero;
+		if(!absolute && lhs_negative != rhs_negative)
+			return lhs_negative ? -1 : 1;
 
-			if(this->is_negative == 1 && _rhs.is_negative == 0)
-				return -1;
-		}
-
-		TBCD rhs_copy(0, *this);
-		if(this->base != _rhs.base) rhs_copy = _rhs;
-		const TBCD& rhs = this->base == _rhs.base ? _rhs : rhs_copy;
-
-		const auto [idx_low,idx_high] = this->OuterBounds(rhs);
-		for(int i = idx_high; i >= idx_low; i--)
-		{
-			const digit_t l = this->Digit(i);
-			const digit_t r = rhs.Digit(i);
-
-			if(l > r)
-				return is_negative && !absolute ? -1 : 1;
-
-			if(l < r)
-				return is_negative && !absolute ? 1 : -1;
-		}
-
-		return 0;
+		int result = CompareMagnitude(*this, rhs);
+		if(!absolute && lhs_negative)
+			result = -result;
+		return result;
 	}
 
 	bool TBCD::HasSameSpecs(const TBCD& rhs) const
 	{
-		return this->base == rhs.base && this->n_integer == rhs.n_integer && this->n_decimal == rhs.n_decimal;
+		return base == rhs.base && n_integer == rhs.n_integer && n_decimal == rhs.n_decimal;
 	}
 
 	/*****************************************************************/
 	// UTILITY FUNCTIONS
 
-	u8_t TBCD::RequiredDigits(const digit_t target_base, const digit_t source_base, const unsigned n_source_digits)
+	usys_t TBCD::RequiredDigits(const digit_t target_base, const digit_t source_base, const usys_t n_source_digits)
 	{
-		EL_NOT_IMPLEMENTED;
+		EL_ERROR(target_base == 1, TInvalidArgumentException, "target_base", "base 1 is reserved for invalid values");
+		EL_ERROR(source_base == 1, TInvalidArgumentException, "source_base", "base 1 is reserved for invalid values");
+		if(n_source_digits == 0)
+			return 0;
+
+		const unsigned source_radix = source_base == 0 ? 256U : (unsigned)source_base;
+		const unsigned target_radix = target_base == 0 ? 256U : (unsigned)target_base;
+		if(source_radix == target_radix)
+			return n_source_digits;
+
+		const long double source_log = std::log((long double)source_radix);
+		const long double target_log = std::log((long double)target_radix);
+		const long double required = (long double)n_source_digits * source_log / target_log;
+		EL_ERROR(!std::isfinite(required) || required > (long double)std::numeric_limits<usys_t>::max(), TInvalidArgumentException, "n_source_digits", "result digit count exceeds addressable memory");
+
+		// source_radix^n - 1 needs ceil(log_target(source_radix^n)) digits.
+		// For the small supported radices long double has ample precision for all
+		// practically addressable buffers. Exact power relations naturally produce
+		// an integral value here and therefore do not gain an extra digit.
+		const long double rounded_up = std::ceil(required);
+		return (usys_t)rounded_up;
 	}
 
-	std::tuple<int,int> TBCD::OuterBounds(const TBCD& rhs) const
+	std::tuple<ssys_t,ssys_t> TBCD::OuterBounds(const TBCD& rhs) const
 	{
 		return {
-			-util::Max<int>(this->n_decimal, rhs.n_decimal),
-			 util::Max<int>(this->n_integer, rhs.n_integer) - 1
+			-(ssys_t)util::Max(n_decimal, rhs.n_decimal),
+			 (ssys_t)util::Max(n_integer, rhs.n_integer) - 1
 		};
 	}
 
-	std::tuple<int,int> TBCD::InnerBounds(const TBCD& rhs) const
+	std::tuple<ssys_t,ssys_t> TBCD::InnerBounds(const TBCD& rhs) const
 	{
 		return {
-			-util::Min<int>(this->n_decimal, rhs.n_decimal),
-			 util::Min<int>(this->n_integer, rhs.n_integer) - 1
+			-(ssys_t)util::Min(n_decimal, rhs.n_decimal),
+			 (ssys_t)util::Min(n_integer, rhs.n_integer) - 1
 		};
 	}
 
-	void TBCD::Shift(const int s)
+	void TBCD::Shift(const ssys_t shift)
 	{
-		if(s > 0)
-			(*this) <<= s;
-		else if(s < 0)
-			(*this) >>= -s;
+		if(!IsFinite())
+			return;
+		if(shift > 0)
+			(*this) <<= (unsigned)shift;
+		else if(shift < 0)
+		{
+			const unsigned magnitude = (unsigned)(-(shift + 1)) + 1U;
+			(*this) >>= magnitude;
+		}
 	}
 
-	static ERoundingMode DecideStochasticRounding(const TBCD& value)
+	void TBCD::Round(const usys_t n_decimal_max, const ERoundingMode mode)
 	{
-		EL_NOT_IMPLEMENTED;
-		// static system::random::TXorShift rng;
-		// const TBCD delta = value - floor_val;	// fractional part, always in [0.0, 1.0)
-  //
-		// // Generate random number in [0.0, 1.0)
-		// const double r = TBCD::Random(value.Base(), value.CountInteger(), value.CountDecimal());
-		// r.TruncateIntegerDigits(0);
-  //
-		// // Probability of rounding up is proportional to fractional part
-		// return r < delta ? ERoundingDirection::UPWARD : ERoundingDirection::DOWNWARD;
-	}
-
-	void TBCD::Round(const u8_t n_decimal_max, ERoundingMode mode)
-	{
+		if(!IsFinite())
+			return;
 		if(n_decimal_max >= n_decimal || IsZero())
 			return;
+		is_periodic = 0;
 
-		const u8_t n_sig = CountSignificantDecimalDigits();
-		if(n_decimal_max >= n_sig)
+		const usys_t n_discard = n_decimal - n_decimal_max;
+		const digit_t* const digits = DigitsPointer();
+		bool has_discarded_value = false;
+		for(usys_t i = 0; i < n_discard; i++)
+			if(digits[i] != 0)
+			{
+				has_discarded_value = true;
+				break;
+			}
+
+		if(!has_discarded_value)
 			return;
 
-		if(mode == ERoundingMode::STOCHASTIC)
-			mode = DecideStochasticRounding(*this);
-
-		int carry = 0;
+		const unsigned radix = Radix();
+		bool increment = false;
 		switch(mode)
 		{
-			case ERoundingMode::TO_NEAREST:
-				carry = Digit(-n_decimal_max - 1) >= base/2 ? 1 : 0;	// correct, no recursion, only the first truncated digit counts
-				break;
 			case ERoundingMode::TOWARDS_ZERO:
-				carry = 0;
+				increment = false;
 				break;
+
 			case ERoundingMode::AWAY_FROM_ZERO:
-				carry = 1;
+				increment = true;
 				break;
+
 			case ERoundingMode::DOWNWARD:
-				carry = is_negative ? 1 : 0;
+				increment = is_negative;
 				break;
+
 			case ERoundingMode::UPWARD:
-				carry = is_negative ? 0 : 1;
+				increment = !is_negative;
 				break;
+
+			case ERoundingMode::TO_NEAREST:
 			case ERoundingMode::TO_NEAREST_EVEN:
-				EL_NOT_IMPLEMENTED;
+			{
+				// The most significant discarded digit decides against 1/2 immediately
+				// unless an even radix represents exactly radix/2. Lower discarded
+				// digits only distinguish an exact tie from a value above the tie.
+				const unsigned leading = digits[n_discard - 1U];
+				const unsigned twice_leading = leading * 2U;
+				if(twice_leading > radix)
+				{
+					increment = true;
+				}
+				else if(twice_leading == radix)
+				{
+					bool has_lower_digits = false;
+					for(usys_t i = 0; i + 1U < n_discard; i++)
+						if(digits[i] != 0)
+						{
+							has_lower_digits = true;
+							break;
+						}
+
+					if(has_lower_digits || mode == ERoundingMode::TO_NEAREST)
+						increment = true;
+					else
+					{
+						const ssys_t retained_index = -(ssys_t)n_decimal_max;
+						increment = (Digit(retained_index) & 1U) != 0;
+					}
+				}
 				break;
+			}
+
 			case ERoundingMode::STOCHASTIC:
-				EL_THROW(TLogicException);
+			{
+				for(usys_t i = n_discard; i > 0; i--)
+				{
+					const digit_t random_digit = RandomDigit(radix);
+					const digit_t remainder_digit = digits[i - 1];
+					if(random_digit < remainder_digit)
+					{
+						increment = true;
+						break;
+					}
+					if(random_digit > remainder_digit)
+						break;
+				}
+				break;
+			}
 		}
 
-		memset(DigitsPointer(), 0, (n_decimal - n_decimal_max) * sizeof(digit_t));
-
-		if(carry != 0)
+		memset(DigitsPointer(), 0, n_discard);
+		if(increment)
 		{
-			TBCD bcd_carry(carry, *this);
-			bcd_carry >>= n_decimal_max;
-			AbsAdd(*this, *this, bcd_carry);
+			unsigned carry = 1;
+			for(unsigned i = n_discard; carry != 0 && i < n_decimal + n_integer; i++)
+			{
+				unsigned value = (unsigned)DigitsPointer()[i] + carry;
+				carry = value / radix;
+				DigitsPointer()[i] = (digit_t)(value % radix);
+			}
 		}
+
+		is_zero = 0;
+		(void)IsZero();
+	}
+
+	bool TBCD::SetPrecision(const usys_t new_n_integer, const usys_t new_n_decimal, const ERoundingMode mode)
+	{
+		EL_ERROR(IsInvalid(), TInvalidArgumentException, "this", "not valid");
+		const usys_t new_count = detail::CheckedDigitCount(new_n_integer, new_n_decimal);
+		if(new_n_integer == n_integer && new_n_decimal == n_decimal)
+			return false;
+		if(!IsFinite())
+		{
+			n_integer = detail::CheckedPrecision(new_n_integer, "new_n_integer");
+			n_decimal = detail::CheckedPrecision(new_n_decimal, "new_n_decimal");
+			return false;
+		}
+
+		if(new_n_decimal < n_decimal)
+			Round(new_n_decimal, mode);
+
+		bool overflow = false;
+		for(usys_t i = new_n_integer; i < n_integer; i++)
+			if(Digit((ssys_t)i) != 0)
+			{
+				overflow = true;
+				break;
+			}
+
+		TList<digit_t> new_digits;
+		if(!IsZero() && new_count != 0)
+		{
+			new_digits.SetCount(new_count);
+			for(usys_t i = 0; i < new_count; i++)
+			{
+				const ssys_t logical_index = (ssys_t)i - (ssys_t)new_n_decimal;
+				new_digits[i] = Digit(logical_index);
+			}
+		}
+
+		n_integer = detail::CheckedPrecision(new_n_integer, "new_n_integer");
+		n_decimal = detail::CheckedPrecision(new_n_decimal, "new_n_decimal");
+		digits = std::move(new_digits);
+		is_periodic = 0;
+		is_zero = 0;
+		(void)IsZero();
+		return overflow;
 	}
 
 	void TBCD::SetZero() noexcept
 	{
-		if(DigitsPointer() && is_zero == 0)
-			memset(DigitsPointer(), 0, (n_decimal + n_integer) * sizeof(digit_t));
+		if(IsInvalid())
+		{
+			is_negative = 0;
+			is_zero = 1;
+			is_periodic = 0;
+			value_class = (u8_t)EValueClass::FINITE;
+			return;
+		}
 
+		digit_t* const digits = DigitsPointer();
+		if(digits != nullptr && !is_zero)
+			memset(digits, 0, n_decimal + n_integer);
 		is_negative = 0;
 		is_zero = 1;
+		is_periodic = 0;
+		value_class = (u8_t)EValueClass::FINITE;
+	}
+
+	void TBCD::SetNaN() noexcept
+	{
+		if(IsInvalid())
+			return;
+		digits.Clear();
+		is_negative = 0;
+		is_zero = 0;
+		is_periodic = 0;
+		value_class = (u8_t)EValueClass::NOT_A_NUMBER;
+	}
+
+	void TBCD::SetInfinity(const bool negative) noexcept
+	{
+		if(IsInvalid())
+			return;
+		digits.Clear();
+		is_negative = negative;
+		is_zero = 0;
+		is_periodic = 0;
+		value_class = (u8_t)EValueClass::INFINITE;
 	}
 
 	bool TBCD::IsZero() const noexcept
 	{
+		if(IsInvalid())
+			return true;
+		if(!IsFinite())
+			return false;
 		if(is_zero)
 			return true;
 
-		if(DigitsPointer())
+		const digit_t* const digits = DigitsPointer();
+		if(digits == nullptr)
 		{
-			for(unsigned i = 0; i < n_integer + n_decimal; i++)
-				if(DigitsPointer()[i] != 0)
-					return false;
-
 			is_zero = 1;
+			return true;
 		}
 
+		for(usys_t i = 0; i < n_integer + n_decimal; i++)
+			if(digits[i] != 0)
+				return false;
+
+		is_zero = 1;
 		return true;
 	}
 
 	double TBCD::ToDouble() const
 	{
+		if(IsNaN())
+			return std::numeric_limits<double>::quiet_NaN();
+		if(IsInfinity())
+			return is_negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
 		if(IsZero())
 			return 0;
 
-		double v = 0;
-
-		for(unsigned i = 0; i < n_integer; i++)
-		{
-			const double d = DigitsPointer()[n_decimal + i];
-			const double m = powl((double)base, (double)i);
-			v += d * m;
-		}
-
-		for(unsigned i = 1; i <= n_decimal; i++)
-		{
-			const double d = DigitsPointer()[n_decimal - i];
-			const double m = pow((double)base, (double)i);
-			// fprintf(stderr, "v0 = %0.20f, d = %f, m = %0.20f\n", v, d, m);
-			v += d / m;
-			// fprintf(stderr, "v1 = %0.20f\n\n", v);
-		}
-
+		const unsigned radix = Radix();
+		long double value = 0;
+		const auto digits = Digits();
+		for(usys_t i = digits.Count(); i > 0; i--)
+			value = value * radix + digits[i - 1];
+		for(usys_t i = 0; i < n_decimal; i++)
+			value /= radix;
 		if(is_negative)
-			v *= -1.0;
-
-		return v;
+			value = -value;
+		return (double)value;
 	}
 
 	s64_t TBCD::ToSignedInt() const
 	{
-		if(IsZero())
-			return 0;
-
-		s64_t v = 0;
-		s64_t m = 1;
-		for(const u64_t d : IntegerDigits())
-		{
-			v += d * m;
-			m *= base;
-		}
-
-		if(is_negative)
-			v *= (s64_t)-1;
-
-		return v;
+		EL_ERROR(!IsFinite(), TInvalidArgumentException, "this", "special BCD value cannot be converted to an integer");
+		u64_t magnitude = ToUnsignedInt();
+		if(is_negative && magnitude != 0)
+			magnitude = 0U - magnitude;
+		return std::bit_cast<s64_t>(magnitude);
 	}
 
 	u64_t TBCD::ToUnsignedInt() const
 	{
+		EL_ERROR(!IsFinite(), TInvalidArgumentException, "this", "special BCD value cannot be converted to an integer");
 		if(IsZero())
 			return 0;
 
-		u64_t v = 0;
-		u64_t m = 1;
-		for(const u64_t d : IntegerDigits())
-		{
-			v += d * m;
-			m *= base;
-		}
-
-		return v;
+		u64_t value = 0;
+		const unsigned radix = Radix();
+		const auto digits = IntegerDigits();
+		for(usys_t i = digits.Count(); i > 0; i--)
+			value = value * radix + digits[i - 1];
+		return value;
 	}
 
 	TBCD TBCD::ToBCDInt() const
@@ -608,185 +1022,203 @@ namespace el1::io::bcd
 		return TBCD(*this, base, n_integer, 0);
 	}
 
-	u8_t TBCD::CountLeadingZeros() const
+	usys_t TBCD::CountLeadingZeros() const
 	{
-		if(DigitsPointer())
-			for(u8_t i = 0; i < n_integer; i++)
-				if(DigitsPointer()[n_decimal + n_integer - i - 1] != 0)
+		EL_ERROR(!IsFinite(), TInvalidArgumentException, "this", "special BCD value has no digits");
+		const digit_t* const digits = DigitsPointer();
+		if(digits != nullptr)
+			for(usys_t i = 0; i < n_integer; i++)
+				if(digits[n_decimal + n_integer - i - 1U] != 0)
 					return i;
-
 		return n_integer;
 	}
 
-	u8_t TBCD::CountTrailingZeros() const
+	usys_t TBCD::CountTrailingZeros() const
 	{
-		if(DigitsPointer())
-			for(u8_t i = 0; i < n_decimal; i++)
-				if(DigitsPointer()[i] != 0)
+		EL_ERROR(!IsFinite(), TInvalidArgumentException, "this", "special BCD value has no digits");
+		const digit_t* const digits = DigitsPointer();
+		if(digits != nullptr)
+			for(usys_t i = 0; i < n_decimal; i++)
+				if(digits[i] != 0)
 					return i;
-
 		return n_decimal;
 	}
 
-	int TBCD::IndexMostSignificantNonZeroDigit() const
+	ssys_t TBCD::IndexMostSignificantNonZeroDigit() const
 	{
-		for(int i = n_integer - 1; i >= -n_decimal; i--)
+		for(ssys_t i = (ssys_t)n_integer - 1; i >= -(ssys_t)n_decimal; i--)
 			if(Digit(i) != 0)
 				return i;
 		EL_THROW(TInvalidArgumentException, "*this", "cannot have a zero value");
 	}
 
-	digit_t TBCD::Digit(const int index) const
+	digit_t TBCD::Digit(const ssys_t index) const
 	{
-		if(DigitsPointer() == nullptr || is_zero)
+		EL_ERROR(!IsFinite(), TInvalidArgumentException, "this", "special BCD value has no digits");
+		if(is_zero)
 			return 0;
 
-		const int i = index + n_decimal;
-		if(i < 0 || i >= n_decimal + n_integer)
+		const ssys_t i = index + (ssys_t)n_decimal;
+		if(i < 0 || (usys_t)i >= n_decimal + n_integer)
 			return 0;
 
-		return DigitsPointer()[i];
+		const digit_t* const digits = DigitsPointer();
+		return digits == nullptr ? 0 : digits[i];
 	}
 
-	bool TBCD::Digit(const int index, const digit_t d)
+	bool TBCD::Digit(const ssys_t index, const digit_t digit)
 	{
-		const int i = index + n_decimal;
-		if(i < 0 || i >= n_decimal + n_integer)
+		EL_ERROR(!IsFinite(), TInvalidArgumentException, "this", "special BCD value has no digits");
+		const ssys_t i = index + (ssys_t)n_decimal;
+		if(i < 0 || (usys_t)i >= n_decimal + n_integer)
 			return false;
+		EL_ERROR((unsigned)digit >= Radix(), TInvalidArgumentException, "d", "digit must be smaller than the numeric base");
 
+		if(digit == 0 && DigitsPointer() == nullptr)
+			return true;
 		EnsureDigits();
-
-		if(d != 0) is_zero = 0;
-		DigitsPointer()[i] = d;
+		is_periodic = 0;
+		if(digit != 0)
+			is_zero = 0;
+		DigitsPointer()[i] = digit;
 		return true;
 	}
 
 	/*****************************************************************/
 	// CONSTRUCTORS + ASSIGNMENT
 
-	void TBCD::InitMem()
-	{
-		EL_ERROR(sizeof(uptr_t) != sizeof(void*), TLogicException);
-		if(InternalMemory())
-			memset(_mem, 0, sizeof(_mem));
-		else
-			new (_mem + sizeof(_mem) - sizeof(uptr_t*)) uptr_t(nullptr);
-	}
-
 	digit_t* TBCD::DigitsPointer()
 	{
 		EL_ERROR(IsInvalid(), TInvalidArgumentException, "this", "not valid");
-		if(InternalMemory())
-			return reinterpret_cast<digit_t*>(_mem);
-		else
-			return reinterpret_cast<uptr_t*>(_mem + sizeof(_mem) - sizeof(uptr_t))->get();
+		return digits.Count() == 0 ? nullptr : &digits[0];
 	}
 
 	const digit_t* TBCD::DigitsPointer() const
 	{
-		return const_cast<TBCD*>(this)->DigitsPointer();
-	}
-
-	TBCD::~TBCD()
-	{
-		if(!InternalMemory())
-			reinterpret_cast<uptr_t*>(_mem + sizeof(_mem) - sizeof(uptr_t))->~uptr_t();
+		EL_ERROR(IsInvalid(), TInvalidArgumentException, "this", "not valid");
+		return digits.Count() == 0 ? nullptr : &digits[0];
 	}
 
 	void TBCD::EnsureDigits()
 	{
-		if(DigitsPointer())
+		if(digits.Count() != 0)
 			return;
 
-		if(!InternalMemory())
-		{
-			*reinterpret_cast<uptr_t*>(_mem + sizeof(_mem) - sizeof(uptr_t)) = uptr_t(new digit_t[n_decimal + n_integer]);
-			memset(DigitsPointer(), 0, (n_decimal + n_integer) * sizeof(digit_t));
-			is_zero = 1;
-		}
+		const usys_t n_digits = detail::CheckedDigitCount(n_integer, n_decimal);
+		if(n_digits != 0)
+			digits.SetCount(n_digits);
+		is_zero = 1;
 	}
 
 	template<typename T>
 	void TBCD::ConvertInteger(T value)
 	{
-		EnsureDigits();
+		using unsigned_t = std::make_unsigned_t<T>;
+		const bool negative = std::is_signed_v<T> && value < 0;
+		unsigned_t magnitude;
+		if constexpr(std::is_signed_v<T>)
+		{
+			const unsigned_t bits = (unsigned_t)value;
+			magnitude = negative ? (unsigned_t)((unsigned_t)0 - bits) : bits;
+		}
+		else
+		{
+			magnitude = value;
+		}
+
+		const bool is_nonzero = magnitude != 0;
 		SetZero();
-
-		is_negative = value < 0;
-		is_zero = value == 0;
-
-		if(is_negative)
-			value *= (T)-1;
-
-		if(is_zero == 0)
-			for(int i = 0; value != 0 && i < n_integer; i++)
-			{
-				const T d = value % (T)base;
-				value /= (T)base;
-				DigitsPointer()[n_decimal + i] = (digit_t)d;
-			}
+		const unsigned radix = Radix();
+		for(usys_t i = 0; i < n_integer && magnitude != 0; i++)
+		{
+			const digit_t digit = (digit_t)(magnitude % radix);
+			if(digit != 0)
+				Digit((ssys_t)i, digit);
+			magnitude /= radix;
+		}
+		is_negative = negative && is_nonzero;
 	}
 
-	void TBCD::ConvertFloat(double value)
+	void TBCD::ConvertFloatParts(const detail::TBinaryFloatParts& value)
 	{
-		EnsureDigits();
-		SetZero();
-
-		is_negative = value < 0;
-		is_zero = value == 0;
-
-		if(is_negative)
-			value *= -1.0;
-
-		if(is_zero == 0)
+		if(value.value_class == EValueClass::NOT_A_NUMBER)
 		{
-			double w = value;
-			for(int i = 0; i < n_integer; i++)
-			{
-				const digit_t d = (digit_t)floor(fmod(w, (double)base));
-				w /= (double)base;
-				DigitsPointer()[n_decimal + i] = (digit_t)d;
-			}
-
-			w = value;
-			for(int i = 0; i < n_decimal; i++)
-			{
-				w *= (double)base;
-				const digit_t d = (digit_t)floor(fmod(w, (double)base));
-				DigitsPointer()[n_decimal - 1 - i] = (digit_t)d;
-			}
+			SetNaN();
+			return;
 		}
+		if(value.value_class == EValueClass::INFINITE)
+		{
+			SetInfinity(value.negative);
+			return;
+		}
+		if(value.significand == 0)
+		{
+			SetZero();
+			return;
+		}
+
+		// Decode the exact IEEE-754 value as significand * 2^exponent and convert
+		// that rational number directly to this BCD scale. No decimal formatting,
+		// parsing or floating-point arithmetic is involved.
+		TList<digit_t> magnitude = BuildIntegerDigits(value.significand, Radix());
+		if(value.exponent > 0)
+			detail::MultiplyDigitsPower(magnitude, Radix(), 2U, (usys_t)value.exponent);
+
+		detail::ShiftDigitsLeft(magnitude, n_decimal);
+		if(value.exponent < 0)
+			detail::DivideDigitsPower(magnitude, Radix(), 2U, (usys_t)-value.exponent);
+
+		AssignMagnitudeDigits(*this, magnitude, value.negative);
+		is_periodic = false;
+	}
+
+	void TBCD::ConvertFloat(const float value)
+	{
+		ConvertFloatParts(detail::DecodeBinaryFloat(value));
+	}
+
+	void TBCD::ConvertFloat(const double value)
+	{
+		ConvertFloatParts(detail::DecodeBinaryFloat(value));
 	}
 
 	void TBCD::ConvertBCD(const TBCD& value)
 	{
 		EL_ERROR(value.IsInvalid(), TInvalidArgumentException, "value", "value is not valid");
-		if(value.IsZero())
+		if(&value == this)
+			return;
+		if(value.IsNaN())
 		{
+			SetNaN();
+			return;
+		}
+		if(value.IsInfinity())
+		{
+			SetInfinity(value.IsNegative());
+			return;
+		}
+
+		if(base == value.base)
+		{
+			const bool negative = value.is_negative;
+			const bool periodic = value.is_periodic;
 			SetZero();
-		}
-		else
-		{
-			EnsureDigits();
-			if(HasSameSpecs(value))
+			for(ssys_t i = -(ssys_t)n_decimal; i < (ssys_t)n_integer; i++)
 			{
-				memcpy(DigitsPointer(), value.DigitsPointer(), (n_integer + n_decimal) * sizeof(digit_t));
-				is_negative = value.is_negative;
-				is_zero = 0;
+				const digit_t digit = value.Digit(i);
+				if(digit != 0)
+					Digit(i, digit);
 			}
-			else
-			{
-				if(this->base == value.base)
-				{
-					// we can just copy the digits
-					for(int i = -n_decimal; i < n_integer; i++)
-						Digit(i, value.Digit(i));
-					is_negative = value.is_negative;
-				}
-				else
-					EL_NOT_IMPLEMENTED;
-			}
+			is_negative = negative;
+			is_periodic = periodic && n_integer == value.n_integer && n_decimal == value.n_decimal;
+			return;
 		}
+
+		TList<digit_t> converted = BuildMagnitudeDigits(value, Radix());
+		detail::ShiftDigitsLeft(converted, n_decimal);
+		detail::DivideDigitsPower(converted, Radix(), value.Radix(), value.n_decimal);
+		AssignMagnitudeDigits(*this, converted, value.is_negative);
+		is_periodic = false;
 	}
 
 	TBCD& TBCD::operator=(TBCD&& rhs)
@@ -796,837 +1228,386 @@ namespace el1::io::bcd
 
 		if(HasSameSpecs(rhs))
 		{
-			EnsureDigits();
-			memmove(DigitsPointer(), rhs.DigitsPointer(), (n_integer + n_decimal) * sizeof(digit_t));
+			digits = std::move(rhs.digits);
 			is_negative = rhs.is_negative;
 			is_zero = rhs.is_zero;
+			is_periodic = rhs.is_periodic;
+			value_class = rhs.value_class;
+			rhs.is_negative = 0;
+			rhs.is_zero = 1;
+			rhs.is_periodic = 0;
+			rhs.value_class = (u8_t)EValueClass::FINITE;
 		}
 		else
 		{
 			ConvertBCD(rhs);
+			rhs.SetZero();
 		}
-
 		return *this;
 	}
 
 	TBCD& TBCD::operator=(const TBCD& rhs)
 	{
-		if(&rhs == this)
-			return *this;
-		ConvertBCD(rhs);
+		if(&rhs != this)
+			ConvertBCD(rhs);
 		return *this;
 	}
 
 	TBCD& TBCD::operator=(const double rhs)
 	{
-		if(rhs == 0)
-			SetZero();
-		else
-			ConvertFloat(rhs);
+		ConvertFloat(rhs);
 		return *this;
 	}
 
 	TBCD& TBCD::operator=(const u64_t rhs)
 	{
-		if(rhs == 0)
-			SetZero();
-		else
-			ConvertInteger(rhs);
+		ConvertInteger(rhs);
 		return *this;
 	}
 
 	TBCD& TBCD::operator=(const s64_t rhs)
 	{
-		if(rhs == 0)
-			SetZero();
-		else
-			ConvertInteger(rhs);
+		ConvertInteger(rhs);
 		return *this;
 	}
 
 	TBCD& TBCD::operator=(const int rhs)
 	{
-		if(rhs == 0)
-			SetZero();
-		else
-			ConvertInteger(rhs);
+		ConvertInteger(rhs);
 		return *this;
 	}
 
-	TBCD::TBCD(float v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer), n_decimal(n_decimal), is_negative(0), is_zero(1)
+	TBCD::TBCD(const float value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer, "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal, "n_decimal")), base(base), is_negative(0), is_zero(1)
 	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(double v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer), n_decimal(n_decimal), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(const TBCD& v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, v.base, v.n_integer)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : RequiredDigits(base, v.base, v.n_decimal)), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(u8_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(s8_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(u16_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(s16_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(u32_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = (u64_t)v;
-	}
-
-	TBCD::TBCD(s32_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(u64_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(s64_t v, const digit_t base, const u8_t n_integer, const u8_t n_decimal) : base(base), n_integer(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(v) * 8)), n_decimal(n_decimal != AUTO_DETECT ? n_decimal : 0), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(base != 1) *this = v;
-	}
-
-	TBCD::TBCD(TBCD v, const TBCD& conf_ref) : TBCD(std::move(v), conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const u8_t   v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const s8_t   v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const u16_t  v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const s16_t  v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const u32_t  v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const s32_t  v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const u64_t  v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const s64_t  v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const float  v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-	TBCD::TBCD(const double v, const TBCD& conf_ref) : TBCD(v, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
-
-	// copy constructor
-	TBCD::TBCD(const TBCD& v) : base(v.base), n_integer(v.n_integer), n_decimal(v.n_decimal), is_negative(0), is_zero(1)
-	{
-		InitMem();
-		if(!v.IsZero())
+		if(base != 1)
 		{
-			EnsureDigits();
-			memcpy(this->DigitsPointer(), v.DigitsPointer(), (v.n_integer + v.n_decimal) * sizeof(digit_t));
-			is_negative = v.is_negative;
-			is_zero = 0;
+			detail::CheckedDigitCount(n_integer, n_decimal);
+			ConvertFloat(value);
 		}
+	}
+
+	TBCD::TBCD(const double value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer, "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(n_integer, n_decimal);
+			ConvertFloat(value);
+		}
+	}
+
+	TBCD::TBCD(const TBCD& value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) :
+		digits(),
+		n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, value.base, value.n_integer), "n_integer")),
+		n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : RequiredDigits(base, value.base, value.n_decimal), "n_decimal")),
+		base(base),
+		is_negative(0),
+		is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertBCD(value);
+		}
+	}
+
+	TBCD::TBCD(const u8_t value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(value) * 8U), "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : 0, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertInteger(value);
+		}
+	}
+
+	TBCD::TBCD(const s8_t value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(value) * 8U), "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : 0, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertInteger(value);
+		}
+	}
+
+	TBCD::TBCD(const u16_t value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(value) * 8U), "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : 0, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertInteger(value);
+		}
+	}
+
+	TBCD::TBCD(const s16_t value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(value) * 8U), "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : 0, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertInteger(value);
+		}
+	}
+
+	TBCD::TBCD(const u32_t value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(value) * 8U), "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : 0, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertInteger(value);
+		}
+	}
+
+	TBCD::TBCD(const s32_t value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(value) * 8U), "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : 0, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertInteger(value);
+		}
+	}
+
+	TBCD::TBCD(const u64_t value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(value) * 8U), "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : 0, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertInteger(value);
+		}
+	}
+
+	TBCD::TBCD(const s64_t value, const digit_t base, const usys_t n_integer, const usys_t n_decimal) : digits(), n_integer(detail::CheckedPrecision(n_integer != AUTO_DETECT ? n_integer : RequiredDigits(base, 2, sizeof(value) * 8U), "n_integer")), n_decimal(detail::CheckedPrecision(n_decimal != AUTO_DETECT ? n_decimal : 0, "n_decimal")), base(base), is_negative(0), is_zero(1)
+	{
+		if(base != 1)
+		{
+			detail::CheckedDigitCount(this->n_integer, this->n_decimal);
+			ConvertInteger(value);
+		}
+	}
+
+	TBCD::TBCD(TBCD value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertBCD(value); }
+	TBCD::TBCD(const u8_t value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertInteger(value); }
+	TBCD::TBCD(const s8_t value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertInteger(value); }
+	TBCD::TBCD(const u16_t value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertInteger(value); }
+	TBCD::TBCD(const s16_t value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertInteger(value); }
+	TBCD::TBCD(const u32_t value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertInteger(value); }
+	TBCD::TBCD(const s32_t value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertInteger(value); }
+	TBCD::TBCD(const u64_t value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertInteger(value); }
+	TBCD::TBCD(const s64_t value, const TBCD& conf_ref) : TBCD(0.0, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) { ConvertInteger(value); }
+	TBCD::TBCD(const float value, const TBCD& conf_ref) : TBCD(value, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
+	TBCD::TBCD(const double value, const TBCD& conf_ref) : TBCD(value, conf_ref.base, conf_ref.n_integer, conf_ref.n_decimal) {}
+
+	TBCD::TBCD(const TBCD& value) : digits(value.digits), n_integer(value.n_integer), n_decimal(value.n_decimal), base(value.base), is_negative(value.is_negative), is_zero(value.is_zero), is_periodic(value.is_periodic), value_class(value.value_class)
+	{
+	}
+
+	TBCD::TBCD(TBCD&& rhs) noexcept : digits(std::move(rhs.digits)), n_integer(rhs.n_integer), n_decimal(rhs.n_decimal), base(rhs.base), is_negative(rhs.is_negative), is_zero(rhs.is_zero), is_periodic(rhs.is_periodic), value_class(rhs.value_class)
+	{
+		rhs.is_negative = 0;
+		rhs.is_zero = 1;
+		rhs.is_periodic = 0;
+		rhs.value_class = (u8_t)EValueClass::FINITE;
 	}
 
 	/*****************************************************************/
 	// WRAPPER FUNCTIONS
 
-	TBCD& TBCD::operator+=(const double rhs)
-	{
-		if(rhs != 0)
-			(*this) += TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator-=(const double rhs)
-	{
-		if(rhs != 0)
-			(*this) -= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator*=(const double rhs)
-	{
-		if(rhs == 0)
-		{
-			SetZero();
-			return *this;
-		}
-
-		if(rhs == 1)
-			return *this;
-
-		if(rhs == -1)
-		{
-			is_negative = 1 - is_negative;
-			return *this;
-		}
-
-		(*this) *= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator/=(const double rhs)
-	{
-		if(rhs == 1)
-			return *this;
-
-		if(rhs == -1)
-		{
-			is_negative = 1 - is_negative;
-			return *this;
-		}
-
-		(*this) /= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator%=(const double rhs)
-	{
-		(*this) %= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator+=(const u64_t rhs)
-	{
-		if(rhs != 0)
-			(*this) += TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator-=(const u64_t rhs)
-	{
-		if(rhs != 0)
-			(*this) -= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator*=(const u64_t rhs)
-	{
-		if(rhs == 0)
-		{
-			SetZero();
-			return *this;
-		}
-
-		if(rhs == 1)
-			return *this;
-
-		(*this) *= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator/=(const u64_t rhs)
-	{
-		if(rhs == 1)
-			return *this;
-
-		(*this) /= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator%=(const u64_t rhs)
-	{
-		(*this) %= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator+=(const s64_t rhs)
-	{
-		if(rhs != 0)
-			(*this) += TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator-=(const s64_t rhs)
-	{
-		if(rhs != 0)
-			(*this) -= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator*=(const s64_t rhs)
-	{
-		if(rhs == 0)
-		{
-			SetZero();
-			return *this;
-		}
-
-		if(rhs == 1)
-			return *this;
-
-		if(rhs == -1)
-		{
-			is_negative = 1 - is_negative;
-			return *this;
-		}
-
-		(*this) *= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator/=(const s64_t rhs)
-	{
-		if(rhs == 1)
-			return *this;
-
-		if(rhs == -1)
-		{
-			is_negative = 1 - is_negative;
-			return *this;
-		}
-
-		(*this) /= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator%=(const s64_t rhs)
-	{
-		(*this) %= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator+=(const int rhs)
-	{
-		if(rhs != 0)
-			(*this) += TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator-=(const int rhs)
-	{
-		if(rhs != 0)
-			(*this) -= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator*=(const int rhs)
-	{
-		if(rhs == 0)
-		{
-			SetZero();
-			return *this;
-		}
-
-		if(rhs == 1)
-			return *this;
-
-		if(rhs == -1)
-		{
-			is_negative = 1 - is_negative;
-			return *this;
-		}
-
-		(*this) *= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator/=(const int rhs)
-	{
-		if(rhs == 1)
-			return *this;
-
-		if(rhs == -1)
-		{
-			is_negative = 1 - is_negative;
-			return *this;
-		}
-
-		(*this) /= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD& TBCD::operator%=(const int rhs)
-	{
-		(*this) %= TBCD(rhs, *this);
-		return *this;
-	}
-
-	TBCD TBCD::operator+(const TBCD& rhs) const
-	{
-		TBCD lhs(*this);
-		lhs += rhs;
-		return lhs;
-	}
-
-	TBCD TBCD::operator-(const TBCD& rhs) const
-	{
-		TBCD lhs(*this);
-		lhs -= rhs;
-		return lhs;
-	}
-
-	TBCD TBCD::operator*(const TBCD& rhs) const
-	{
-		TBCD lhs(*this);
-		lhs *= rhs;
-		return lhs;
-	}
-
-	TBCD TBCD::operator/(const TBCD& rhs) const
-	{
-		TBCD lhs(*this);
-		lhs /= rhs;
-		return lhs;
-	}
-
-	TBCD TBCD::operator%(const TBCD& rhs) const
-	{
-		TBCD lhs(*this);
-		lhs %= rhs;
-		return lhs;
-	}
-
-	TBCD TBCD::operator+(const double rhs) const
-	{
-		return (*this) + TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator-(const double rhs) const
-	{
-		return (*this) - TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator*(const double rhs) const
-	{
-		return (*this) * TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator/(const double rhs) const
-	{
-		return (*this) / TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator%(const double rhs) const
-	{
-		return (*this) % TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator+(const u64_t rhs) const
-	{
-		return (*this) + TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator-(const u64_t rhs) const
-	{
-		return (*this) - TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator*(const u64_t rhs) const
-	{
-		return (*this) * TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator/(const u64_t rhs) const
-	{
-		return (*this) / TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator%(const u64_t rhs) const
-	{
-		return (*this) % TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator+(const s64_t rhs) const
-	{
-		return (*this) + TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator-(const s64_t rhs) const
-	{
-		return (*this) - TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator*(const s64_t rhs) const
-	{
-		return (*this) * TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator/(const s64_t rhs) const
-	{
-		return (*this) / TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator%(const s64_t rhs) const
-	{
-		return (*this) % TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator+(const int rhs) const
-	{
-		return (*this) + TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator-(const int rhs) const
-	{
-		return (*this) - TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator*(const int rhs) const
-	{
-		return (*this) * TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator/(const int rhs) const
-	{
-		return (*this) / TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator%(const int rhs) const
-	{
-		return (*this) % TBCD(rhs, *this);
-	}
-
-	TBCD TBCD::operator<<(const unsigned n_shift) const
-	{
-		TBCD lhs = *this;
-		lhs <<= n_shift;
-		return lhs;
-	}
-
-	TBCD TBCD::operator>>(const unsigned n_shift) const
-	{
-		TBCD lhs = *this;
-		lhs >>= n_shift;
-		return lhs;
-	}
-
-	bool TBCD::operator==(const TBCD& rhs) const
-	{
-		return this->Compare(rhs) == 0;
-	}
-
-	bool TBCD::operator!=(const TBCD& rhs) const
-	{
-		return this->Compare(rhs) != 0;
-	}
-
-	bool TBCD::operator>=(const TBCD& rhs) const
-	{
-		return this->Compare(rhs) >= 0;
-	}
-
-	bool TBCD::operator<=(const TBCD& rhs) const
-	{
-		return this->Compare(rhs) <= 0;
-	}
-
-	bool TBCD::operator> (const TBCD& rhs) const
-	{
-		return this->Compare(rhs) > 0;
-	}
-
-	bool TBCD::operator< (const TBCD& rhs) const
-	{
-		return this->Compare(rhs) < 0;
-	}
-
-	bool TBCD::operator==(const double rhs) const
-	{
-		if(this->IsZero() && rhs == 0)
-			return true;
-		if(this->IsZero() && rhs != 0)
-			return false;
-		return (*this) == TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator!=(const double rhs) const
-	{
-		if(this->IsZero() && rhs != 0)
-			return true;
-		if(this->IsZero() && rhs == 0)
-			return false;
-		return (*this) != TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator>=(const double rhs) const
-	{
-		if(this->IsZero() && rhs == 0)
-			return true;
-		if(this->IsZero() && rhs < 0)
-			return true;
-		if(this->IsZero() && rhs > 0)
-			return false;
-		return (*this) >= TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator<=(const double rhs) const
-	{
-		if(rhs == 0 && this->IsZero())
-			return true;
-		if(rhs > 0 && this->IsZero())
-			return true;
-		if(rhs < 0 && this->IsZero())
-			return false;
-		return (*this) <= TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator> (const double rhs) const
-	{
-		if(rhs < 0 && this->IsZero())
-			return true;
-		if(rhs > 0 && this->IsZero())
-			return false;
-		return (*this) > TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator< (const double rhs) const
-	{
-		if(rhs > 0 && this->IsZero())
-			return true;
-		if(rhs < 0 && this->IsZero())
-			return false;
-		return (*this) < TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator==(const u64_t rhs) const
-	{
-		if(rhs == 0 && this->IsZero())
-			return true;
-		if(rhs != 0 && this->IsZero())
-			return false;
-		return (*this) == TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator!=(const u64_t rhs) const
-	{
-		if(rhs != 0 && this->IsZero())
-			return true;
-		if(rhs == 0 && this->IsZero())
-			return false;
-		return (*this) != TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator>=(const u64_t rhs) const
-	{
-		if(this->IsZero() && rhs == 0)
-			return true;
-		if(this->IsZero() && rhs > 0)
-			return false;
-		return (*this) >= TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator<=(const u64_t rhs) const
-	{
-		if(rhs == 0 && this->IsZero())
-			return true;
-		if(rhs > 0 && this->IsZero())
-			return true;
-		return (*this) <= TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator> (const u64_t rhs) const
-	{
-		if(rhs > 0 && this->IsZero())
-			return false;
-		return (*this) > TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator< (const u64_t rhs) const
-	{
-		if(rhs > 0 && this->IsZero())
-			return true;
-		return (*this) < TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator==(const s64_t rhs) const
-	{
-		if(this->IsZero() && rhs == 0)
-			return true;
-		if(this->IsZero() && rhs != 0)
-			return false;
-		return (*this) == TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator!=(const s64_t rhs) const
-	{
-		if(rhs != 0 && this->IsZero())
-			return true;
-		if(rhs == 0 && this->IsZero())
-			return false;
-		return (*this) != TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator>=(const s64_t rhs) const
-	{
-		if(this->IsZero() && rhs == 0)
-			return true;
-		if(this->IsZero() && rhs < 0)
-			return true;
-		if(this->IsZero() && rhs > 0)
-			return false;
-		return (*this) >= TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator<=(const s64_t rhs) const
-	{
-		if(rhs == 0 && this->IsZero())
-			return true;
-		if(rhs > 0 && this->IsZero())
-			return true;
-		if(rhs < 0 && this->IsZero())
-			return false;
-		return (*this) <= TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator> (const s64_t rhs) const
-	{
-		if(rhs < 0 && this->IsZero())
-			return true;
-		if(rhs > 0 && this->IsZero())
-			return false;
-		return (*this) > TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator< (const s64_t rhs) const
-	{
-		if(rhs > 0 && this->IsZero())
-			return true;
-		if(rhs < 0 && this->IsZero())
-			return false;
-		return (*this) < TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator==(const int rhs) const
-	{
-		if(this->IsZero() && rhs == 0)
-			return true;
-		if(this->IsZero() && rhs != 0)
-			return false;
-		return (*this) == TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator!=(const int rhs) const
-	{
-		if(rhs != 0 && this->IsZero())
-			return true;
-		if(rhs == 0 && this->IsZero())
-			return false;
-		return (*this) != TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator>=(const int rhs) const
-	{
-		if(this->IsZero() && rhs == 0)
-			return true;
-		if(this->IsZero() && rhs < 0)
-			return true;
-		if(this->IsZero() && rhs > 0)
-			return false;
-		return (*this) >= TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator<=(const int rhs) const
-	{
-		if(rhs == 0 && this->IsZero())
-			return true;
-		if(rhs > 0 && this->IsZero())
-			return true;
-		if(rhs < 0 && this->IsZero())
-			return false;
-		return (*this) <= TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator> (const int rhs) const
-	{
-		if(rhs < 0 && this->IsZero())
-			return true;
-		if(rhs > 0 && this->IsZero())
-			return false;
-		return (*this) > TBCD(rhs, *this);
-	}
-
-	bool TBCD::operator< (const int rhs) const
-	{
-		if(rhs > 0 && this->IsZero())
-			return true;
-		if(rhs < 0 && this->IsZero())
-			return false;
-		return (*this) < TBCD(rhs, *this);
-	}
-
-	TBCD::operator double() const
-	{
-		return this->ToDouble();
-	}
-
-	TBCD::operator s64_t() const
-	{
-		return this->ToSignedInt();
-	}
-
-	TBCD::operator u64_t() const
-	{
-		return this->ToUnsignedInt();
-	}
-
-	TBCD TBCD::FromString(const text::string::TString& str, const text::string::TString& symbols, const text::encoding::TUTF32 decimal_seperator, const text::encoding::TUTF32 negative_symbol, const text::encoding::TUTF32 positive_symbol, const bool default_negative)
+	TBCD& TBCD::operator+=(const double rhs) { return (*this) += TBCD(rhs, *this); }
+	TBCD& TBCD::operator-=(const double rhs) { return (*this) -= TBCD(rhs, *this); }
+	TBCD& TBCD::operator*=(const double rhs) { return (*this) *= TBCD(rhs, *this); }
+	TBCD& TBCD::operator/=(const double rhs) { return (*this) /= TBCD(rhs, *this); }
+	TBCD& TBCD::operator%=(const double rhs) { return (*this) %= TBCD(rhs, *this); }
+	TBCD& TBCD::operator+=(const u64_t rhs) { return (*this) += TBCD(rhs, *this); }
+	TBCD& TBCD::operator-=(const u64_t rhs) { return (*this) -= TBCD(rhs, *this); }
+	TBCD& TBCD::operator*=(const u64_t rhs) { return (*this) *= TBCD(rhs, *this); }
+	TBCD& TBCD::operator/=(const u64_t rhs) { return (*this) /= TBCD(rhs, *this); }
+	TBCD& TBCD::operator%=(const u64_t rhs) { return (*this) %= TBCD(rhs, *this); }
+	TBCD& TBCD::operator+=(const s64_t rhs) { return (*this) += TBCD(rhs, *this); }
+	TBCD& TBCD::operator-=(const s64_t rhs) { return (*this) -= TBCD(rhs, *this); }
+	TBCD& TBCD::operator*=(const s64_t rhs) { return (*this) *= TBCD(rhs, *this); }
+	TBCD& TBCD::operator/=(const s64_t rhs) { return (*this) /= TBCD(rhs, *this); }
+	TBCD& TBCD::operator%=(const s64_t rhs) { return (*this) %= TBCD(rhs, *this); }
+	TBCD& TBCD::operator+=(const int rhs) { return (*this) += TBCD(rhs, *this); }
+	TBCD& TBCD::operator-=(const int rhs) { return (*this) -= TBCD(rhs, *this); }
+	TBCD& TBCD::operator*=(const int rhs) { return (*this) *= TBCD(rhs, *this); }
+	TBCD& TBCD::operator/=(const int rhs) { return (*this) /= TBCD(rhs, *this); }
+	TBCD& TBCD::operator%=(const int rhs) { return (*this) %= TBCD(rhs, *this); }
+
+	TBCD TBCD::operator+(const TBCD& rhs) const { TBCD out(*this); out += rhs; return out; }
+	TBCD TBCD::operator-(const TBCD& rhs) const { TBCD out(*this); out -= rhs; return out; }
+	TBCD TBCD::operator*(const TBCD& rhs) const { TBCD out(*this); out *= rhs; return out; }
+	TBCD TBCD::operator/(const TBCD& rhs) const { TBCD out(*this); out /= rhs; return out; }
+	TBCD TBCD::operator%(const TBCD& rhs) const { TBCD out(*this); out %= rhs; return out; }
+	TBCD TBCD::operator+(const double rhs) const { return (*this) + TBCD(rhs, *this); }
+	TBCD TBCD::operator-(const double rhs) const { return (*this) - TBCD(rhs, *this); }
+	TBCD TBCD::operator*(const double rhs) const { return (*this) * TBCD(rhs, *this); }
+	TBCD TBCD::operator/(const double rhs) const { return (*this) / TBCD(rhs, *this); }
+	TBCD TBCD::operator%(const double rhs) const { return (*this) % TBCD(rhs, *this); }
+	TBCD TBCD::operator+(const u64_t rhs) const { return (*this) + TBCD(rhs, *this); }
+	TBCD TBCD::operator-(const u64_t rhs) const { return (*this) - TBCD(rhs, *this); }
+	TBCD TBCD::operator*(const u64_t rhs) const { return (*this) * TBCD(rhs, *this); }
+	TBCD TBCD::operator/(const u64_t rhs) const { return (*this) / TBCD(rhs, *this); }
+	TBCD TBCD::operator%(const u64_t rhs) const { return (*this) % TBCD(rhs, *this); }
+	TBCD TBCD::operator+(const s64_t rhs) const { return (*this) + TBCD(rhs, *this); }
+	TBCD TBCD::operator-(const s64_t rhs) const { return (*this) - TBCD(rhs, *this); }
+	TBCD TBCD::operator*(const s64_t rhs) const { return (*this) * TBCD(rhs, *this); }
+	TBCD TBCD::operator/(const s64_t rhs) const { return (*this) / TBCD(rhs, *this); }
+	TBCD TBCD::operator%(const s64_t rhs) const { return (*this) % TBCD(rhs, *this); }
+	TBCD TBCD::operator+(const int rhs) const { return (*this) + TBCD(rhs, *this); }
+	TBCD TBCD::operator-(const int rhs) const { return (*this) - TBCD(rhs, *this); }
+	TBCD TBCD::operator*(const int rhs) const { return (*this) * TBCD(rhs, *this); }
+	TBCD TBCD::operator/(const int rhs) const { return (*this) / TBCD(rhs, *this); }
+	TBCD TBCD::operator%(const int rhs) const { return (*this) % TBCD(rhs, *this); }
+
+	TBCD TBCD::operator<<(const unsigned n_shift) const { TBCD out(*this); out <<= n_shift; return out; }
+	TBCD TBCD::operator>>(const unsigned n_shift) const { TBCD out(*this); out >>= n_shift; return out; }
+
+	bool TBCD::operator==(const TBCD& rhs) const { return !IsNaN() && !rhs.IsNaN() && Compare(rhs) == 0; }
+	bool TBCD::operator!=(const TBCD& rhs) const { return IsNaN() || rhs.IsNaN() || Compare(rhs) != 0; }
+	bool TBCD::operator>=(const TBCD& rhs) const { return !IsNaN() && !rhs.IsNaN() && Compare(rhs) >= 0; }
+	bool TBCD::operator<=(const TBCD& rhs) const { return !IsNaN() && !rhs.IsNaN() && Compare(rhs) <= 0; }
+	bool TBCD::operator> (const TBCD& rhs) const { return !IsNaN() && !rhs.IsNaN() && Compare(rhs) > 0; }
+	bool TBCD::operator< (const TBCD& rhs) const { return !IsNaN() && !rhs.IsNaN() && Compare(rhs) < 0; }
+
+	bool TBCD::operator==(const double rhs) const { return CompareFloating(rhs) == 0; }
+	bool TBCD::operator!=(const double rhs) const { return CompareFloating(rhs) != 0; }
+	bool TBCD::operator>=(const double rhs) const { const int c = CompareFloating(rhs); return c != 2 && c >= 0; }
+	bool TBCD::operator<=(const double rhs) const { const int c = CompareFloating(rhs); return c != 2 && c <= 0; }
+	bool TBCD::operator> (const double rhs) const { return CompareFloating(rhs) == 1; }
+	bool TBCD::operator< (const double rhs) const { return CompareFloating(rhs) == -1; }
+
+	bool TBCD::operator==(const u64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) == 0; }
+	bool TBCD::operator!=(const u64_t rhs) const { return IsNaN() || Compare(TBCD(rhs, base)) != 0; }
+	bool TBCD::operator>=(const u64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) >= 0; }
+	bool TBCD::operator<=(const u64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) <= 0; }
+	bool TBCD::operator> (const u64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) > 0; }
+	bool TBCD::operator< (const u64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) < 0; }
+	bool TBCD::operator==(const s64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) == 0; }
+	bool TBCD::operator!=(const s64_t rhs) const { return IsNaN() || Compare(TBCD(rhs, base)) != 0; }
+	bool TBCD::operator>=(const s64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) >= 0; }
+	bool TBCD::operator<=(const s64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) <= 0; }
+	bool TBCD::operator> (const s64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) > 0; }
+	bool TBCD::operator< (const s64_t rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) < 0; }
+	bool TBCD::operator==(const int rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) == 0; }
+	bool TBCD::operator!=(const int rhs) const { return IsNaN() || Compare(TBCD(rhs, base)) != 0; }
+	bool TBCD::operator>=(const int rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) >= 0; }
+	bool TBCD::operator<=(const int rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) <= 0; }
+	bool TBCD::operator> (const int rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) > 0; }
+	bool TBCD::operator< (const int rhs) const { return !IsNaN() && Compare(TBCD(rhs, base)) < 0; }
+
+	TBCD::operator double() const { return ToDouble(); }
+	TBCD::operator s64_t() const { return ToSignedInt(); }
+	TBCD::operator u64_t() const { return ToUnsignedInt(); }
+
+	TBCD TBCD::FromString(const text::string::TStringView str, const text::string::TStringView symbols, const text::encoding::TUTF32 decimal_seperator, const text::encoding::TUTF32 negative_symbol, const text::encoding::TUTF32 positive_symbol, const bool default_negative)
 	{
 		if(str.Length() == 0)
 			return INVALID;
-		EL_ERROR(symbols.Length() > 254, TInvalidArgumentException, "symbols", "only up to 254 symbols are supported");
-		EL_ERROR(symbols.chars.Contains(decimal_seperator), TInvalidArgumentException, "symbols", "symbols must not include the decimal seperator character");
 
-		usys_t value;
-		usys_t pos_dec = str.chars.FindFirst(decimal_seperator);
+		EL_ERROR(symbols.Length() < 2 || symbols.Length() > 256, TInvalidArgumentException, "symbols", "between 2 and 256 numeric symbols are required");
+		EL_ERROR(symbols.Contains(decimal_seperator), TInvalidArgumentException, "symbols", "symbols must not include the decimal separator");
+		EL_ERROR(symbols.Contains(negative_symbol), TInvalidArgumentException, "symbols", "symbols must not include the negative sign");
+		EL_ERROR(symbols.Contains(positive_symbol), TInvalidArgumentException, "symbols", "symbols must not include the positive sign");
+		EL_ERROR(decimal_seperator == negative_symbol || decimal_seperator == positive_symbol || negative_symbol == positive_symbol, TInvalidArgumentException, "symbols", "separator and sign characters must be distinct");
 
-		usys_t i,n;
-		bool is_negative;
+		for(usys_t i = 0; i < symbols.Length(); i++)
+			for(usys_t j = i + 1U; j < symbols.Length(); j++)
+				EL_ERROR(symbols[i] == symbols[j], TInvalidArgumentException, "symbols", "numeric symbols must be unique");
 
-		if(str.chars[0] == negative_symbol || str.chars[0] == positive_symbol)
+		usys_t begin = 0;
+		usys_t end = str.Length();
+		bool negative = default_negative;
+		const bool sign_front = str[0] == negative_symbol || str[0] == positive_symbol;
+		const bool sign_back = str[str.Length() - 1U] == negative_symbol || str[str.Length() - 1U] == positive_symbol;
+		EL_ERROR(sign_front && sign_back && str.Length() > 1, TInvalidArgumentException, "str", "numeric string contains multiple sign characters");
+
+		if(sign_front)
 		{
-			is_negative = str.chars[0] == negative_symbol;
-			i = 1;
-			n = str.chars.Count() - 1;
+			negative = str[0] == negative_symbol;
+			begin++;
 		}
-		else if(str.chars[-1] == negative_symbol || str.chars[-1] == positive_symbol)
+		else if(sign_back)
 		{
-			is_negative = str.chars[-1] == negative_symbol;
-			i = 0;
-			n = str.chars.Count() - 1;
+			negative = str[str.Length() - 1U] == negative_symbol;
+			end--;
+		}
+
+		EL_ERROR(begin >= end, TInvalidArgumentException, "str", "numeric string contains no digits");
+
+		usys_t decimal = NEG1;
+		unsigned n_digits = 0;
+		for(usys_t i = begin; i < end; i++)
+		{
+			if(str[i] == decimal_seperator)
+			{
+				EL_ERROR(decimal != NEG1, TInvalidArgumentException, "str", "numeric string contains multiple decimal separators");
+				decimal = i;
+			}
+			else
+			{
+				n_digits++;
+			}
+		}
+		EL_ERROR(n_digits == 0, TInvalidArgumentException, "str", "numeric string contains no digits");
+
+		const usys_t n_decimal_digits = decimal == NEG1 ? 0U : decimal - begin;
+		const usys_t n_integer_digits = n_digits - n_decimal_digits;
+		const digit_t base = symbols.Length() == 256U ? 0 : (digit_t)symbols.Length();
+		TBCD result(0, base, n_integer_digits, n_decimal_digits);
+		result.EnsureDigits();
+		usys_t output = 0;
+		for(usys_t i = begin; i < end; i++)
+		{
+			if(str[i] == decimal_seperator)
+				continue;
+			const usys_t value = symbols.Find(str[i]);
+			EL_ERROR(value == NEG1, TInvalidArgumentException, "str", "numeric string contains a character not present in symbols");
+			result.DigitsPointer()[output++] = (digit_t)value;
+			if(value != 0)
+				result.is_zero = 0;
+		}
+		result.is_negative = negative;
+		return result;
+	}
+
+	TBCD TBCD::Random(const digit_t base, const usys_t n_integer, const usys_t n_decimal)
+	{
+		EL_ERROR(base == 1, TInvalidArgumentException, "base", "base 1 is reserved for invalid values");
+		TBCD result(0, base, n_integer, n_decimal);
+		const usys_t n_digits = n_integer + n_decimal;
+		if(n_digits == 0)
+			return result;
+
+		result.EnsureDigits();
+		auto& rng = system::random::TSystemRandom::Instance();
+		digit_t* const digits = result.DigitsPointer();
+		const unsigned radix = result.Radix();
+		if(radix == 256U)
+		{
+			rng.ReadAll(digits, n_digits);
 		}
 		else
 		{
-			is_negative = default_negative;
-			i = 0;
-			n = str.chars.Count();
-		}
-
-		TBCD bcd(0, symbols.Length(), i + n - (pos_dec == NEG1 ? 0 : pos_dec + 1), (pos_dec == NEG1 ? 0 : pos_dec - i));
-		digit_t* d = bcd.DigitsPointer();
-
-		for(; i < n; i++)
-		{
-			auto chr = str.chars[i];
-			if(chr != decimal_seperator)
+			digit_t random_bytes[64];
+			usys_t random_pos = sizeof(random_bytes);
+			const unsigned limit = 256U - (256U % radix);
+			for(usys_t i = 0; i < n_digits; i++)
 			{
-				EL_ERROR((value = symbols.chars.FindFirst(chr)) == NEG1, TException, TString::Format("unknown character %q in numeric string %q; known numeric symbols are %q", chr, str, symbols));
-				if(value != 0)
-					bcd.is_zero = 0;
-				*d = (digit_t)value;
-				d++;
+				digit_t random_byte;
+				do
+				{
+					if(random_pos == sizeof(random_bytes))
+					{
+						rng.ReadAll(random_bytes, sizeof(random_bytes));
+						random_pos = 0;
+					}
+					random_byte = random_bytes[random_pos++];
+				}
+				while((unsigned)random_byte >= limit);
+				digits[i] = (digit_t)((unsigned)random_byte % radix);
 			}
 		}
 
-		bcd.IsNegative(is_negative);
-		return bcd;
+		result.is_zero = 0;
+		(void)result.IsZero();
+		return result;
 	}
 
 	TBCD::TBCD() : TBCD(0, 1, 0, 0) {}

@@ -10,7 +10,7 @@ namespace el1::dev::gcode::grbl
 	{
 	}
 
-	TDecimal::TDecimal(int v) : TBCD(v, 10, N_INTEGER, N_DECIMAL)
+	TDecimal::TDecimal(int v) : TBase(v)
 	{
 	}
 
@@ -19,7 +19,7 @@ namespace el1::dev::gcode::grbl
 		try
 		{
 			str.Reverse();
-			*this = TBCD::FromString(str, DECIMAL_SYMBOLS, '.', '-', '+', false);
+			TBase::operator=(TBCD::FromString(str, DECIMAL_SYMBOLS, '.', '-', '+', false));
 		}
 		catch(const IException& e)
 		{
@@ -33,7 +33,7 @@ namespace el1::dev::gcode::grbl
 
 	TDecimalVector::TDecimalVector(const EUnit unit, const char* const keys, TArgumentMap& args)
 	{
-		static const auto inch_mul = TBCD(25.4, 10, N_INTEGER, N_DECIMAL);
+		static const TDecimal::TBase inch_mul(25.4);
 		for(unsigned i = 0; keys[i] != 0; i++)
 		{
 			TDecimal* const a = args.Get(keys[i]);
