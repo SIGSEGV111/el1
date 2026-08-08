@@ -99,6 +99,7 @@ namespace el1::io::net::tls
 		};
 
 		std::unique_ptr<ip::TTcpClient> tcp_client;
+		SSL_CTX* owned_ssl_context;
 		SSL* ssl;
 		const TInputWaitable on_input_ready;
 		byte_t write_buffer[WRITE_BUFFER_SIZE];
@@ -110,8 +111,9 @@ namespace el1::io::net::tls
 		bool output_closed;
 		bool closed;
 
-		data_t(void* const ssl_context, std::unique_ptr<ip::TTcpClient> tcp_client) :
+		data_t(SSL_CTX* const ssl_context, std::unique_ptr<ip::TTcpClient> tcp_client, const bool server_mode, SSL_CTX* const owned_ssl_context = nullptr) :
 			tcp_client(std::move(tcp_client)),
+			owned_ssl_context(owned_ssl_context),
 			ssl(nullptr),
 			on_input_ready(this),
 			write_offset(0),
@@ -134,7 +136,11 @@ namespace el1::io::net::tls
 				EL_THROW(TTlsException, msg);
 			}
 
-			SSL_set_accept_state(ssl);
+			if(server_mode)
+				SSL_set_accept_state(ssl);
+			else
+				SSL_set_connect_state(ssl);
+
 			SSL_set_mode(ssl, SSL_MODE_ENABLE_PARTIAL_WRITE);
 		}
 
@@ -142,6 +148,8 @@ namespace el1::io::net::tls
 		{
 			if(ssl != nullptr)
 				SSL_free(ssl);
+			if(owned_ssl_context != nullptr)
+				SSL_CTX_free(owned_ssl_context);
 		}
 
 		const IWaitable* Waitable(const EWaitDirection direction) const
@@ -206,8 +214,57 @@ namespace el1::io::net::tls
 	}
 
 	TClient::TClient(void* const ssl_context, std::unique_ptr<ip::TTcpClient> tcp_client) :
-		data(new data_t(ssl_context, std::move(tcp_client)))
+		data(new data_t(static_cast<SSL_CTX*>(ssl_context), std::move(tcp_client), true))
 	{
+	}
+
+	TClient::TClient(TString remote_host, const ip::port_t remote_port, client_config_t config)
+	{
+		if(config.server_name.Length() == 0)
+			config.server_name = remote_host;
+
+		ERR_clear_error();
+		SSL_CTX* const context = SSL_CTX_new(TLS_client_method());
+		EL_ERROR(context == nullptr, TTlsException, OpenSslError("SSL_CTX_new() failed"));
+
+		try
+		{
+			EL_ERROR(SSL_CTX_set_min_proto_version(context, NativeVersion(config.min_version)) != 1, TTlsException, OpenSslError("SSL_CTX_set_min_proto_version() failed"));
+			SSL_CTX_set_options(context, SSL_OP_NO_COMPRESSION);
+
+			if(config.verify_peer)
+			{
+				SSL_CTX_set_verify(context, SSL_VERIFY_PEER, nullptr);
+
+				if(config.ca_file.Length() == 0)
+				{
+					EL_ERROR(SSL_CTX_set_default_verify_paths(context) != 1, TTlsException, OpenSslError("failed to load default CA paths"));
+				}
+				else
+				{
+					auto ca_file = config.ca_file.MakeCStr();
+					EL_ERROR(SSL_CTX_load_verify_locations(context, ca_file.get(), nullptr) != 1, TTlsException, OpenSslError("failed to load CA file"));
+				}
+			}
+			else
+			{
+				SSL_CTX_set_verify(context, SSL_VERIFY_NONE, nullptr);
+			}
+
+			auto tcp_client = std::unique_ptr<ip::TTcpClient>(new ip::TTcpClient(remote_host, remote_port));
+			data.reset(new data_t(context, std::move(tcp_client), false, context));
+
+			auto server_name = config.server_name.MakeCStr();
+			EL_ERROR(SSL_set_tlsext_host_name(data->ssl, server_name.get()) != 1, TTlsException, OpenSslError("failed to set TLS SNI hostname"));
+			if(config.verify_peer)
+				EL_ERROR(SSL_set1_host(data->ssl, server_name.get()) != 1, TTlsException, OpenSslError("failed to configure TLS hostname verification"));
+		}
+		catch(...)
+		{
+			if(data == nullptr)
+				SSL_CTX_free(context);
+			throw;
+		}
 	}
 
 	TClient::TClient(TClient&&) noexcept = default;

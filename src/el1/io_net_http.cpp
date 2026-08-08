@@ -3,6 +3,9 @@
 #include "io_bcd.hpp"
 #include "io_text_encoding_utf8.hpp"
 
+#include <stdio.h>
+#include <string.h>
+
 #define IF_DEBUG_PRINTF(...) if(EL_UNLIKELY(DEBUG)) fprintf(stderr, __VA_ARGS__)
 
 namespace el1::io::net::http
@@ -90,6 +93,218 @@ namespace el1::io::net::http
 		EL_THROW(TException, "unsupported status code");
 	}
 
+	static const char* MethodToString(const EMethod method)
+	{
+		switch(method)
+		{
+			case EMethod::GET: return "GET";
+			case EMethod::POST: return "POST";
+			case EMethod::HEAD: return "HEAD";
+			case EMethod::PUT: return "PUT";
+			case EMethod::PATCH: return "PATCH";
+			case EMethod::DELETE: return "DELETE";
+			case EMethod::TRACE: return "TRACE";
+			case EMethod::OPTIONS: return "OPTIONS";
+			case EMethod::CONNECT: return "CONNECT";
+		}
+
+		EL_THROW(TLogicException);
+	}
+
+	static bool HeaderNameEquals(const TString& a, const TString& b)
+	{
+		TString aa = a;
+		TString bb = b;
+		aa.ToLower();
+		bb.ToLower();
+		return aa == bb;
+	}
+
+	static TString* FindHeaderField(THttpHeaderFields& fields, const TString& name)
+	{
+		for(auto& field : fields.Items())
+			if(HeaderNameEquals(field.key, name))
+				return &field.value;
+		return nullptr;
+	}
+
+	static const TString* FindHeaderField(const THttpHeaderFields& fields, const TString& name)
+	{
+		for(const auto& field : fields.Items())
+			if(HeaderNameEquals(field.key, name))
+				return &field.value;
+		return nullptr;
+	}
+
+	static void SetHeaderField(THttpHeaderFields& fields, TString name, TString value)
+	{
+		for(auto& field : fields.Items())
+			if(HeaderNameEquals(field.key, name))
+			{
+				field.value = std::move(value);
+				return;
+			}
+
+		fields.Add(std::move(name), std::move(value));
+	}
+
+	static bool RemoveHeaderField(THttpHeaderFields& fields, const TString& name)
+	{
+		for(usys_t i = 0; i < fields.Items().Count(); i++)
+			if(HeaderNameEquals(fields.Items()[i].key, name))
+			{
+				const TString key = fields.Items()[i].key;
+				fields.Remove(key);
+				return true;
+			}
+		return false;
+	}
+
+	static bool IsHeaderNameChar(const TUTF32 chr)
+	{
+		if(chr.code <= 0x20 || chr.code >= 0x7f)
+			return false;
+
+		switch(chr.code)
+		{
+			case '(': case ')': case '<': case '>': case '@':
+			case ',': case ';': case ':': case '\\': case '"':
+			case '/': case '[': case ']': case '?': case '=':
+			case '{': case '}':
+				return false;
+		}
+		return true;
+	}
+
+	static void ValidateHeaderField(const TString& name, const TString& value)
+	{
+		EL_ERROR(name.Length() == 0, TInvalidArgumentException, "header name", "HTTP header name must not be empty");
+		for(const TUTF32 chr : name.chars)
+			EL_ERROR(!IsHeaderNameChar(chr), TInvalidArgumentException, "header name", "HTTP header name contains an invalid character");
+
+		for(const TUTF32 chr : value.chars)
+			EL_ERROR(chr.code == '\r' || chr.code == '\n' || chr.code == 0, TInvalidArgumentException, "header value", "HTTP header value contains CR, LF or NUL");
+	}
+
+	static void ValidateRequestTarget(const TString& target)
+	{
+		EL_ERROR(target.Length() == 0, TInvalidArgumentException, "url", "request URL must not be empty");
+		for(const TUTF32 chr : target.chars)
+			EL_ERROR(chr.code <= 0x20 || chr.code == 0x7f, TInvalidArgumentException, "url", "HTTP request target contains whitespace or a control character");
+	}
+
+	static bool HeaderHasToken(const TString& value, TString token)
+	{
+		token.ToLower();
+		for(TString item : value.Split(','))
+		{
+			item.Trim();
+			item.ToLower();
+			if(item == token)
+				return true;
+		}
+		return false;
+	}
+
+	static void WriteString(ISink<byte_t>& sink, const TString& str)
+	{
+		auto cstr = str.MakeCStr();
+		sink.WriteAll(reinterpret_cast<const byte_t*>(cstr.get()), strlen(cstr.get()));
+	}
+
+	static bool ReadByteBlocking(ISource<byte_t>& source, byte_t& byte)
+	{
+		for(;;)
+		{
+			if(source.Read(&byte, 1) == 1)
+				return true;
+
+			const IWaitable* const waitable = source.OnInputReady();
+			if(waitable == nullptr)
+				return false;
+			waitable->WaitFor();
+		}
+	}
+
+	static bool ReadHttpLine(ISource<byte_t>& source, TString& line, const usys_t limit = HEADER_CHAR_LIMIT)
+	{
+		line.chars.Clear();
+		for(;;)
+		{
+			byte_t byte = 0;
+			if(!ReadByteBlocking(source, byte))
+				return line.Length() != 0;
+
+			if(byte == '\n')
+			{
+				if(line.Length() != 0 && line[-1] == '\r')
+					line.Cut(0, 1);
+				return true;
+			}
+
+			EL_ERROR(line.Length() >= limit, TException, "HTTP line exceeds configured limit");
+			line += TUTF32((u32_t)byte);
+		}
+	}
+
+	static usys_t ReadSomeBlocking(ISource<byte_t>& source, byte_t* const buffer, const usys_t size)
+	{
+		for(;;)
+		{
+			const usys_t n = source.Read(buffer, size);
+			if(n != 0)
+				return n;
+
+			const IWaitable* const waitable = source.OnInputReady();
+			if(waitable == nullptr)
+				return 0;
+			waitable->WaitFor();
+		}
+	}
+
+	static void PumpExactBlocking(ISource<byte_t>& source, ISink<byte_t>& sink, usys_t count)
+	{
+		byte_t buffer[16U * 1024U];
+		while(count != 0)
+		{
+			const usys_t n_want = util::Min<usys_t>(count, sizeof(buffer));
+			const usys_t n = ReadSomeBlocking(source, buffer, n_want);
+			EL_ERROR(n == 0, TStreamDryException);
+			sink.WriteAll(buffer, n);
+			count -= n;
+		}
+	}
+
+	static void PumpUntilEofBlocking(ISource<byte_t>& source, ISink<byte_t>& sink)
+	{
+		byte_t buffer[16U * 1024U];
+		for(;;)
+		{
+			const usys_t n = ReadSomeBlocking(source, buffer, sizeof(buffer));
+			if(n == 0)
+				break;
+			sink.WriteAll(buffer, n);
+		}
+	}
+
+	static usys_t ParseHex(const TString& str)
+	{
+		EL_ERROR(str.Length() == 0, TException, "empty HTTP chunk size");
+		usys_t value = 0;
+		for(usys_t i = 0; i < str.Length(); i++)
+		{
+			const TUTF32 chr = str[i];
+			u8_t digit;
+			if(chr >= '0' && chr <= '9') digit = chr.code - '0';
+			else if(chr >= 'a' && chr <= 'f') digit = chr.code - 'a' + 10;
+			else if(chr >= 'A' && chr <= 'F') digit = chr.code - 'A' + 10;
+			else EL_THROW(TException, "invalid HTTP chunk size");
+			EL_ERROR(value > (NEG1 - digit) / 16U, TException, "HTTP chunk size overflow");
+			value = value * 16U + digit;
+		}
+		return value;
+	}
+
 	static void SendResponse(ISink<byte_t>& sink, THttpServer::response_t& response)
 	{
 		const char* const str_version = VersionToString(response.version);
@@ -133,18 +348,18 @@ namespace el1::io::net::http
 
 	usys_t THttpHeaderFields::ContentLength() const
 	{
-		const TString* v = this->Get(L"content-length");
-		if(v == nullptr)
-			v = this->Get(L"Content-Length");
-		if(v == nullptr)
+		const TString* const value = FindHeaderField(*this, L"Content-Length");
+		if(value == nullptr)
 			return NEG1;
-		else
-			return v->ToInteger();
+
+		const s64_t length = value->ToInteger();
+		EL_ERROR(length < 0, TException, "negative HTTP Content-Length");
+		return (usys_t)length;
 	}
 
 	void THttpHeaderFields::ContentLength(const usys_t new_content_length)
 	{
-		this->Set(L"Content-Length", TString::Format("%d", new_content_length));
+		SetHeaderField(*this, L"Content-Length", TString::Format("%d", new_content_length));
 	}
 
 	EStatus THttpServer::HandleSingleRequest(ISource<byte_t>& source, ISink<byte_t>& sink, request_handler_t handler, const ipport_t remote_address)
@@ -389,6 +604,545 @@ namespace el1::io::net::http
 	{
 		IF_DEBUG_PRINTF("THttpServer destructor\n");
 	}
+
+	static void WriteChunkedBody(ISource<byte_t>& source, ISink<byte_t>& sink)
+	{
+		byte_t buffer[16U * 1024U];
+		for(;;)
+		{
+			const usys_t n = ReadSomeBlocking(source, buffer, sizeof(buffer));
+			if(n == 0)
+				break;
+
+			char chunk_header[32];
+			const int n_header = snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", (size_t)n);
+			EL_ERROR(n_header <= 0 || (usys_t)n_header >= sizeof(chunk_header), TLogicException);
+			sink.WriteAll(reinterpret_cast<const byte_t*>(chunk_header), n_header);
+			sink.WriteAll(buffer, n);
+			sink.WriteAll(reinterpret_cast<const byte_t*>("\r\n"), 2);
+		}
+
+		sink.WriteAll(reinterpret_cast<const byte_t*>("0\r\n\r\n"), 5);
+	}
+
+	static void AddResponseHeader(THttpClient::response_t& response, TString name, TString value)
+	{
+		response.header_lines.Append({ name, value });
+		TString* const existing = FindHeaderField(response.header_fields, name);
+		if(existing == nullptr)
+		{
+			response.header_fields.Add(std::move(name), std::move(value));
+		}
+		else if(!HeaderNameEquals(name, L"set-cookie"))
+		{
+			*existing += L", ";
+			*existing += value;
+		}
+	}
+
+	static void ParseHeaderLine(const TString& line, TString& name, TString& value)
+	{
+		const usys_t pos_colon = line.Find(':');
+		EL_ERROR(pos_colon == NEG1 || pos_colon == 0, TException, "invalid HTTP header line");
+		name = line.SliceBE(0, pos_colon);
+		value = line.SliceSL(pos_colon + 1);
+		name.Trim();
+		value.Trim();
+		EL_ERROR(name.Length() == 0, TException, "empty HTTP header name");
+	}
+
+	static void ReadChunkedBody(ISource<byte_t>& source, ISink<byte_t>& sink, THttpClient::response_t& response)
+	{
+		for(;;)
+		{
+			TString line;
+			EL_ERROR(!ReadHttpLine(source, line), TStreamDryException);
+			const usys_t pos_extension = line.Find(';');
+			TString str_size = pos_extension == NEG1 ? line : line.SliceBE(0, pos_extension);
+			str_size.Trim();
+			const usys_t chunk_size = ParseHex(str_size);
+
+			if(chunk_size == 0)
+			{
+				for(;;)
+				{
+					EL_ERROR(!ReadHttpLine(source, line), TStreamDryException);
+					if(line.Length() == 0)
+						return;
+
+					TString name;
+					TString value;
+					ParseHeaderLine(line, name, value);
+					AddResponseHeader(response, std::move(name), std::move(value));
+				}
+			}
+
+			PumpExactBlocking(source, sink, chunk_size);
+			byte_t terminator[2];
+			source.ReadAll(terminator, 2);
+			EL_ERROR(terminator[0] != '\r' || terminator[1] != '\n', TException, "invalid HTTP chunk terminator");
+		}
+	}
+
+	static TString RequestPath(const TString& url)
+	{
+		const usys_t pos_query = url.Find('?');
+		TString path = pos_query == NEG1 ? url : url.SliceBE(0, pos_query);
+		if(path.Length() == 0 || path[0] != '/')
+			return L"/";
+		return path;
+	}
+
+	static TString DefaultCookiePath(const TString& request_path)
+	{
+		if(request_path.Length() == 0 || request_path[0] != '/')
+			return L"/";
+
+		const usys_t pos_slash = request_path.Find('/', -1, true);
+		if(pos_slash == NEG1 || pos_slash == 0)
+			return L"/";
+		return request_path.SliceBE(0, pos_slash);
+	}
+
+	static bool DomainMatches(TString host, TString domain)
+	{
+		host.ToLower();
+		domain.ToLower();
+		while(domain.Length() != 0 && domain[0] == '.')
+			domain.chars.Remove(0);
+
+		if(host == domain)
+			return true;
+		if(host.Length() <= domain.Length())
+			return false;
+
+		const usys_t offset = host.Length() - domain.Length();
+		return offset > 0 && host[offset - 1] == '.' && host.SliceSL(offset) == domain;
+	}
+
+	static s64_t DaysFromCivil(int year, const unsigned month, const unsigned day)
+	{
+		year -= month <= 2;
+		const int era = (year >= 0 ? year : year - 399) / 400;
+		const unsigned year_of_era = (unsigned)(year - era * 400);
+		const unsigned adjusted_month = month > 2 ? month - 3U : month + 9U;
+		const unsigned day_of_year = (153U * adjusted_month + 2U) / 5U + day - 1U;
+		const unsigned day_of_era = year_of_era * 365U + year_of_era / 4U - year_of_era / 100U + day_of_year;
+		return (s64_t)era * 146097 + (s64_t)day_of_era - 719468;
+	}
+
+	static bool AsciiEqualsIgnoreCase(const char* a, const char* b)
+	{
+		while(*a != '\0' && *b != '\0')
+		{
+			char ca = *a++;
+			char cb = *b++;
+			if(ca >= 'A' && ca <= 'Z')
+				ca = (char)(ca - 'A' + 'a');
+			if(cb >= 'A' && cb <= 'Z')
+				cb = (char)(cb - 'A' + 'a');
+			if(ca != cb)
+				return false;
+		}
+		return *a == *b;
+	}
+
+	static bool ParseCookieExpires(const TString& value, s64_t& unix_time)
+	{
+		auto cstr = value.MakeCStr();
+		char weekday[4] = {};
+		char month_name[4] = {};
+		char zone[8] = {};
+		int day = 0;
+		int year = 0;
+		int hour = 0;
+		int minute = 0;
+		int second = 0;
+		if(sscanf(cstr.get(), "%3[^,], %d %3s %d %d:%d:%d %7s", weekday, &day, month_name, &year, &hour, &minute, &second, zone) != 8)
+			return false;
+
+		static const char* const MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+		unsigned month = 0;
+		for(unsigned i = 0; i < 12; i++)
+			if(AsciiEqualsIgnoreCase(month_name, MONTHS[i]))
+			{
+				month = i + 1;
+				break;
+			}
+
+		if(month == 0 || day < 1 || day > 31 || year < 1601 || hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 60 || !AsciiEqualsIgnoreCase(zone, "GMT"))
+			return false;
+
+		unix_time = DaysFromCivil(year, month, (unsigned)day) * 86400 + hour * 3600 + minute * 60 + second;
+		return true;
+	}
+
+	static bool CookiePathMatches(const TString& request_path, const TString& cookie_path)
+	{
+		if(cookie_path == L"/")
+			return true;
+		if(!request_path.BeginsWith(cookie_path))
+			return false;
+		if(request_path.Length() == cookie_path.Length())
+			return true;
+		if(cookie_path.Length() != 0 && cookie_path[-1] == '/')
+			return true;
+		return request_path[cookie_path.Length()] == '/';
+	}
+
+	const TString* THttpClient::response_t::FindHeader(const TString& name) const
+	{
+		for(const auto& field : header_lines)
+			if(HeaderNameEquals(field.key, name))
+				return &field.value;
+		return nullptr;
+	}
+
+	TList<TString> THttpClient::response_t::FindHeaders(const TString& name) const
+	{
+		TList<TString> values;
+		for(const auto& field : header_lines)
+			if(HeaderNameEquals(field.key, name))
+				values.Append(field.value);
+		return values;
+	}
+
+	THttpClient::THttpClient(TString host, const port_t port) :
+		host(std::move(host)),
+		port(port),
+		use_tls(false)
+	{
+		EL_ERROR(this->host.Length() == 0, TInvalidArgumentException, "host", "host must not be empty");
+		EL_ERROR(port == 0, TInvalidArgumentException, "port", "port must not be zero");
+	}
+
+	THttpClient::THttpClient(TString host, const port_t port, tls::client_config_t tls_config) :
+		host(std::move(host)),
+		port(port),
+		use_tls(true),
+		tls_config(std::move(tls_config))
+	{
+		EL_ERROR(this->host.Length() == 0, TInvalidArgumentException, "host", "host must not be empty");
+		EL_ERROR(port == 0, TInvalidArgumentException, "port", "port must not be zero");
+	}
+
+	void THttpClient::Connect()
+	{
+		if(connection != nullptr)
+			return;
+
+		if(use_tls)
+			connection.reset(new tls::TClient(host, port, tls_config));
+		else
+			connection.reset(new TTcpClient(host, port));
+	}
+
+	void THttpClient::SetHeader(TString name, TString value)
+	{
+		ValidateHeaderField(name, value);
+		SetHeaderField(request_headers, std::move(name), std::move(value));
+	}
+
+	const TString* THttpClient::FindHeader(const TString& name) const
+	{
+		return FindHeaderField(request_headers, name);
+	}
+
+	bool THttpClient::RemoveHeader(const TString& name)
+	{
+		return RemoveHeaderField(request_headers, name);
+	}
+
+	void THttpClient::Close()
+	{
+		if(connection != nullptr)
+		{
+			connection->Close();
+			connection.reset();
+		}
+	}
+
+	void THttpClient::ProcessSetCookie(const TString& value, const TString& request_path)
+	{
+		TList<TString> parts = value.Split(';');
+		if(parts.Count() == 0)
+			return;
+
+		parts[0].Trim();
+		const usys_t pos_equals = parts[0].Find('=');
+		if(pos_equals == NEG1 || pos_equals == 0)
+			return;
+
+		cookie_t cookie;
+		cookie.name = parts[0].SliceBE(0, pos_equals);
+		cookie.value = parts[0].SliceSL(pos_equals + 1);
+		cookie.name.Trim();
+		cookie.value.Trim();
+		cookie.domain = host;
+		cookie.domain.ToLower();
+		cookie.path = DefaultCookiePath(request_path);
+
+		bool delete_cookie = false;
+		bool has_max_age = false;
+		for(usys_t i = 1; i < parts.Count(); i++)
+		{
+			parts[i].Trim();
+			if(parts[i].Length() == 0)
+				continue;
+
+			const usys_t pos_attr_equals = parts[i].Find('=');
+			TString attr_name = pos_attr_equals == NEG1 ? parts[i] : parts[i].SliceBE(0, pos_attr_equals);
+			TString attr_value = pos_attr_equals == NEG1 ? TString() : parts[i].SliceSL(pos_attr_equals + 1);
+			attr_name.Trim();
+			attr_name.ToLower();
+			attr_value.Trim();
+
+			if(attr_name == L"domain")
+			{
+				attr_value.ToLower();
+				while(attr_value.Length() != 0 && attr_value[0] == '.')
+					attr_value.chars.Remove(0);
+				if(attr_value.Length() == 0 || !DomainMatches(host, attr_value))
+					return;
+				cookie.domain = std::move(attr_value);
+				cookie.host_only = false;
+			}
+			else if(attr_name == L"path")
+			{
+				if(attr_value.Length() != 0 && attr_value[0] == '/')
+					cookie.path = std::move(attr_value);
+			}
+			else if(attr_name == L"max-age")
+			{
+				try
+				{
+					const s64_t seconds = attr_value.ToInteger();
+					has_max_age = true;
+					delete_cookie = seconds <= 0;
+					if(seconds > 0)
+						cookie.expires_unix = system::time::TTime::Now().Seconds() + seconds;
+				}
+				catch(const IException&)
+				{
+				}
+			}
+			else if(attr_name == L"expires" && !has_max_age)
+			{
+				s64_t expires_unix = -1;
+				if(ParseCookieExpires(attr_value, expires_unix))
+				{
+					cookie.expires_unix = expires_unix;
+					if(expires_unix <= system::time::TTime::Now().Seconds())
+						delete_cookie = true;
+				}
+			}
+			else if(attr_name == L"secure")
+			{
+				cookie.secure = true;
+			}
+			else if(attr_name == L"httponly")
+			{
+				cookie.http_only = true;
+			}
+		}
+
+		for(ssys_t i = cookies.Count() - 1; i >= 0; i--)
+			if(cookies[i].name == cookie.name && cookies[i].domain == cookie.domain && cookies[i].path == cookie.path)
+			{
+				cookies.Remove(i);
+				break;
+			}
+
+		if(!delete_cookie)
+			cookies.Append(std::move(cookie));
+	}
+
+	TString THttpClient::BuildCookieHeader(const TString& request_path)
+	{
+		const s64_t now = system::time::TTime::Now().Seconds();
+		TString result;
+
+		for(ssys_t i = cookies.Count() - 1; i >= 0; i--)
+			if(cookies[i].expires_unix >= 0 && cookies[i].expires_unix <= now)
+				cookies.Remove(i);
+
+		for(const cookie_t& cookie : cookies)
+		{
+			const bool domain_match = cookie.host_only ? HeaderNameEquals(host, cookie.domain) : DomainMatches(host, cookie.domain);
+			if(!domain_match || !CookiePathMatches(request_path, cookie.path) || (cookie.secure && !use_tls))
+				continue;
+
+			if(result.Length() != 0)
+				result += L"; ";
+			result += cookie.name;
+			result += L"=";
+			result += cookie.value;
+		}
+
+		return result;
+	}
+
+	THttpClient::response_t THttpClient::Get(TString url, ISink<byte_t>* const response_body_sink)
+	{
+		request_t request;
+		request.method = EMethod::GET;
+		request.url = std::move(url);
+		return Request(std::move(request), response_body_sink);
+	}
+
+	THttpClient::response_t THttpClient::Request(request_t request, ISink<byte_t>* const response_body_sink)
+	{
+		ValidateRequestTarget(request.url);
+		EL_ERROR(request.body == nullptr && request.content_length != 0, TInvalidArgumentException, "content_length", "non-zero content length requires a request body");
+
+		try
+		{
+			THttpHeaderFields headers = request_headers;
+			for(const auto& field : request.header_fields.Items())
+				SetHeaderField(headers, field.key, field.value);
+
+			if(FindHeaderField(headers, L"Host") == nullptr)
+			{
+				const bool default_port = (!use_tls && port == 80) || (use_tls && port == 443);
+				SetHeaderField(headers, L"Host", default_port ? host : TString::Format(L"%s:%d", host, port));
+			}
+
+			const TString request_path = RequestPath(request.url);
+			TString jar_cookie = BuildCookieHeader(request_path);
+			if(jar_cookie.Length() != 0)
+			{
+				TString* const explicit_cookie = FindHeaderField(headers, L"Cookie");
+				if(explicit_cookie != nullptr && explicit_cookie->Length() != 0)
+				{
+					jar_cookie += L"; ";
+					jar_cookie += *explicit_cookie;
+				}
+				SetHeaderField(headers, L"Cookie", std::move(jar_cookie));
+			}
+
+			if(request.body != nullptr)
+			{
+				if(request.content_length == NEG1)
+				{
+					RemoveHeaderField(headers, L"Content-Length");
+					SetHeaderField(headers, L"Transfer-Encoding", L"chunked");
+				}
+				else
+				{
+					RemoveHeaderField(headers, L"Transfer-Encoding");
+					SetHeaderField(headers, L"Content-Length", TString::Format(L"%d", request.content_length));
+				}
+			}
+
+			for(const auto& field : headers.Items())
+				ValidateHeaderField(field.key, field.value);
+
+			Connect();
+			connection->WriteAll(reinterpret_cast<const byte_t*>(MethodToString(request.method)), strlen(MethodToString(request.method)));
+			connection->WriteAll(reinterpret_cast<const byte_t*>(" "), 1);
+			WriteString(*connection, request.url);
+			connection->WriteAll(reinterpret_cast<const byte_t*>(" HTTP/1.1\r\n"), 11);
+
+			for(const auto& field : headers.Items())
+			{
+				WriteString(*connection, field.key);
+				connection->WriteAll(reinterpret_cast<const byte_t*>(": "), 2);
+				WriteString(*connection, field.value);
+				connection->WriteAll(reinterpret_cast<const byte_t*>("\r\n"), 2);
+			}
+			connection->WriteAll(reinterpret_cast<const byte_t*>("\r\n"), 2);
+
+			if(request.body != nullptr)
+			{
+				if(request.content_length == NEG1)
+					WriteChunkedBody(*request.body, *connection);
+				else
+					PumpExactBlocking(*request.body, *connection, request.content_length);
+			}
+			connection->Flush();
+
+			response_t response;
+			for(;;)
+			{
+				TString line;
+				EL_ERROR(!ReadHttpLine(*connection, line), TStreamDryException);
+				TList<TString> status_parts = line.Split(' ', 3);
+				EL_ERROR(status_parts.Count() < 2, TException, "invalid HTTP status line");
+				response.version = VersionFromString(status_parts[0]);
+				const s64_t status_code = status_parts[1].ToInteger();
+				EL_ERROR(status_code < 100 || status_code > 999, TException, "invalid HTTP status code");
+				response.status = static_cast<EStatus>((u16_t)status_code);
+				response.header_fields.Clear();
+				response.header_lines.Clear();
+
+				usys_t header_size = line.Length();
+				for(;;)
+				{
+					EL_ERROR(!ReadHttpLine(*connection, line), TStreamDryException);
+					if(line.Length() == 0)
+						break;
+					header_size += line.Length();
+					EL_ERROR(header_size > HEADER_CHAR_LIMIT, TException, "HTTP response header exceeds configured limit");
+
+					TString name;
+					TString value;
+					ParseHeaderLine(line, name, value);
+					AddResponseHeader(response, std::move(name), std::move(value));
+				}
+
+				if(status_code < 100 || status_code >= 200 || status_code == 101)
+					break;
+			}
+
+			for(const TString& set_cookie : response.FindHeaders(L"Set-Cookie"))
+				ProcessSetCookie(set_cookie, request_path);
+
+			TListSink<byte_t> buffer_sink(&response.body);
+			ISink<byte_t>* const body_sink = response_body_sink == nullptr ? static_cast<ISink<byte_t>*>(&buffer_sink) : response_body_sink;
+			const u16_t status_code = (u16_t)response.status;
+			const bool no_body = request.method == EMethod::HEAD || (status_code >= 100 && status_code < 200) || status_code == 204 || status_code == 304;
+			bool reusable = true;
+
+			if(!no_body)
+			{
+				const TString* const transfer_encoding = response.FindHeader(L"Transfer-Encoding");
+				const usys_t content_length = response.header_fields.ContentLength();
+				if(transfer_encoding != nullptr)
+				{
+					TString encoding = *transfer_encoding;
+					encoding.Trim();
+					encoding.ToLower();
+					EL_ERROR(encoding != L"chunked", TException, "unsupported HTTP transfer encoding");
+					ReadChunkedBody(*connection, *body_sink, response);
+				}
+				else if(content_length != NEG1)
+				{
+					PumpExactBlocking(*connection, *body_sink, content_length);
+				}
+				else
+				{
+					PumpUntilEofBlocking(*connection, *body_sink);
+					reusable = false;
+				}
+			}
+
+			const TString* const connection_header = response.FindHeader(L"Connection");
+			if(connection_header != nullptr && HeaderHasToken(*connection_header, L"close"))
+				reusable = false;
+			if(response.version == EVersion::HTTP10 && (connection_header == nullptr || !HeaderHasToken(*connection_header, L"keep-alive")))
+				reusable = false;
+
+			if(!reusable)
+				Close();
+			return response;
+		}
+		catch(...)
+		{
+			Close();
+			throw;
+		}
+	}
+
 
 	TString UrlDecode(TString url)
 	{

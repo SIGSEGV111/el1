@@ -10,6 +10,8 @@
 #include "system_waitable.hpp"
 #include "util_function.hpp"
 #include "io_net_ip.hpp"
+#include "io_net_tls.hpp"
+#include "system_time.hpp"
 
 #undef EOF
 #undef OK
@@ -125,6 +127,73 @@ namespace el1::io::net::http
 			THttpServer(ip::IStreamServer* const stream_server, request_handler_t handler);
 			THttpServer(ip::TTcpServer* const tcp_server, request_handler_t handler);
 			~THttpServer();
+	};
+
+	class THttpClient
+	{
+		public:
+			struct cookie_t
+			{
+				text::string::TString name;
+				text::string::TString value;
+				text::string::TString domain;
+				text::string::TString path;
+				s64_t expires_unix = -1;
+				bool secure = false;
+				bool http_only = false;
+				bool host_only = true;
+			};
+
+			struct request_t
+			{
+				EMethod method = EMethod::GET;
+				text::string::TString url = L"/";
+				THttpHeaderFields header_fields;
+				stream::ISource<byte_t>* body = nullptr;
+				usys_t content_length = 0;
+			};
+
+			struct response_t : response_meta_t
+			{
+				using header_line_t = kv_pair_tt<text::string::TString, text::string::TString>;
+
+				collection::list::TList<header_line_t> header_lines;
+				collection::list::TList<byte_t> body;
+
+				const text::string::TString* FindHeader(const text::string::TString& name) const EL_GETTER;
+				collection::list::TList<text::string::TString> FindHeaders(const text::string::TString& name) const EL_GETTER;
+			};
+
+		protected:
+			text::string::TString host;
+			ip::port_t port;
+			bool use_tls;
+			tls::client_config_t tls_config;
+			std::unique_ptr<ip::IStreamClient> connection;
+			collection::list::TList<cookie_t> cookies;
+
+			void Connect();
+			void ProcessSetCookie(const text::string::TString& value, const text::string::TString& request_path);
+			text::string::TString BuildCookieHeader(const text::string::TString& request_path);
+
+		public:
+			THttpHeaderFields request_headers;
+
+			THttpClient(text::string::TString host, const ip::port_t port = 80);
+			THttpClient(text::string::TString host, const ip::port_t port, tls::client_config_t tls_config);
+			THttpClient(THttpClient&&) noexcept = default;
+			THttpClient(const THttpClient&) = delete;
+
+			response_t Request(request_t request, stream::ISink<byte_t>* const response_body_sink = nullptr);
+			response_t Get(text::string::TString url, stream::ISink<byte_t>* const response_body_sink = nullptr);
+
+			void SetHeader(text::string::TString name, text::string::TString value);
+			const text::string::TString* FindHeader(const text::string::TString& name) const EL_GETTER;
+			bool RemoveHeader(const text::string::TString& name);
+
+			const collection::list::TList<cookie_t>& ListCookies() const EL_GETTER { return cookies; }
+			void ClearCookies() { cookies.Clear(); }
+			void Close();
 	};
 
 	text::string::TString UrlDecode(text::string::TString url);

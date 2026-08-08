@@ -100,6 +100,8 @@ namespace el1::io::net::ip
 	class IStreamClient : public stream::ISink<byte_t>, public stream::ISource<byte_t>
 	{
 		public:
+			virtual system::handle::handle_t Handle() override = 0;
+			virtual void Close() override = 0;
 			virtual ipport_t LocalAddress() const EL_GETTER = 0;
 			virtual ipport_t RemoteAddress() const EL_GETTER = 0;
 	};

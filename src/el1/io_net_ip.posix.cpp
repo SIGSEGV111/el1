@@ -251,8 +251,8 @@ namespace el1::io::net::ip
 		TList<ipaddr_t> addrs;
 
 		struct addrinfo* res = nullptr;
-		int status = 0;
-		EL_ERROR(status = getaddrinfo(hostname.MakeCStr().get(), nullptr, nullptr, &res) != 0, TException, gai_strerror(status));
+		const int status = getaddrinfo(hostname.MakeCStr().get(), nullptr, nullptr, &res);
+		EL_ERROR(status != 0, TException, gai_strerror(status));
 
 		try
 		{
@@ -296,10 +296,10 @@ namespace el1::io::net::ip
 		return this->remote_address;
 	}
 
-	// TTcpClient::TTcpClient(const io::text::string::TString remote_host, const port_t remote_port)
-	// {
-	// 	EL_NOT_IMPLEMENTED;
-	// }
+	TTcpClient::TTcpClient(const io::text::string::TString remote_host, const port_t remote_port) :
+		TTcpClient(ResolveHostname(remote_host)[0], remote_port)
+	{
+	}
 
 	TTcpClient::TTcpClient(const ipaddr_t remote_ip, const port_t remote_port) :
 		handle(CreateSocket(SOCK_STREAM, 0, remote_ip.Version())),
@@ -416,8 +416,8 @@ namespace el1::io::net::ip
 
 	void TTcpClient::Flush()
 	{
-		// set and reset TCP_NODELAY
-		EL_NOT_IMPLEMENTED;
+		// TCP has no userspace write buffer in this class. Successful write()
+		// calls have already handed all accepted bytes to the kernel.
 	}
 
 	/*********************************************************************************/

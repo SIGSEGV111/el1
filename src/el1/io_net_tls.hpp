@@ -25,6 +25,14 @@ namespace el1::io::net::tls
 		EVersion min_version = EVersion::TLS12;
 	};
 
+	struct client_config_t
+	{
+		text::string::TString server_name;
+		text::string::TString ca_file;
+		EVersion min_version = EVersion::TLS12;
+		bool verify_peer = true;
+	};
+
 	struct TTlsException : error::IException
 	{
 		const text::string::TString msg;
@@ -46,6 +54,7 @@ namespace el1::io::net::tls
 			TClient(void* const ssl_context, std::unique_ptr<ip::TTcpClient> tcp_client);
 
 		public:
+			TClient(text::string::TString remote_host, const ip::port_t remote_port, client_config_t config = {});
 			TClient(TClient&&) noexcept;
 			TClient(const TClient&) = delete;
 			~TClient() override;
