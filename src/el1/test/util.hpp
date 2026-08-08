@@ -94,7 +94,7 @@ namespace el1::testing
 			return *this;
 		}
 
-		TDebugItem(TDebugItem&& rhs) : alive(std::unique_ptr<bool>(new bool)), value(rhs.value)
+		TDebugItem(TDebugItem&& rhs) : alive(el1::New<bool>()), value(rhs.value)
 		{
 			*alive = true;
 			rhs.value = -1234567;
@@ -103,7 +103,7 @@ namespace el1::testing
 			n_constructed++;
 		}
 
-		TDebugItem(const TDebugItem& rhs) : alive(std::unique_ptr<bool>(new bool)), value(rhs.value)
+		TDebugItem(const TDebugItem& rhs) : alive(el1::New<bool>()), value(rhs.value)
 		{
 			*alive = true;
 			if(!*rhs.alive) throw "copy-constructed from a dead item";
@@ -111,13 +111,13 @@ namespace el1::testing
 			n_constructed++;
 		}
 
-		TDebugItem(int value) : alive(std::unique_ptr<bool>(new bool)), value(value)
+		TDebugItem(int value) : alive(el1::New<bool>()), value(value)
 		{
 			*alive = true;
 			n_constructed++;
 		}
 
-		TDebugItem(unsigned value) : alive(std::unique_ptr<bool>(new bool)), value(value)
+		TDebugItem(unsigned value) : alive(el1::New<bool>()), value(value)
 		{
 			*alive = true;
 			n_constructed++;

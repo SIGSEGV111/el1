@@ -239,7 +239,7 @@ namespace
 
 	TEST(dev_i2c_ds2482, scans_single_ds18b20)
 	{
-		auto fake = std::unique_ptr<TFakeDS2482>(new TFakeDS2482());
+		auto fake = el1::New<TFakeDS2482>();
 		const uuid_t expected = fake->Rom().uuid;
 		TDS2482Bus bus(std::move(fake));
 		const TList<uuid_t> found = bus.Scan();
@@ -249,7 +249,7 @@ namespace
 
 	TEST(dev_i2c_ds2482, scans_multiple_ds18b20)
 	{
-		auto fake = std::unique_ptr<TFakeDS2482>(new TFakeDS2482(2));
+		auto fake = el1::New<TFakeDS2482>(2);
 		const uuid_t expected_a = fake->Rom(0).uuid;
 		const uuid_t expected_b = fake->Rom(1).uuid;
 		TDS2482Bus bus(std::move(fake));
@@ -268,7 +268,7 @@ namespace
 
 	TEST(dev_i2c_ds2482, ds18b20_parasitic_conversion_uses_strong_pullup)
 	{
-		auto fake = std::unique_ptr<TFakeDS2482>(new TFakeDS2482());
+		auto fake = el1::New<TFakeDS2482>();
 		TFakeDS2482* const fake_ptr = fake.get();
 		const uuid_t uuid = fake->Rom().uuid;
 		TDS2482Bus bus(std::move(fake));
@@ -280,7 +280,7 @@ namespace
 
 	TEST(dev_i2c_ds2482, ds18b20_negative_temperature_is_signed)
 	{
-		auto fake = std::unique_ptr<TFakeDS2482>(new TFakeDS2482());
+		auto fake = el1::New<TFakeDS2482>();
 		const uuid_t uuid = fake->Rom().uuid;
 		TDS2482Bus bus(std::move(fake));
 		TDS18X20 sensor(bus.ClaimDevice(uuid), EPowerSource::DEDICATED);
@@ -290,7 +290,7 @@ namespace
 
 	TEST(dev_i2c_ds2482, ds18s20_negative_temperature_is_signed)
 	{
-		auto fake = std::unique_ptr<TFakeDS2482>(new TFakeDS2482(1, EModel::DS18S20));
+		auto fake = el1::New<TFakeDS2482>(1, EModel::DS18S20);
 		const uuid_t uuid = fake->Rom().uuid;
 		TDS2482Bus bus(std::move(fake));
 		TDS18X20 sensor(bus.ClaimDevice(uuid), EPowerSource::DEDICATED);
@@ -300,7 +300,7 @@ namespace
 
 	TEST(dev_i2c_ds2482, ds18b20_is_configured_for_12_bit_resolution)
 	{
-		auto fake = std::unique_ptr<TFakeDS2482>(new TFakeDS2482());
+		auto fake = el1::New<TFakeDS2482>();
 		TFakeDS2482* const fake_ptr = fake.get();
 		const uuid_t uuid = fake->Rom().uuid;
 		TDS2482Bus bus(std::move(fake));

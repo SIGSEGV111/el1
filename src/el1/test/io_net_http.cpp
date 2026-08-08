@@ -114,7 +114,7 @@ namespace
 
 		THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [](const THttpServer::request_t&, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto body = std::unique_ptr<TFifo<byte_t>>(new TFifo<byte_t>());
+			auto body = el1::New<TFifo<byte_t>>();
 			body->WriteAll(reinterpret_cast<const byte_t*>("stream"), 6);
 			body->CloseOutput();
 			response.body = std::move(body);
@@ -130,7 +130,7 @@ namespace
 		TTcpServer tcp_server;
 		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto file = std::unique_ptr<TFile>(new TFile(L"gen/testdata/test1.json"));
+			auto file = el1::New<TFile>(L"gen/testdata/test1.json");
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
@@ -149,7 +149,7 @@ namespace
 		THttpServer http_server(&tls_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			EXPECT_EQ(request.url, L"/secure");
 			response.status = EStatus::OK;
-			auto file = std::unique_ptr<TFile>(new TFile(L"gen/testdata/freecad_v1_0_0.gcode"));
+			auto file = el1::New<TFile>(L"gen/testdata/freecad_v1_0_0.gcode");
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
@@ -166,7 +166,7 @@ namespace
 		tls::TServer tls_server(&tcp_server, L"support/tls-test-cert.pem", L"support/tls-test-key.pem");
 		THttpServer http_server(&tls_server, [](const THttpServer::request_t&, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto body = std::unique_ptr<TFifo<byte_t>>(new TFifo<byte_t>());
+			auto body = el1::New<TFifo<byte_t>>();
 			body->WriteAll(reinterpret_cast<const byte_t*>("secure-stream"), 13);
 			body->CloseOutput();
 			response.body = std::move(body);
@@ -183,7 +183,7 @@ namespace
 		TTcpServer tcp_server;
 		THttpServer http_server(&tcp_server, [&fail](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto file = std::unique_ptr<TFile>(new TFile(L"non-existent file")); // this should throw
+			auto file = el1::New<TFile>(L"non-existent file"); // this should throw
 			fail = true; // this should never be reached
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
@@ -269,7 +269,7 @@ namespace
 				response.header_fields.Set(L"Set-Cookie", L"session=abc; Path=/api; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Max-Age=3600");
 				response.header_fields.Set(L"X-Reply", L"first");
 				response.header_fields.ContentLength(sizeof(download));
-				auto body = std::unique_ptr<TFifo<byte_t>>(new TFifo<byte_t>());
+				auto body = el1::New<TFifo<byte_t>>();
 				body->WriteAll(download, sizeof(download));
 				body->CloseOutput();
 				response.body = std::move(body);
@@ -353,7 +353,7 @@ namespace
 		THttpServer http_server(&tcp_server, [&](const THttpServer::request_t&, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
 			response.header_fields.ContentLength(expected.Count());
-			auto body = std::unique_ptr<TFifo<byte_t, 65536>>(new TFifo<byte_t, 65536>());
+			auto body = el1::New<TFifo<byte_t, 65536>>();
 			body->WriteAll(expected.ItemPtr(0), expected.Count());
 			body->CloseOutput();
 			response.body = std::move(body);

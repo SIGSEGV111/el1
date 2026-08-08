@@ -245,7 +245,7 @@ namespace el1::dev::i2c::pca9555
 
 	std::unique_ptr<gpio::IPin> TPCA9555::ClaimPin(const usys_t index)
 	{
-		return std::unique_ptr<gpio::IPin>(new TPin(this, index));
+		return New<TPin, gpio::IPin>(this, index);
 	}
 
 	void TPCA9555::Commit()

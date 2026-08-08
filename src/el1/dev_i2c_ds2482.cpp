@@ -213,7 +213,7 @@ namespace el1::dev::i2c::ds2482
 
 	std::unique_ptr<IW1Device> TDS2482Bus::ClaimDevice(const uuid_t uuid)
 	{
-		return std::unique_ptr<IW1Device>(new TDS2482Device(this, uuid));
+		return New<TDS2482Device, IW1Device>(this, uuid);
 	}
 
 	TList<uuid_t> TDS2482Bus::Scan(const ESpeed speed)

@@ -573,7 +573,7 @@ namespace el1::io::net::http
 			{
 				IF_DEBUG_PRINTF("accepted new client, spawning handler\n");
 				// start handler and handoff client
-				handlers.MoveAppend(std::unique_ptr<TFiber>(new TFiber([this, stream_client = std::move(stream_client), &cleanup_handlers](){
+				handlers.MoveAppend(New<TFiber>([this, stream_client = std::move(stream_client), &cleanup_handlers](){
 					// TODO: add some kind of output buffer to prevent excessive amounts of small write()-syscalls
 
 					// process all requests from client
@@ -581,7 +581,7 @@ namespace el1::io::net::http
 
 					// notify controller to cleanup handler
 					cleanup_handlers = 1;
-				})));
+				}));
 			}
 		}
 	}

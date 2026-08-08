@@ -252,7 +252,7 @@ namespace el1::system::task
 		this->on_state_change.Raise();
 
 		if(exit_code != nullptr)
-			return std::unique_ptr<const IException>(new TUnknownException);
+			return New<TUnknownException, const IException>();
 
 		return std::move(this->main_fiber.exception);
 	}

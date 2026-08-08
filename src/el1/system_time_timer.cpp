@@ -8,7 +8,7 @@ namespace el1::system::time::timer
 	{
 		if(timer == nullptr)
 		{
-			timer = std::unique_ptr<TTimer>(new TTimer(clock, ts_wait_until, TTime(0)));
+			timer = New<TTimer>(clock, ts_wait_until, TTime(0));
 		}
 
 		return &timer->OnTick();

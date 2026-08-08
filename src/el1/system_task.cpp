@@ -435,7 +435,7 @@ namespace el1::system::task
 		catch(...)
 		{
 			IF_DEBUG_PRINTF("TFiber@%p::Boot(): caught unknown exception\n", self);
-			self->exception = std::unique_ptr<const IException>(new TUnknownException());
+			self->exception = New<TUnknownException, const IException>();
 			self->state = EFiberState::CRASHED;
 		}
 

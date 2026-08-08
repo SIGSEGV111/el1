@@ -406,11 +406,11 @@ namespace
 		TDebugItem::Reset();
 		{
 			TList< std::unique_ptr<TDebugItem> > list;
-			list.MoveAppend(std::unique_ptr<TDebugItem>(new TDebugItem(1)));
-			list.MoveAppend(std::unique_ptr<TDebugItem>(new TDebugItem(2)));
-			list.MoveAppend(std::unique_ptr<TDebugItem>(new TDebugItem(3)));
-			list.MoveAppend(std::unique_ptr<TDebugItem>(new TDebugItem(4)));
-			list.MoveAppend(std::unique_ptr<TDebugItem>(new TDebugItem(5)));
+			list.MoveAppend(el1::New<TDebugItem>(1));
+			list.MoveAppend(el1::New<TDebugItem>(2));
+			list.MoveAppend(el1::New<TDebugItem>(3));
+			list.MoveAppend(el1::New<TDebugItem>(4));
+			list.MoveAppend(el1::New<TDebugItem>(5));
 			EXPECT_EQ(list.Count(), 5U);
 		}
 		EXPECT_TRUE(TDebugItem::Check());

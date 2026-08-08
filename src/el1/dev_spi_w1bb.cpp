@@ -336,7 +336,7 @@ namespace el1::dev::spi::w1bb
 
 	std::unique_ptr<IW1Device> TW1BbBus::ClaimDevice(const uuid_t uuid)
 	{
-		return std::unique_ptr<IW1Device>(new TW1BbDevice(this, uuid));
+		return New<TW1BbDevice, IW1Device>(this, uuid);
 	}
 
 	void TW1BbBus::Scan(TTransaction& tr, io::collection::list::TList<uuid_t>& list, u8_t idx_bit, uuid_t uuid)

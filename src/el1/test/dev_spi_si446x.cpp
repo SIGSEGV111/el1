@@ -127,7 +127,7 @@ namespace
 	TEST(dev_spi_si446x, formats_start_tx_command)
 	{
 		auto* const spi_raw = new TTestSpiDevice();
-		TRadio radio{std::unique_ptr<ISpiDevice>(spi_raw), std::unique_ptr<gpio::IPin>(new TTestPin())};
+		TRadio radio{std::unique_ptr<ISpiDevice>(spi_raw), el1::New<TTestPin, gpio::IPin>()};
 
 		radio.StartTx(3, 0x1234, 0x80);
 		ASSERT_FALSE(spi_raw->commands.empty());
@@ -143,7 +143,7 @@ namespace
 	TEST(dev_spi_si446x, decodes_part_info_response)
 	{
 		auto* const spi_raw = new TTestSpiDevice();
-		TRadio radio{std::unique_ptr<ISpiDevice>(spi_raw), std::unique_ptr<gpio::IPin>(new TTestPin())};
+		TRadio radio{std::unique_ptr<ISpiDevice>(spi_raw), el1::New<TTestPin, gpio::IPin>()};
 
 		const TPartInfo info = radio.PartInfo();
 		EXPECT_EQ(info.chip_revision, 0x42);
@@ -160,7 +160,7 @@ namespace
 		auto* const irq_raw = new TTestPin();
 		irq_raw->state = false;
 		irq_raw->waitable.ready = true;
-		TRadio radio{std::unique_ptr<ISpiDevice>(spi_raw), std::unique_ptr<gpio::IPin>(new TTestPin()), std::unique_ptr<gpio::IPin>(irq_raw)};
+		TRadio radio{std::unique_ptr<ISpiDevice>(spi_raw), el1::New<TTestPin, gpio::IPin>(), std::unique_ptr<gpio::IPin>(irq_raw)};
 		irq_raw->state = false;
 		irq_raw->waitable.ready = true;
 		const usys_t acknowledged_before = irq_raw->n_acknowledged;

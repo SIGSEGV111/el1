@@ -109,7 +109,7 @@ namespace el1::dev::spi::native
 
 	std::unique_ptr<ISpiDevice> TNativeSpiBus::ClaimDevice(std::unique_ptr<IPin> chip_enable_pin)
 	{
-		return std::unique_ptr<ISpiDevice>(new TNativeSpiDevice(this, std::move(chip_enable_pin)));
+		return New<TNativeSpiDevice, ISpiDevice>(this, std::move(chip_enable_pin));
 	}
 
 	TNativeSpiBus::TNativeSpiBus(TPath device) : handle(EL_SYSERR(open(device, O_RDWR|O_CLOEXEC|O_NOCTTY)), true), active_device(nullptr), on_idle((usys_t*)&active_device, (usys_t*)NEG1, NEG1)

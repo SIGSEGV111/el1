@@ -295,7 +295,7 @@ namespace el1::system::task
 			}
 			catch(...)
 			{
-				myself->main_fiber.exception = std::unique_ptr<const IException>(new TUnknownException());
+				myself->main_fiber.exception = New<TUnknownException, const IException>();
 			}
 
 			const TMutexAutoLock lock(&myself->mutex);

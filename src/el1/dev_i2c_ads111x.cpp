@@ -221,7 +221,7 @@ namespace el1::dev::i2c::ads111x
 		if(!new_config.HasIrq())
 		{
 			if(timer == nullptr)
-				timer = std::unique_ptr<TTimer>(new TTimer(EClock::MONOTONIC, ComputeSampleInterval((EDataRate)new_config.dr)));
+				timer = New<TTimer>(EClock::MONOTONIC, ComputeSampleInterval((EDataRate)new_config.dr));
 			else
 				timer->Start(ComputeSampleInterval((EDataRate)new_config.dr));
 

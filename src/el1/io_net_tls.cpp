@@ -251,7 +251,7 @@ namespace el1::io::net::tls
 				SSL_CTX_set_verify(context, SSL_VERIFY_NONE, nullptr);
 			}
 
-			auto tcp_client = std::unique_ptr<ip::TTcpClient>(new ip::TTcpClient(remote_host, remote_port));
+			auto tcp_client = New<ip::TTcpClient>(remote_host, remote_port);
 			data.reset(new data_t(context, std::move(tcp_client), false, context));
 
 			auto server_name = config.server_name.MakeCStr();

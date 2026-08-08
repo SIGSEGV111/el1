@@ -450,7 +450,7 @@ namespace el1::io::net::ip
 		}
 		else
 		{
-			return std::unique_ptr<TTcpClient>(new TTcpClient(THandle(r, true), ConvertFromPosix(addr)));
+			return New<TTcpClient>(THandle(r, true), ConvertFromPosix(addr));
 		}
 	}
 
