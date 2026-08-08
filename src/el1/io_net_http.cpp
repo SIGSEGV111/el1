@@ -333,8 +333,8 @@ namespace el1::io::net::http
 		{
 			// accept new client
 			IF_DEBUG_PRINTF("calling AcceptClient()\n");
-			std::unique_ptr<TTcpClient> tcp_client = this->tcp_server->AcceptClient();
-			if(tcp_client == nullptr)
+			std::unique_ptr<IStreamClient> stream_client = this->stream_server->AcceptStreamClient();
+			if(stream_client == nullptr)
 			{
 				IF_DEBUG_PRINTF("no new client waiting, just cleaning up\n");
 				// cleanup
@@ -352,17 +352,17 @@ namespace el1::io::net::http
 
 				// wait
 				IF_DEBUG_PRINTF("waiting ...\n");
-				TFiber::WaitForMany({ &this->tcp_server->OnClientConnect(), &wait_cleanup });
+				TFiber::WaitForMany({ &this->stream_server->OnClientConnect(), &wait_cleanup });
 			}
 			else
 			{
 				IF_DEBUG_PRINTF("accepted new client, spawning handler\n");
 				// start handler and handoff client
-				handlers.MoveAppend(std::unique_ptr<TFiber>(new TFiber([this, tcp_client = std::move(tcp_client), &cleanup_handlers](){
+				handlers.MoveAppend(std::unique_ptr<TFiber>(new TFiber([this, stream_client = std::move(stream_client), &cleanup_handlers](){
 					// TODO: add some kind of output buffer to prevent excessive amounts of small write()-syscalls
 
 					// process all requests from client
-					while(HandleSingleRequest(*tcp_client.get(), *tcp_client.get(), this->handler, tcp_client->RemoteAddress()) != EStatus::EOF);
+					while(HandleSingleRequest(*stream_client.get(), *stream_client.get(), this->handler, stream_client->RemoteAddress()) != EStatus::EOF);
 
 					// notify controller to cleanup handler
 					cleanup_handlers = 1;
@@ -371,12 +371,18 @@ namespace el1::io::net::http
 		}
 	}
 
-	THttpServer::THttpServer(TTcpServer* const tcp_server, request_handler_t handler) :
-		tcp_server(tcp_server),
+	THttpServer::THttpServer(IStreamServer* const stream_server, request_handler_t handler) :
+		stream_server(stream_server),
 		handler(handler),
 		fiber(TFunction<void>(this, &THttpServer::FiberMain), true)
 	{
+		EL_ERROR(stream_server == nullptr, TInvalidArgumentException, "stream_server", "stream_server must not be null");
 		IF_DEBUG_PRINTF("THttpServer constructor\n");
+	}
+
+	THttpServer::THttpServer(TTcpServer* const tcp_server, request_handler_t handler) :
+		THttpServer(static_cast<IStreamServer*>(tcp_server), std::move(handler))
+	{
 	}
 
 	THttpServer::~THttpServer()

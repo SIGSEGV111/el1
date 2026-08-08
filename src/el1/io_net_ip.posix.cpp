@@ -432,6 +432,11 @@ namespace el1::io::net::ip
 		return this->on_client_connect;
 	}
 
+	std::unique_ptr<IStreamClient> TTcpServer::AcceptStreamClient()
+	{
+		return AcceptClient();
+	}
+
 	std::unique_ptr<TTcpClient> TTcpServer::AcceptClient()
 	{
 		sockaddr_in6 addr = {};

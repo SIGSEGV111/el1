@@ -2,6 +2,7 @@
 #include <el1/error.hpp>
 #include <el1/io_net_http.hpp>
 #include <el1/io_net_ip.hpp>
+#include <el1/io_net_tls.hpp>
 #include <el1/io_stream.hpp>
 #include <el1/io_file.hpp>
 #include <el1/io_stream_fifo.hpp>
@@ -21,6 +22,7 @@ namespace
 	using namespace el1::io::stream::fifo;
 	using namespace el1::io::text::encoding::utf8;
 	using namespace el1::io::net::ip;
+	namespace tls = el1::io::net::tls;
 	using namespace el1::io::file;
 	using namespace el1::error;
 	using namespace el1::system::task;
@@ -138,6 +140,41 @@ namespace
 		str_curl.Cut(0, str_curl.Length() / 3 * 2);
 		const TString str_ref = TFile(L"gen/testdata/test1.json").Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
+	}
+
+	TEST(io_net_http, THttpServer_curl_https)
+	{
+		TTcpServer tcp_server;
+		tls::TServer tls_server(&tcp_server, L"support/tls-test-cert.pem", L"support/tls-test-key.pem");
+		THttpServer http_server(&tls_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			EXPECT_EQ(request.url, L"/secure");
+			response.status = EStatus::OK;
+			auto file = std::unique_ptr<TFile>(new TFile(L"gen/testdata/freecad_v1_0_0.gcode"));
+			response.header_fields.ContentLength(file->Size());
+			response.body = std::move(file);
+		});
+
+		const TString url = TString::Format(L"https://localhost:%d/secure", tls_server.LocalAddress().port);
+		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--insecure", L"--tlsv1.2", url });
+		const TString str_ref = TFile(L"gen/testdata/freecad_v1_0_0.gcode").Pipe().Transform(TUTF8Decoder()).Collect();
+		EXPECT_EQ(str_curl, str_ref);
+	}
+
+	TEST(io_net_http, THttpServer_curl_https_unknown_length)
+	{
+		TTcpServer tcp_server;
+		tls::TServer tls_server(&tcp_server, L"support/tls-test-cert.pem", L"support/tls-test-key.pem");
+		THttpServer http_server(&tls_server, [](const THttpServer::request_t&, THttpServer::response_t& response) {
+			response.status = EStatus::OK;
+			auto body = std::unique_ptr<TFifo<byte_t>>(new TFifo<byte_t>());
+			body->WriteAll(reinterpret_cast<const byte_t*>("secure-stream"), 13);
+			body->CloseOutput();
+			response.body = std::move(body);
+		});
+
+		const TString url = TString::Format(L"https://localhost:%d/stream", tls_server.LocalAddress().port);
+		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--insecure", url });
+		EXPECT_EQ(str_curl, L"secure-stream");
 	}
 
 	TEST(io_net_http, THttpServer_curl_error)

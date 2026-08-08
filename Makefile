@@ -32,7 +32,7 @@ ifeq ($(ARCH),x86_64)
 endif
 
 PROJECT_CPPFLAGS :=
-PACKAGE_NAMES := krb5 zlib
+PACKAGE_NAMES := krb5 zlib openssl
 
 ifeq ($(WITH_POSTGRES),1)
 	PROJECT_CPPFLAGS += -DEL1_WITH_POSTGRES

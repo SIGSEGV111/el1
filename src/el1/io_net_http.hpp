@@ -106,7 +106,7 @@ namespace el1::io::net::http
 			using request_handler_t = util::function::TFunction<void, const request_t&, response_t&>;
 
 		protected:
-			ip::TTcpServer* const tcp_server;
+			ip::IStreamServer* const stream_server;
 			request_handler_t handler;
 			system::task::TFiber fiber;
 
@@ -122,6 +122,7 @@ namespace el1::io::net::http
 				const ip::ipport_t remote_address = ip::ipport_t{}
 			);
 
+			THttpServer(ip::IStreamServer* const stream_server, request_handler_t handler);
 			THttpServer(ip::TTcpServer* const tcp_server, request_handler_t handler);
 			~THttpServer();
 	};

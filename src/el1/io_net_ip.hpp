@@ -97,7 +97,22 @@ namespace el1::io::net::ip
 	io::collection::list::TList<ipaddr_t> EnumMyIpAddresses();
 	io::collection::list::TList<ipaddr_t> ResolveHostname(const text::string::TString&);
 
-	class TTcpClient : public stream::ISink<byte_t>, public stream::ISource<byte_t>
+	class IStreamClient : public stream::ISink<byte_t>, public stream::ISource<byte_t>
+	{
+		public:
+			virtual ipport_t LocalAddress() const EL_GETTER = 0;
+			virtual ipport_t RemoteAddress() const EL_GETTER = 0;
+	};
+
+	class IStreamServer
+	{
+		public:
+			virtual ~IStreamServer() = default;
+			virtual const system::waitable::IWaitable& OnClientConnect() const EL_GETTER = 0;
+			virtual std::unique_ptr<IStreamClient> AcceptStreamClient() = 0;
+	};
+
+	class TTcpClient : public IStreamClient
 	{
 		protected:
 			system::handle::THandle handle;
@@ -108,8 +123,8 @@ namespace el1::io::net::ip
 		public:
 			system::handle::handle_t Handle() final override EL_GETTER;
 
-			ipport_t LocalAddress() const EL_GETTER;
-			ipport_t RemoteAddress() const EL_GETTER;
+			ipport_t LocalAddress() const final override EL_GETTER;
+			ipport_t RemoteAddress() const final override EL_GETTER;
 
 			TTcpClient(const io::text::string::TString remote_host, const port_t remote_port);
 			TTcpClient(const ipaddr_t remote_ip, const port_t remote_port);
@@ -130,7 +145,7 @@ namespace el1::io::net::ip
 			void Flush() final override;
 	};
 
-	class TTcpServer
+	class TTcpServer : public IStreamServer
 	{
 		protected:
 			system::handle::THandle handle;
@@ -139,7 +154,8 @@ namespace el1::io::net::ip
 		public:
 			system::handle::handle_t Handle() EL_GETTER;
 
-			const system::waitable::THandleWaitable& OnClientConnect() const EL_GETTER;
+			const system::waitable::THandleWaitable& OnClientConnect() const final override EL_GETTER;
+			std::unique_ptr<IStreamClient> AcceptStreamClient() final override;
 			std::unique_ptr<TTcpClient> AcceptClient(); // returns nullptr if no client was waiting
 
 			ipport_t LocalAddress() const EL_GETTER;

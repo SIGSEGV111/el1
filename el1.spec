@@ -15,6 +15,7 @@ BuildRequires:  valgrind-devel
 BuildRequires:  libstdc++-devel
 BuildRequires:  pkgconfig(krb5)
 BuildRequires:  pkgconfig(libpq)
+BuildRequires:  pkgconfig(openssl)
 BuildRequires:  pkgconfig(zlib)
 
 %description
