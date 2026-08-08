@@ -3,6 +3,8 @@
 #include "def.hpp"
 #include "error.hpp"
 #include "io_net_ip.hpp"
+#include "io_file.hpp"
+#include "io_collection_list.hpp"
 #include "io_stream.hpp"
 #include "io_text_string.hpp"
 
@@ -18,17 +20,44 @@ namespace el1::io::net::tls
 		TLS13 = 13,
 	};
 
+	class TPemSource
+	{
+		public:
+			enum class EType : u8_t
+			{
+				NONE,
+				FILE,
+				MEMORY,
+			};
+
+		private:
+			EType type;
+			file::TPath path;
+			collection::list::TList<byte_t> data;
+
+		public:
+			EType Type() const noexcept EL_GETTER { return type; }
+			bool IsEmpty() const noexcept EL_GETTER { return type == EType::NONE; }
+			const file::TPath& Path() const EL_GETTER;
+			collection::list::array_t<const byte_t> Data() const EL_GETTER;
+
+			TPemSource();
+			explicit TPemSource(file::TPath path);
+			explicit TPemSource(collection::list::array_t<const byte_t> data);
+			explicit TPemSource(collection::list::TList<byte_t> data);
+	};
+
 	struct server_config_t
 	{
-		text::string::TString certificate_chain_file;
-		text::string::TString private_key_file;
+		TPemSource certificate_chain;
+		TPemSource private_key;
 		EVersion min_version = EVersion::TLS12;
 	};
 
 	struct client_config_t
 	{
 		text::string::TString server_name;
-		text::string::TString ca_file;
+		TPemSource ca_certificates;
 		EVersion min_version = EVersion::TLS12;
 		bool verify_peer = true;
 	};
@@ -90,8 +119,8 @@ namespace el1::io::net::tls
 			TServer(ip::TTcpServer* const tcp_server, server_config_t config);
 			TServer(
 				ip::TTcpServer* const tcp_server,
-				text::string::TString certificate_chain_file,
-				text::string::TString private_key_file,
+				file::TPath certificate_chain_file,
+				file::TPath private_key_file,
 				const EVersion min_version = EVersion::TLS12
 			);
 			TServer(TServer&&) = delete;

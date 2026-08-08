@@ -389,11 +389,31 @@ namespace
 		});
 
 		tls::client_config_t config;
-		config.ca_file = L"support/tls-test-cert.pem";
+		config.ca_certificates = tls::TPemSource(TPath(L"support/tls-test-cert.pem"));
 		THttpClient client(L"localhost", tls_server.LocalAddress().port, std::move(config));
 		EXPECT_EQ(client.Get(L"/one").status, EStatus::OK);
 		EXPECT_EQ(client.Get(L"/two").status, EStatus::OK);
 		EXPECT_EQ(request_index, 2U);
+	}
+
+	TEST(io_net_http, THttpClient_https_credentials_from_memory)
+	{
+		TList<byte_t> certificate = TFile(L"support/tls-test-cert.pem").Pipe().Collect();
+		TList<byte_t> private_key = TFile(L"support/tls-test-key.pem").Pipe().Collect();
+
+		TTcpServer tcp_server;
+		tls::server_config_t server_config;
+		server_config.certificate_chain = tls::TPemSource(certificate);
+		server_config.private_key = tls::TPemSource(std::move(private_key));
+		tls::TServer tls_server(&tcp_server, std::move(server_config));
+		THttpServer http_server(&tls_server, [](const THttpServer::request_t&, THttpServer::response_t& response) {
+			response.status = EStatus::OK;
+		});
+
+		tls::client_config_t client_config;
+		client_config.ca_certificates = tls::TPemSource(std::move(certificate));
+		THttpClient client(L"localhost", tls_server.LocalAddress().port, std::move(client_config));
+		EXPECT_EQ(client.Get(L"/").status, EStatus::OK);
 	}
 
 	TEST(io_net_http, THttpClient_chunked_upload_download_and_trailer)

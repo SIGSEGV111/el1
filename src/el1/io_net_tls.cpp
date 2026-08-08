@@ -1,8 +1,12 @@
 #include "io_net_tls.hpp"
 
 #include <openssl/err.h>
+#include <openssl/pem.h>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
+#include <openssl/x509err.h>
 
+#include <limits.h>
 #include <string.h>
 
 namespace el1::io::net::tls
@@ -11,6 +15,37 @@ namespace el1::io::net::tls
 	using namespace io::stream;
 	using namespace io::text::string;
 	using namespace system::waitable;
+
+	TPemSource::TPemSource() : type(EType::NONE)
+	{
+	}
+
+	TPemSource::TPemSource(file::TPath path) : type(EType::FILE), path(std::move(path))
+	{
+		EL_ERROR(this->path.IsEmpty(), TInvalidArgumentException, "path", "PEM file path must not be empty");
+	}
+
+	TPemSource::TPemSource(collection::list::array_t<const byte_t> data) : type(EType::MEMORY), data(data)
+	{
+		EL_ERROR(data.Count() == 0, TInvalidArgumentException, "data", "PEM data must not be empty");
+	}
+
+	TPemSource::TPemSource(collection::list::TList<byte_t> data) : type(EType::MEMORY), data(std::move(data))
+	{
+		EL_ERROR(this->data.Count() == 0, TInvalidArgumentException, "data", "PEM data must not be empty");
+	}
+
+	const file::TPath& TPemSource::Path() const
+	{
+		EL_ERROR(type != EType::FILE, TLogicException);
+		return path;
+	}
+
+	collection::list::array_t<const byte_t> TPemSource::Data() const
+	{
+		EL_ERROR(type != EType::MEMORY, TLogicException);
+		return data;
+	}
 
 	namespace
 	{
@@ -69,6 +104,130 @@ namespace el1::io::net::tls
 				default:
 					EL_THROW(TTlsException, OpenSslError(context));
 			}
+		}
+
+		static std::unique_ptr<BIO, decltype(&BIO_free)> MakeMemoryBio(const TPemSource& source)
+		{
+			const auto data = source.Data();
+			EL_ERROR(data.Count() > INT_MAX, TInvalidArgumentException, "data", "PEM data exceeds OpenSSL memory BIO size limit");
+			BIO* const bio = BIO_new_mem_buf(data.ItemPtr(0), (int)data.Count());
+			EL_ERROR(bio == nullptr, TTlsException, OpenSslError("failed to create PEM memory BIO"));
+			return std::unique_ptr<BIO, decltype(&BIO_free)>(bio, BIO_free);
+		}
+
+		static void LoadCertificateChain(SSL_CTX* const context, const TPemSource& source)
+		{
+			if(source.Type() == TPemSource::EType::FILE)
+			{
+				auto filename = ((TString)source.Path()).MakeCStr();
+				EL_ERROR(SSL_CTX_use_certificate_chain_file(context, filename.get()) != 1, TTlsException, OpenSslError("failed to load TLS certificate chain"));
+				return;
+			}
+
+			auto bio = MakeMemoryBio(source);
+			STACK_OF(X509_INFO)* const infos = PEM_X509_INFO_read_bio(bio.get(), nullptr, nullptr, nullptr);
+			EL_ERROR(infos == nullptr, TTlsException, OpenSslError("failed to parse TLS certificate chain from memory"));
+
+			usys_t n_certificates = 0;
+			try
+			{
+				SSL_CTX_clear_chain_certs(context);
+				for(int i = 0; i < sk_X509_INFO_num(infos); i++)
+				{
+					X509_INFO* const info = sk_X509_INFO_value(infos, i);
+					if(info->x509 == nullptr)
+						continue;
+
+					if(n_certificates == 0)
+						EL_ERROR(SSL_CTX_use_certificate(context, info->x509) != 1, TTlsException, OpenSslError("failed to use TLS certificate from memory"));
+					else
+						EL_ERROR(SSL_CTX_add1_chain_cert(context, info->x509) != 1, TTlsException, OpenSslError("failed to add TLS chain certificate from memory"));
+
+					n_certificates++;
+				}
+
+				EL_ERROR(n_certificates == 0, TTlsException, TString("TLS certificate chain in memory contains no certificates"));
+			}
+			catch(...)
+			{
+				sk_X509_INFO_pop_free(infos, X509_INFO_free);
+				throw;
+			}
+
+			sk_X509_INFO_pop_free(infos, X509_INFO_free);
+		}
+
+		static void LoadPrivateKey(SSL_CTX* const context, const TPemSource& source)
+		{
+			if(source.Type() == TPemSource::EType::FILE)
+			{
+				auto filename = ((TString)source.Path()).MakeCStr();
+				EL_ERROR(SSL_CTX_use_PrivateKey_file(context, filename.get(), SSL_FILETYPE_PEM) != 1, TTlsException, OpenSslError("failed to load TLS private key"));
+				return;
+			}
+
+			auto bio = MakeMemoryBio(source);
+			EVP_PKEY* const key = PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr);
+			EL_ERROR(key == nullptr, TTlsException, OpenSslError("failed to parse TLS private key from memory"));
+			const int result = SSL_CTX_use_PrivateKey(context, key);
+			EVP_PKEY_free(key);
+			EL_ERROR(result != 1, TTlsException, OpenSslError("failed to use TLS private key from memory"));
+		}
+
+		static void AddCaCertificate(X509_STORE* const store, X509* const certificate)
+		{
+			ERR_clear_error();
+			if(X509_STORE_add_cert(store, certificate) == 1)
+				return;
+
+			const unsigned long error_code = ERR_peek_last_error();
+			if(ERR_GET_REASON(error_code) == X509_R_CERT_ALREADY_IN_HASH_TABLE)
+			{
+				ERR_clear_error();
+				return;
+			}
+
+			EL_THROW(TTlsException, OpenSslError("failed to add CA certificate from memory"));
+		}
+
+		static void LoadCaCertificates(SSL_CTX* const context, const TPemSource& source)
+		{
+			if(source.Type() == TPemSource::EType::FILE)
+			{
+				auto filename = ((TString)source.Path()).MakeCStr();
+				EL_ERROR(SSL_CTX_load_verify_locations(context, filename.get(), nullptr) != 1, TTlsException, OpenSslError("failed to load CA certificates"));
+				return;
+			}
+
+			auto bio = MakeMemoryBio(source);
+			STACK_OF(X509_INFO)* const infos = PEM_X509_INFO_read_bio(bio.get(), nullptr, nullptr, nullptr);
+			EL_ERROR(infos == nullptr, TTlsException, OpenSslError("failed to parse CA certificates from memory"));
+
+			usys_t n_certificates = 0;
+			try
+			{
+				X509_STORE* const store = SSL_CTX_get_cert_store(context);
+				EL_ERROR(store == nullptr, TTlsException, TString("TLS context has no certificate store"));
+
+				for(int i = 0; i < sk_X509_INFO_num(infos); i++)
+				{
+					X509_INFO* const info = sk_X509_INFO_value(infos, i);
+					if(info->x509 == nullptr)
+						continue;
+
+					AddCaCertificate(store, info->x509);
+					n_certificates++;
+				}
+
+				EL_ERROR(n_certificates == 0, TTlsException, TString("CA PEM data in memory contains no certificates"));
+			}
+			catch(...)
+			{
+				sk_X509_INFO_pop_free(infos, X509_INFO_free);
+				throw;
+			}
+
+			sk_X509_INFO_pop_free(infos, X509_INFO_free);
 		}
 	}
 
@@ -236,15 +395,10 @@ namespace el1::io::net::tls
 			{
 				SSL_CTX_set_verify(context, SSL_VERIFY_PEER, nullptr);
 
-				if(config.ca_file.Length() == 0)
-				{
+				if(config.ca_certificates.IsEmpty())
 					EL_ERROR(SSL_CTX_set_default_verify_paths(context) != 1, TTlsException, OpenSslError("failed to load default CA paths"));
-				}
 				else
-				{
-					auto ca_file = config.ca_file.MakeCStr();
-					EL_ERROR(SSL_CTX_load_verify_locations(context, ca_file.get(), nullptr) != 1, TTlsException, OpenSslError("failed to load CA file"));
-				}
+					LoadCaCertificates(context, config.ca_certificates);
 			}
 			else
 			{
@@ -440,8 +594,8 @@ namespace el1::io::net::tls
 		ssl_context(nullptr)
 	{
 		EL_ERROR(tcp_server == nullptr, TInvalidArgumentException, "tcp_server", "tcp_server must not be null");
-		EL_ERROR(config.certificate_chain_file.Length() == 0, TInvalidArgumentException, "certificate_chain_file", "certificate chain file must not be empty");
-		EL_ERROR(config.private_key_file.Length() == 0, TInvalidArgumentException, "private_key_file", "private key file must not be empty");
+		EL_ERROR(config.certificate_chain.IsEmpty(), TInvalidArgumentException, "certificate_chain", "certificate chain source must not be empty");
+		EL_ERROR(config.private_key.IsEmpty(), TInvalidArgumentException, "private_key", "private key source must not be empty");
 
 		ERR_clear_error();
 		SSL_CTX* const context = SSL_CTX_new(TLS_server_method());
@@ -453,11 +607,8 @@ namespace el1::io::net::tls
 			EL_ERROR(SSL_CTX_set_min_proto_version(context, NativeVersion(config.min_version)) != 1, TTlsException, OpenSslError("SSL_CTX_set_min_proto_version() failed"));
 			SSL_CTX_set_options(context, SSL_OP_NO_COMPRESSION);
 
-			auto certificate_chain_file = config.certificate_chain_file.MakeCStr();
-			EL_ERROR(SSL_CTX_use_certificate_chain_file(context, certificate_chain_file.get()) != 1, TTlsException, OpenSslError("failed to load TLS certificate chain"));
-
-			auto private_key_file = config.private_key_file.MakeCStr();
-			EL_ERROR(SSL_CTX_use_PrivateKey_file(context, private_key_file.get(), SSL_FILETYPE_PEM) != 1, TTlsException, OpenSslError("failed to load TLS private key"));
+			LoadCertificateChain(context, config.certificate_chain);
+			LoadPrivateKey(context, config.private_key);
 			EL_ERROR(SSL_CTX_check_private_key(context) != 1, TTlsException, OpenSslError("TLS private key does not match certificate"));
 		}
 		catch(...)
@@ -470,13 +621,13 @@ namespace el1::io::net::tls
 
 	TServer::TServer(
 		ip::TTcpServer* const tcp_server,
-		TString certificate_chain_file,
-		TString private_key_file,
+		file::TPath certificate_chain_file,
+		file::TPath private_key_file,
 		const EVersion min_version
 	) :
 		TServer(tcp_server, server_config_t{
-			.certificate_chain_file = std::move(certificate_chain_file),
-			.private_key_file = std::move(private_key_file),
+			.certificate_chain = TPemSource(std::move(certificate_chain_file)),
+			.private_key = TPemSource(std::move(private_key_file)),
 			.min_version = min_version,
 		})
 	{
