@@ -25,4 +25,14 @@ namespace el1::io::stream
 	{
 		return new TSinkFloodedException(*this);
 	}
+
+	TString TLimitExceededException::Message() const
+	{
+		return L"stream sink exceeded configured item limit";
+	}
+
+	IException* TLimitExceededException::Clone() const
+	{
+		return new TLimitExceededException(*this);
+	}
 }

@@ -192,8 +192,40 @@ namespace el1::io::collection::list
 		constexpr TListSink(TList<T>* list, const usys_t n_items_prealloc = util::Max<iosize_t>(1, 4096U / sizeof(T))) : list(list), n_items_prealloc(n_items_prealloc) {}
 	};
 
+	template<typename T>
+	struct TListSource : stream::ISource<T>
+	{
+		TList<T> list;
+		usys_t pos;
 
+		usys_t Remaining() const EL_GETTER
+		{
+			return list.Count() - pos;
+		}
 
+		usys_t Read(T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
+		{
+			const usys_t n = util::Min(Remaining(), n_items_max);
+			for(usys_t i = 0; i < n; i++)
+				arr_items[i] = list[pos++];
+			return n;
+		}
+
+		iosize_t WriteOut(stream::ISink<T>& sink, const iosize_t n_items_max, const bool) final override
+		{
+			const usys_t n = n_items_max == (iosize_t)-1 ? Remaining() : util::Min<usys_t>(Remaining(), n_items_max);
+			if(n == 0)
+				return 0;
+
+			const usys_t n_written = sink.Write(list.ItemPtr(pos), n);
+			pos += n_written;
+			return n_written;
+		}
+
+		TListSource(const TListSource&) = delete;
+		TListSource(TListSource&&) = default;
+		explicit TListSource(TList<T> list) : list(std::move(list)), pos(0) {}
+	};
 }
 
 namespace el1::io::collection::array

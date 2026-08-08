@@ -153,16 +153,22 @@ namespace el1::io::net::http
 				usys_t content_length = 0;
 			};
 
-			struct response_t : response_meta_t
+			struct response_header_t : response_meta_t
 			{
 				using header_line_t = kv_pair_tt<text::string::TString, text::string::TString>;
 
 				collection::list::TList<header_line_t> header_lines;
-				collection::list::TList<byte_t> body;
 
 				const text::string::TString* FindHeader(const text::string::TString& name) const EL_GETTER;
 				collection::list::TList<text::string::TString> FindHeaders(const text::string::TString& name) const EL_GETTER;
 			};
+
+			struct response_t : response_header_t
+			{
+				collection::list::TList<byte_t> body;
+			};
+
+			static constexpr usys_t DEFAULT_RESPONSE_BODY_LIMIT = 16U * 1024U * 1024U;
 
 		protected:
 			text::string::TString host;
@@ -184,8 +190,31 @@ namespace el1::io::net::http
 			THttpClient(THttpClient&&) noexcept = default;
 			THttpClient(const THttpClient&) = delete;
 
-			response_t Request(request_t request, stream::ISink<byte_t>* const response_body_sink = nullptr);
-			response_t Get(text::string::TString url, stream::ISink<byte_t>* const response_body_sink = nullptr);
+			response_t Request(request_t request, stream::ISink<byte_t>* const response_body_sink = nullptr, const usys_t body_limit = DEFAULT_RESPONSE_BODY_LIMIT);
+			response_t Get(text::string::TString url, stream::ISink<byte_t>* const response_body_sink = nullptr, const usys_t body_limit = DEFAULT_RESPONSE_BODY_LIMIT);
+			std::unique_ptr<stream::ISource<byte_t>> Get(text::string::TString url, response_header_t* const response_header, const usys_t body_limit = DEFAULT_RESPONSE_BODY_LIMIT);
+
+			response_t Post(
+				text::string::TString url,
+				collection::list::array_t<const byte_t> body,
+				THttpHeaderFields header_fields = {},
+				const usys_t body_limit = DEFAULT_RESPONSE_BODY_LIMIT
+			);
+
+			response_t Post(
+				text::string::TString url,
+				stream::ISource<byte_t>& body,
+				THttpHeaderFields header_fields = {},
+				const usys_t body_limit = DEFAULT_RESPONSE_BODY_LIMIT
+			);
+
+			response_t Post(
+				text::string::TString url,
+				stream::ISource<byte_t>& body,
+				const usys_t content_length,
+				THttpHeaderFields header_fields = {},
+				const usys_t body_limit = DEFAULT_RESPONSE_BODY_LIMIT
+			);
 
 			void SetHeader(text::string::TString name, text::string::TString value);
 			const text::string::TString* FindHeader(const text::string::TString& name) const EL_GETTER;

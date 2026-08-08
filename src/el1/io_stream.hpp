@@ -53,6 +53,12 @@ namespace el1::io::stream
 		error::IException* Clone() const override;
 	};
 
+	struct TLimitExceededException : error::IException
+	{
+		io::text::string::TString Message() const final override;
+		error::IException* Clone() const override;
+	};
+
 	template<typename T>
 	class TSourcePipe;
 
@@ -500,6 +506,33 @@ namespace el1::io::stream
 			}
 
 			TLimitPipe(TPipe* source, const iosize_t n_items_limit) : source(source), n_remaining(n_items_limit) {}
+	};
+
+	template<typename T>
+	class TLimitSink : public ISink<T>
+	{
+		protected:
+			ISink<T>* const sink;
+			const usys_t limit;
+			usys_t n_written;
+
+		public:
+			TLimitSink(ISink<T>* const sink, const usys_t limit) : sink(sink), limit(limit), n_written(0) {}
+
+			usys_t Write(const T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
+			{
+				if(limit != NEG1)
+					EL_ERROR(n_items_max > limit - n_written, TLimitExceededException);
+
+				const usys_t n = sink->Write(arr_items, n_items_max);
+				n_written += n;
+				return n;
+			}
+
+			const system::waitable::IWaitable* OnOutputReady() const final override { return sink->OnOutputReady(); }
+			bool CloseOutput() final override { return sink->CloseOutput(); }
+			void Flush() final override { sink->Flush(); }
+			void Close() final override { sink->Close(); }
 	};
 
 	template<typename T>

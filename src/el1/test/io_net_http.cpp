@@ -240,6 +240,7 @@ namespace
 		TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url });
 		THttpServer::DEBUG = false;
 	}
+
 	TEST(io_net_http, THttpClient_stateful_headers_cookies_and_binary_body)
 	{
 		TTcpServer tcp_server;
@@ -326,6 +327,75 @@ namespace
 		EXPECT_EQ(client.ListCookies().Count(), 0U);
 		client.Get(L"/api/data");
 		EXPECT_EQ(request_index, 4U);
+	}
+
+	TEST(io_net_http, THttpClient_body_limit_and_convenience_helpers)
+	{
+		TTcpServer tcp_server;
+		usys_t request_index = 0;
+		const byte_t upload[] = { 1, 2, 3, 4, 5 };
+		const byte_t download[] = { 9, 8, 7, 6 };
+
+		THttpServer http_server(&tcp_server, [&](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			request_index++;
+			response.status = EStatus::OK;
+
+			if(request_index == 1)
+			{
+				EXPECT_EQ(request.method, EMethod::POST);
+				EXPECT_EQ(request.url, L"/post");
+				EXPECT_EQ(request.header_fields[L"x-test"], L"yes");
+				byte_t received[sizeof(upload)] = {};
+				request.body->ReadAll(received, sizeof(received));
+				EXPECT_EQ(memcmp(received, upload, sizeof(upload)), 0);
+				response.header_fields.Set(L"X-Reply", L"post");
+				response.header_fields.ContentLength(sizeof(download));
+				auto body = el1::New<TFifo<byte_t>>();
+				body->WriteAll(download, sizeof(download));
+				body->CloseOutput();
+				response.body = std::move(body);
+			}
+			else if(request_index == 2)
+			{
+				EXPECT_EQ(request.method, EMethod::GET);
+				EXPECT_EQ(request.url, L"/get");
+				response.header_fields.Set(L"X-Reply", L"get");
+				response.header_fields.ContentLength(sizeof(download));
+				auto body = el1::New<TFifo<byte_t>>();
+				body->WriteAll(download, sizeof(download));
+				body->CloseOutput();
+				response.body = std::move(body);
+			}
+			else
+			{
+				response.header_fields.ContentLength(64);
+				auto body = el1::New<TFifo<byte_t>>();
+				byte_t data[64] = {};
+				body->WriteAll(data, sizeof(data));
+				body->CloseOutput();
+				response.body = std::move(body);
+			}
+		});
+
+		THttpClient client(L"localhost", tcp_server.LocalAddress().port);
+		THttpHeaderFields request_headers;
+		request_headers.Set(L"X-Test", L"yes");
+		auto post_response = client.Post(L"/post", array_t<const byte_t>(upload, sizeof(upload)), std::move(request_headers));
+		ASSERT_NE(post_response.FindHeader(L"x-reply"), nullptr);
+		EXPECT_EQ(*post_response.FindHeader(L"x-reply"), L"post");
+		ASSERT_EQ(post_response.body.Count(), sizeof(download));
+		EXPECT_EQ(memcmp(post_response.body.ItemPtr(0), download, sizeof(download)), 0);
+
+		THttpClient::response_header_t response_header;
+		auto source = client.Get(L"/get", &response_header);
+		ASSERT_NE(response_header.FindHeader(L"x-reply"), nullptr);
+		EXPECT_EQ(*response_header.FindHeader(L"x-reply"), L"get");
+		TList<byte_t> source_body = source->Pipe().Collect();
+		ASSERT_EQ(source_body.Count(), sizeof(download));
+		EXPECT_EQ(memcmp(source_body.ItemPtr(0), download, sizeof(download)), 0);
+
+		EXPECT_THROW(client.Get(L"/too-large", static_cast<ISink<byte_t>*>(nullptr), 32), TException);
+		EXPECT_EQ(THttpClient::DEFAULT_RESPONSE_BODY_LIMIT, 16U * 1024U * 1024U);
 	}
 
 	TEST(io_net_http, THttpClient_rejects_request_injection)
@@ -499,12 +569,7 @@ namespace
 		upload_source.CloseOutput();
 
 		THttpClient client(L"localhost", tcp_server.LocalAddress().port);
-		THttpClient::request_t request;
-		request.method = EMethod::POST;
-		request.url = L"/chunked";
-		request.body = &upload_source;
-		request.content_length = NEG1;
-		auto response = client.Request(std::move(request));
+		auto response = client.Post(L"/chunked", upload_source);
 
 		const char expected[] = "Wikipedia";
 		ASSERT_EQ(response.body.Count(), sizeof(expected) - 1);

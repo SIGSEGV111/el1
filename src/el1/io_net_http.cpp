@@ -625,7 +625,7 @@ namespace el1::io::net::http
 		sink.WriteAll(reinterpret_cast<const byte_t*>("0\r\n\r\n"), 5);
 	}
 
-	static void AddResponseHeader(THttpClient::response_t& response, TString name, TString value)
+	static void AddResponseHeader(THttpClient::response_header_t& response, TString name, TString value)
 	{
 		response.header_lines.Append({ name, value });
 		TString* const existing = FindHeaderField(response.header_fields, name);
@@ -639,6 +639,7 @@ namespace el1::io::net::http
 			*existing += value;
 		}
 	}
+
 
 	static void ParseHeaderLine(const TString& line, TString& name, TString& value)
 	{
@@ -790,7 +791,7 @@ namespace el1::io::net::http
 		return request_path[cookie_path.Length()] == '/';
 	}
 
-	const TString* THttpClient::response_t::FindHeader(const TString& name) const
+	const TString* THttpClient::response_header_t::FindHeader(const TString& name) const
 	{
 		for(const auto& field : header_lines)
 			if(HeaderNameEquals(field.key, name))
@@ -798,7 +799,7 @@ namespace el1::io::net::http
 		return nullptr;
 	}
 
-	TList<TString> THttpClient::response_t::FindHeaders(const TString& name) const
+	TList<TString> THttpClient::response_header_t::FindHeaders(const TString& name) const
 	{
 		TList<TString> values;
 		for(const auto& field : header_lines)
@@ -982,15 +983,45 @@ namespace el1::io::net::http
 		return result;
 	}
 
-	THttpClient::response_t THttpClient::Get(TString url, ISink<byte_t>* const response_body_sink)
+	THttpClient::response_t THttpClient::Get(TString url, ISink<byte_t>* const response_body_sink, const usys_t body_limit)
 	{
 		request_t request;
 		request.method = EMethod::GET;
 		request.url = std::move(url);
-		return Request(std::move(request), response_body_sink);
+		return Request(std::move(request), response_body_sink, body_limit);
 	}
 
-	THttpClient::response_t THttpClient::Request(request_t request, ISink<byte_t>* const response_body_sink)
+	std::unique_ptr<ISource<byte_t>> THttpClient::Get(TString url, response_header_t* const response_header, const usys_t body_limit)
+	{
+		response_t response = Get(std::move(url), static_cast<ISink<byte_t>*>(nullptr), body_limit);
+		if(response_header != nullptr)
+			*response_header = std::move(static_cast<response_header_t&>(response));
+		return New<TListSource<byte_t>, ISource<byte_t>>(std::move(response.body));
+	}
+
+	THttpClient::response_t THttpClient::Post(TString url, array_t<const byte_t> body, THttpHeaderFields header_fields, const usys_t body_limit)
+	{
+		TArraySource<byte_t> source(body);
+		return Post(std::move(url), source, body.Count(), std::move(header_fields), body_limit);
+	}
+
+	THttpClient::response_t THttpClient::Post(TString url, ISource<byte_t>& body, THttpHeaderFields header_fields, const usys_t body_limit)
+	{
+		return Post(std::move(url), body, NEG1, std::move(header_fields), body_limit);
+	}
+
+	THttpClient::response_t THttpClient::Post(TString url, ISource<byte_t>& body, const usys_t content_length, THttpHeaderFields header_fields, const usys_t body_limit)
+	{
+		request_t request;
+		request.method = EMethod::POST;
+		request.url = std::move(url);
+		request.header_fields = std::move(header_fields);
+		request.body = &body;
+		request.content_length = content_length;
+		return Request(std::move(request), nullptr, body_limit);
+	}
+
+	THttpClient::response_t THttpClient::Request(request_t request, ISink<byte_t>* const response_body_sink, const usys_t body_limit)
 	{
 		ValidateRequestTarget(request.url);
 		EL_ERROR(request.body == nullptr && request.content_length != 0, TInvalidArgumentException, "content_length", "non-zero content length requires a request body");
@@ -1098,7 +1129,9 @@ namespace el1::io::net::http
 				ProcessSetCookie(set_cookie, request_path);
 
 			TListSink<byte_t> buffer_sink(&response.body);
-			ISink<byte_t>* const body_sink = response_body_sink == nullptr ? static_cast<ISink<byte_t>*>(&buffer_sink) : response_body_sink;
+			ISink<byte_t>* const raw_body_sink = response_body_sink == nullptr ? static_cast<ISink<byte_t>*>(&buffer_sink) : response_body_sink;
+			TLimitSink<byte_t> limit_sink(raw_body_sink, body_limit);
+			ISink<byte_t>* const body_sink = &limit_sink;
 			const u16_t status_code = (u16_t)response.status;
 			const bool no_body = request.method == EMethod::HEAD || (status_code >= 100 && status_code < 200) || status_code == 204 || status_code == 304;
 			bool reusable = true;
@@ -1107,6 +1140,8 @@ namespace el1::io::net::http
 			{
 				const TString* const transfer_encoding = response.FindHeader(L"Transfer-Encoding");
 				const usys_t content_length = response.header_fields.ContentLength();
+				if(body_limit != NEG1 && transfer_encoding == nullptr && content_length != NEG1)
+					EL_ERROR(content_length > body_limit, TException, "HTTP response body exceeds configured limit");
 				if(transfer_encoding != nullptr)
 				{
 					TString encoding = *transfer_encoding;
