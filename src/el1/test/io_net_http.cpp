@@ -155,7 +155,7 @@ namespace
 		});
 
 		const TString url = TString::Format(L"https://localhost:%d/secure", tls_server.LocalAddress().port);
-		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--insecure", L"--tlsv1.2", url });
+		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--cacert", L"support/tls-test-cert.pem", L"--tlsv1.2", url });
 		const TString str_ref = TFile(L"gen/testdata/freecad_v1_0_0.gcode").Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
 	}
@@ -173,7 +173,7 @@ namespace
 		});
 
 		const TString url = TString::Format(L"https://localhost:%d/stream", tls_server.LocalAddress().port);
-		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--insecure", url });
+		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--cacert", L"support/tls-test-cert.pem", url });
 		EXPECT_EQ(str_curl, L"secure-stream");
 	}
 
