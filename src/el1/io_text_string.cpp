@@ -9,7 +9,265 @@ namespace el1::io::text::string
 {
 	extern const array_t<const TUTF32> WHITESPACE_CHARS;
 
-	TString operator ""_U(const char* str, size_t len) { return TString(str, len); }
+	bool TStringView::Contains(const TStringView needle) const
+	{
+		if(needle.Length() == 0)
+			return true;
+		if(Length() < needle.Length())
+			return false;
+
+		for(usys_t i = 0; i <= Count() - needle.Count(); i++)
+			if(memcmp(ItemPtr(i), needle.ItemPtr(0), needle.Count() * sizeof(TUTF32)) == 0)
+				return true;
+
+		return false;
+	}
+
+	usys_t TStringView::Find(const TStringView needle, const ssys_t start, const bool reverse) const
+	{
+		EL_ERROR(needle.Length() == 0, TInvalidArgumentException, "needle", "needle must not be empty");
+
+		if(Length() == 0 || needle.Length() > Length())
+			return NEG1;
+
+		if(reverse)
+		{
+			for(ssys_t i = static_cast<ssys_t>(AbsoluteIndex(start, false)) - static_cast<ssys_t>(needle.Length()) + 1; i >= 0; i--)
+			{
+				usys_t j = 0;
+				for(; j < needle.Length() && (*this)[i + j] == needle[j]; j++);
+				if(j == needle.Length())
+					return static_cast<usys_t>(i);
+			}
+		}
+		else
+		{
+			const usys_t end = Count() - needle.Length() + 1;
+			for(usys_t i = AbsoluteIndex(start, false); i < end; i++)
+			{
+				usys_t j = 0;
+				for(; j < needle.Length() && (*this)[i + j] == needle[j]; j++);
+				if(j == needle.Length())
+					return i;
+			}
+		}
+
+		return NEG1;
+	}
+
+	usys_t TStringView::Find(const TUTF32 needle, const ssys_t start, const bool reverse) const
+	{
+		if(Length() == 0)
+			return NEG1;
+
+		if(reverse)
+		{
+			for(ssys_t i = static_cast<ssys_t>(AbsoluteIndex(start, false)); i >= 0; i--)
+				if((*this)[i] == needle)
+					return static_cast<usys_t>(i);
+		}
+		else
+		{
+			for(usys_t i = AbsoluteIndex(start, false); i < Count(); i++)
+				if((*this)[i] == needle)
+					return i;
+		}
+
+		return NEG1;
+	}
+
+	usys_t TStringView::FindFirst(const array_t<const TUTF32>& charset, const ssys_t start, const bool reverse) const
+	{
+		if(Length() == 0)
+			return NEG1;
+
+		const usys_t index = AbsoluteIndex(start, false);
+		if(reverse)
+		{
+			for(ssys_t i = static_cast<ssys_t>(index); i >= 0; i--)
+				if(charset.Contains((*this)[i]))
+					return static_cast<usys_t>(i);
+		}
+		else
+		{
+			for(usys_t i = index; i < Count(); i++)
+				if(charset.Contains((*this)[i]))
+					return i;
+		}
+
+		return NEG1;
+	}
+
+	bool TStringView::BeginsWith(const TStringView txt) const
+	{
+		if(Length() < txt.Length())
+			return false;
+
+		for(usys_t i = 0; i < txt.Length(); i++)
+			if((*this)[i] != txt[i])
+				return false;
+		return true;
+	}
+
+	bool TStringView::EndsWith(const TStringView txt) const
+	{
+		if(Length() < txt.Length())
+			return false;
+
+		const usys_t offset = Length() - txt.Length();
+		for(usys_t i = 0; i < txt.Length(); i++)
+			if((*this)[offset + i] != txt[i])
+				return false;
+		return true;
+	}
+
+	TStringView TStringView::SliceSL(const ssys_t start, usys_t length) const
+	{
+		const usys_t idx_start = AbsoluteIndex(start, true);
+		if(length == NEG1)
+			length = Count() - idx_start;
+
+		EL_ERROR(length > Count() - idx_start, TInvalidArgumentException, "length", "start + length is after the end of the string");
+		return TStringView(idx_start == 0 ? Data() : Data() + idx_start, length);
+	}
+
+	TStringView TStringView::SliceBE(const ssys_t begin, const ssys_t end) const
+	{
+		const usys_t idx_begin = AbsoluteIndex(begin, true);
+		const usys_t idx_end = AbsoluteIndex(end, true);
+		EL_ERROR(idx_end < idx_begin, TInvalidArgumentException, "end", "end is before start");
+		return TStringView(idx_begin == 0 ? Data() : Data() + idx_begin, idx_end - idx_begin);
+	}
+
+	double TStringView::ToDouble() const
+	{
+		EL_ERROR(Length() == 0, TInvalidArgumentException, "str", "empty string cannot be parsed as double");
+
+		double number = 0.0;
+		double divider = 10.0;
+		u8_t integer_part[22];
+		bool parse_int = true;
+		bool negative = false;
+		unsigned ii = 0;
+
+		for(usys_t i = 0; i < Length(); i++)
+		{
+			const TUTF32 chr = (*this)[i];
+			if(chr.code == '-' && parse_int && ii == 0 && !negative)
+			{
+				negative = true;
+			}
+			else if(chr.code == '.' && parse_int)
+			{
+				parse_int = false;
+			}
+			else if(chr.code >= '0' && chr.code <= '9')
+			{
+				if(parse_int)
+				{
+					EL_ERROR(ii >= sizeof(integer_part), TException, "number integer-part is too big");
+					integer_part[ii++] = static_cast<u8_t>(chr.code - '0');
+				}
+				else
+				{
+					number += (chr.code - '0') / divider;
+					divider *= 10.0;
+				}
+			}
+			else
+			{
+				EL_THROW(TException, TString::Format("encountered non-numeric character '%c' at index %d"_U, chr, i));
+			}
+		}
+
+		u64_t m = 1;
+		for(usys_t i = ii; i > 0; i--)
+		{
+			number += m * integer_part[i - 1];
+			m *= 10;
+		}
+
+		return negative ? -number : number;
+	}
+
+	s64_t TStringView::ToInteger() const
+	{
+		EL_ERROR(Length() == 0, TInvalidArgumentException, "str", "empty string cannot be parsed as integer");
+
+		u8_t integer_part[22];
+		bool negative = false;
+		unsigned ii = 0;
+
+		for(usys_t i = 0; i < Length(); i++)
+		{
+			const TUTF32 chr = (*this)[i];
+			if(chr.code == '-' && ii == 0 && !negative)
+			{
+				negative = true;
+			}
+			else if(chr.code >= '0' && chr.code <= '9')
+			{
+				EL_ERROR(ii >= sizeof(integer_part), TException, "number integer-part is too big");
+				integer_part[ii++] = static_cast<u8_t>(chr.code - '0');
+			}
+			else
+			{
+				EL_THROW(TException, TString::Format("encountered non-numeric character '%c' at index %d"_U, chr, i));
+			}
+		}
+
+		s64_t number = 0;
+		u64_t m = 1;
+		for(usys_t i = ii; i > 0; i--)
+		{
+			number += m * integer_part[i - 1];
+			m *= 10;
+		}
+
+		return negative ? -number : number;
+	}
+
+	bool TStringView::operator==(const TStringView rhs) const
+	{
+		return Count() == rhs.Count() && (Count() == 0 || memcmp(Data(), rhs.Data(), Count() * sizeof(TUTF32)) == 0);
+	}
+
+	bool TStringView::operator>=(const TStringView rhs) const
+	{
+		return !operator<(rhs);
+	}
+
+	bool TStringView::operator<=(const TStringView rhs) const
+	{
+		return !operator>(rhs);
+	}
+
+	bool TStringView::operator>(const TStringView rhs) const
+	{
+		const usys_t n = util::Min(Count(), rhs.Count());
+		for(usys_t i = 0; i < n; i++)
+		{
+			if((*this)[i] > rhs[i])
+				return true;
+			if((*this)[i] < rhs[i])
+				return false;
+		}
+		return Count() > rhs.Count();
+	}
+
+	bool TStringView::operator<(const TStringView rhs) const
+	{
+		const usys_t n = util::Min(Count(), rhs.Count());
+		for(usys_t i = 0; i < n; i++)
+		{
+			if((*this)[i] < rhs[i])
+				return true;
+			if((*this)[i] > rhs[i])
+				return false;
+		}
+		return Count() < rhs.Count();
+	}
+
 
 	TString TUndefineFormatException::Message() const
 	{
@@ -47,6 +305,7 @@ namespace el1::io::text::string
 	TString IFormatter::Format(const char* const) const    { EL_THROW(TUndefineFormatException, "char*",    FormatName()); }
 	TString IFormatter::Format(const wchar_t* const) const { EL_THROW(TUndefineFormatException, "wchar_t*", FormatName()); }
 	TString IFormatter::Format(const TString&) const       { EL_THROW(TUndefineFormatException, "TString",  FormatName()); }
+	TString IFormatter::Format(const TStringView) const     { EL_THROW(TUndefineFormatException, "TStringView", FormatName()); }
 	TString IFormatter::Format(const char) const           { EL_THROW(TUndefineFormatException, "char",     FormatName()); }
 	TString IFormatter::Format(const wchar_t) const        { EL_THROW(TUndefineFormatException, "wchar_t",  FormatName()); }
 	TString IFormatter::Format(const TUTF32) const         { EL_THROW(TUndefineFormatException, "TUTF32",   FormatName()); }
@@ -456,7 +715,14 @@ namespace el1::io::text::string
 
 	TString TStringFormatter::Format(const TString& value) const
 	{
-		TString s = config.prefix + value + config.suffix;
+		return Format(value.View());
+	}
+
+	TString TStringFormatter::Format(const TStringView value) const
+	{
+		TString s = config.prefix;
+		s += value;
+		s += config.suffix;
 
 		if(config.quote_symbols != nullptr)
 		{
@@ -510,7 +776,7 @@ namespace el1::io::text::string
 
 	/******************************************/
 
-	TFormatVariable TFormatVariable::Find(const TString& str, const usys_t start_pos)
+	TFormatVariable TFormatVariable::Find(const TStringView str, const usys_t start_pos)
 	{
 		for(usys_t i = start_pos + 1; i < str.Length(); i++)
 		{
@@ -526,7 +792,7 @@ namespace el1::io::text::string
 					if(str[j] == 'b' || str[j] == 'd' || str[j] == 'x' || str[j] == 'p' || str[j] == 's' || str[j] == 'q' || str[j] == 'c')
 					{
 						const char format_char = (char)str[j].code;
-						const TString arg_str = str.SliceBE(i, j);
+						const TStringView arg_str = str.SliceBE(i, j);
 						TFormatVariable v = TFormatVariable::Parse(format_char, arg_str);
 						v.pos = i - 1;
 						v.len = j - i + 2;
@@ -545,7 +811,7 @@ namespace el1::io::text::string
 		return TFormatVariable(false, nullptr);
 	}
 
-	TFormatVariable TFormatVariable::Parse(const TUTF32 format_char, const TString& arg_str)
+	TFormatVariable TFormatVariable::Parse(const TUTF32 format_char, const TStringView arg_str)
 	{
 		switch(format_char.code)
 		{
@@ -560,7 +826,7 @@ namespace el1::io::text::string
 		}
 	}
 
-	TFormatVariable TFormatVariable::ParseNumberFormatterArguments(const TString& arg_str, const TNumberFormatter* const default_format)
+	TFormatVariable TFormatVariable::ParseNumberFormatterArguments(const TStringView arg_str, const TNumberFormatter* const default_format)
 	{
 		// %[<PAD>][<int part len>[.<dec part len>]](b|d|x|p)
 		// first non-numeric character is interpreted as pad character
@@ -617,21 +883,21 @@ namespace el1::io::text::string
 		}
 	}
 
-	TFormatVariable TFormatVariable::ParseStringFormatterArguments(const TString& arg_str)
+	TFormatVariable TFormatVariable::ParseStringFormatterArguments(const TStringView arg_str)
 	{
 		EL_ERROR(arg_str.Length() != 0, TNotImplementedException);
 
 		return TFormatVariable(true, &TStringFormatter::PLAIN);
 	}
 
-	TFormatVariable TFormatVariable::ParseQuotedFormatterArguments(const TString& arg_str)
+	TFormatVariable TFormatVariable::ParseQuotedFormatterArguments(const TStringView arg_str)
 	{
 		EL_ERROR(arg_str.Length() != 0, TNotImplementedException);
 
 		return TFormatVariable(true, &TStringFormatter::ASCII_QUOTED);
 	}
 
-	TFormatVariable TFormatVariable::ParseCharacterFormatterArguments(const TString& arg_str)
+	TFormatVariable TFormatVariable::ParseCharacterFormatterArguments(const TStringView arg_str)
 	{
 		EL_ERROR(arg_str.Length() != 0, TNotImplementedException);
 
@@ -642,96 +908,12 @@ namespace el1::io::text::string
 
 	double TString::ToDouble() const
 	{
-		EL_ERROR(this->Length() == 0, TInvalidArgumentException, "str", "empty string cannot be parsed as double");
-
-		double number = 0.0;
-		double divider = 10.0;
-
-		u8_t integer_part[22];
-		bool parse_int = true;
-		bool negative = false;
-		unsigned ii = 0;
-
-		for(const TUTF32& chr : chars)
-		{
-			if(chr.code == '-' && parse_int && ii == 0 && !negative)
-			{
-				negative = true;
-			}
-			else if(chr.code == '.' && parse_int)
-			{
-				parse_int = false;
-			}
-			else if(chr.code >= '0' && chr.code <= '9')
-			{
-				if(parse_int)
-				{
-					EL_ERROR(ii >= sizeof(integer_part), TException, "number integer-part is too big");
-					integer_part[ii++] = ((u8_t)(chr.code - '0'));
-				}
-				else
-				{
-					number += (chr.code - '0') / divider;
-					divider *= 10.0;
-				}
-			}
-			else
-			{
-				EL_THROW(TException, TString::Format("encountered non-numeric character '%c' at index %d", chr, (usys_t)(&chr - &chars[0])));
-			}
-		}
-
-		u64_t m = 1;
-		for(usys_t i = ii; i > 0; i--)
-		{
-			number += m * integer_part[i-1];
-			m *= 10;
-		}
-
-		if(negative)
-			number *= -1.0;
-
-		return number;
+		return View().ToDouble();
 	}
 
 	s64_t TString::ToInteger() const
 	{
-		EL_ERROR(this->Length() == 0, TInvalidArgumentException, "str", "empty string cannot be parsed as integer");
-
-		u8_t integer_part[22];
-		bool negative = false;
-		unsigned ii = 0;
-
-		for(const TUTF32& chr : chars)
-		{
-			if(chr.code == '-' && ii == 0 && !negative)
-			{
-				negative = true;
-			}
-			else if(chr.code >= '0' && chr.code <= '9') // TODO: support more than just ASCII decimal - there are other unicode digits and number-systems
-			{
-				EL_ERROR(ii >= sizeof(integer_part), TException, "number integer-part is too big");
-				integer_part[ii++] = ((u8_t)(chr.code - '0'));
-			}
-			else
-			{
-				EL_THROW(TException, TString::Format("encountered non-numeric character '%c' at index %d", chr, (usys_t)(&chr - &chars[0])));
-			}
-		}
-
-		s64_t number = 0;
-		u64_t m = 1;
-		for(usys_t i = ii; i > 0; i--)
-		{
-			number += m * integer_part[i-1];
-			m *= 10;
-		}
-
-		if(negative)
-			number *= -1;
-
-		// std::cerr<<"DEBUG: ToInteger() = "<<number<<std::endl;
-		return number;
+		return View().ToInteger();
 	}
 
 	TString::TString(const char* const str, const usys_t maxlen)
@@ -755,13 +937,13 @@ namespace el1::io::text::string
 		chars.Append(str, len);
 	}
 
-	TString& TString::operator+=(const TString& rhs)
+	TString& TString::operator+=(const TStringView rhs)
 	{
-		chars.Append(rhs.chars);
+		chars.Append(rhs);
 		return *this;
 	}
 
-	TString  TString::operator+ (const TString& rhs) const
+	TString TString::operator+ (const TStringView rhs) const
 	{
 		TString tmp = *this;
 		tmp += rhs;
@@ -781,37 +963,24 @@ namespace el1::io::text::string
 		return tmp;
 	}
 
-	bool TString::BeginsWith(const TString& str) const
+	bool TString::BeginsWith(const TStringView str) const
 	{
-		if(this->Length() < str.Length())
-			return false;
-
-		for(usys_t i = 0; i < str.Length(); i++)
-			if(str[i] != this->chars[i])
-				return false;
-
-		return true;
+		return View().BeginsWith(str);
 	}
 
-	void TString::Insert(const ssys_t pos, const TString& str)
+	void TString::Insert(const ssys_t pos, const TStringView str)
 	{
-		chars.Insert(pos, str.chars);
+		chars.Insert(pos, str);
 	}
 
-	void TString::Append(const TString& str)
+	void TString::Append(const TStringView str)
 	{
-		chars.Append(str.chars);
+		chars.Append(str);
 	}
 
-	bool TString::EndsWith(const TString& txt) const
+	bool TString::EndsWith(const TStringView txt) const
 	{
-		const usys_t my_len = this->Length();
-		const usys_t txt_len = txt.Length();
-		const usys_t l = util::Min(my_len, txt_len);
-		for(usys_t i = 1; i <= l; i++)
-			if(this->chars[my_len - i] != txt.chars[txt_len - i])
-				return false;
-		return true;
+		return View().EndsWith(txt);
 	}
 
 	TString TString::ExtractSequence(const array_t<const TUTF32> charset, const ssys_t _start, usys_t max_length) const
@@ -831,173 +1000,49 @@ namespace el1::io::text::string
 		return seq;
 	}
 
-	bool TString::operator==(const TString& rhs) const
+	bool TString::operator==(const TStringView rhs) const
 	{
-		if(this == &rhs) return true;
-		if(this->chars.Count() != rhs.chars.Count())
-			return false;
-
-		for(usys_t i = 0; i < this->chars.Count(); i++)
-			if(this->chars[i] != rhs.chars[i])
-				return false;
-
-		return true;
+		return View() == rhs;
 	}
 
-	bool TString::operator!=(const TString& rhs) const
+	bool TString::operator!=(const TStringView rhs) const
 	{
-		return !operator==(rhs);
+		return View() != rhs;
 	}
 
-	bool TString::operator>=(const TString& rhs) const
+	bool TString::operator>=(const TStringView rhs) const
 	{
-		if(this == &rhs) return true;
-		const usys_t n = util::Min(this->chars.Count(), rhs.chars.Count());
-
-		for(usys_t i = 0; i < n; i++)
-		{
-			if(this->chars[i] > rhs.chars[i])
-				return true;
-
-			if(this->chars[i] < rhs.chars[i])
-				return false;
-		}
-
-		if(this->chars.Count() >= rhs.chars.Count())
-			return true;
-
-		return false;
+		return View() >= rhs;
 	}
 
-	bool TString::operator<=(const TString& rhs) const
+	bool TString::operator<=(const TStringView rhs) const
 	{
-		if(this == &rhs) return true;
-		const usys_t n = util::Min(this->chars.Count(), rhs.chars.Count());
-
-		for(usys_t i = 0; i < n; i++)
-		{
-			if(this->chars[i] < rhs.chars[i])
-				return true;
-
-			if(this->chars[i] > rhs.chars[i])
-				return false;
-		}
-
-		if(this->chars.Count() <= rhs.chars.Count())
-			return true;
-
-		return false;
+		return View() <= rhs;
 	}
 
-	bool TString::operator> (const TString& rhs) const
+	bool TString::operator>(const TStringView rhs) const
 	{
-		if(this == &rhs) return false;
-		const usys_t n = util::Min(this->chars.Count(), rhs.chars.Count());
-
-		for(usys_t i = 0; i < n; i++)
-		{
-			if(this->chars[i] > rhs.chars[i])
-				return true;
-
-			if(this->chars[i] < rhs.chars[i])
-				return false;
-		}
-
-		if(this->chars.Count() > rhs.chars.Count())
-			return true;
-
-		return false;
+		return View() > rhs;
 	}
 
-	bool TString::operator< (const TString& rhs) const
+	bool TString::operator<(const TStringView rhs) const
 	{
-		if(this == &rhs) return false;
-		const usys_t n = util::Min(this->chars.Count(), rhs.chars.Count());
-
-		for(usys_t i = 0; i < n; i++)
-		{
-			if(this->chars[i] > rhs.chars[i])
-				return false;
-
-			if(this->chars[i] < rhs.chars[i])
-				return true;
-		}
-
-		if(this->chars.Count() < rhs.chars.Count())
-			return true;
-
-		return false;
+		return View() < rhs;
 	}
 
-	usys_t TString::Find(const TString& needle, const ssys_t start, const bool reverse) const
+	usys_t TString::Find(const TStringView needle, const ssys_t start, const bool reverse) const
 	{
-		EL_ERROR(needle.Length() == 0, TInvalidArgumentException, "needle", "needle must not be empty");
-
-		if(this->Length() == 0)
-			return NEG1;
-
-		if(reverse)
-		{
-			for(ssys_t i = chars.AbsoluteIndex(start, false) - needle.Length() + 1; i >= 0; i--)
-			{
-				usys_t j = 0;
-				for(; j < needle.Length() && chars[i + j] == needle[j]; j++);
-				if(j == needle.Length())
-					return i;
-			}
-		}
-		else
-		{
-			const usys_t end = chars.Count() - needle.Length() + 1;
-			for(usys_t i = chars.AbsoluteIndex(start, false); i < end; i++)
-			{
-				usys_t j = 0;
-				for(; j < needle.Length() && chars[i + j] == needle[j]; j++);
-				if(j == needle.Length())
-					return i;
-			}
-		}
-
-		return NEG1;
+		return View().Find(needle, start, reverse);
 	}
 
 	usys_t TString::Find(const TUTF32 needle, const ssys_t start, const bool reverse) const
 	{
-		if(Length() == 0)
-			return NEG1;
-
-		if(reverse)
-		{
-			for(ssys_t i = chars.AbsoluteIndex(start, false); i >= 0; i--)
-				if(chars[i] == needle)
-					return i;
-		}
-		else
-		{
-			for(usys_t i = chars.AbsoluteIndex(start, false); i < chars.Count(); i++)
-				if(chars[i] == needle)
-					return i;
-		}
-
-		return NEG1;
+		return View().Find(needle, start, reverse);
 	}
 
-	usys_t TString::FindFirst(const array_t<const TUTF32>& charset, const ssys_t _start, const bool reverse) const
+	usys_t TString::FindFirst(const array_t<const TUTF32>& charset, const ssys_t start, const bool reverse) const
 	{
-		const usys_t start = chars.AbsoluteIndex(_start, false);
-		if(reverse)
-		{
-			for(ssys_t i = start; i >= 0; i--)
-				if(charset.Contains(chars[i]))
-					return i;
-		}
-		else
-		{
-			for(usys_t i = start; i < chars.Count(); i++)
-				if(charset.Contains(chars[i]))
-					return i;
-		}
-		return NEG1;
+		return View().FindFirst(charset, start, reverse);
 	}
 
 	TString& TString::Trim(const bool start, const bool end, const array_t<const TUTF32> trim_chars)
@@ -1015,7 +1060,7 @@ namespace el1::io::text::string
 		return *this;
 	}
 
-	void TString::ReplaceAt(const ssys_t pos, const usys_t length, const TString& substitute)
+	void TString::ReplaceAt(const ssys_t pos, const usys_t length, const TStringView substitute)
 	{
 		const usys_t n_common = util::Min(length, substitute.Length());
 
@@ -1025,10 +1070,10 @@ namespace el1::io::text::string
 		if(length > substitute.Length())
 			chars.Remove(pos + n_common, length - n_common);
 		else if(length < substitute.Length())
-			chars.Insert(pos + n_common, &substitute.chars[n_common], substitute.Length() - n_common);
+			chars.Insert(pos + n_common, substitute.Data() + n_common, substitute.Length() - n_common);
 	}
 
-	usys_t TString::Replace(const TString& needle, const TString& substitute, const ssys_t start, const bool reverse, const usys_t n_max_replacements)
+	usys_t TString::Replace(const TStringView needle, const TStringView substitute, const ssys_t start, const bool reverse, const usys_t n_max_replacements)
 	{
 		EL_ERROR(needle.Length() == 0, TInvalidArgumentException, "needle", "needle must not be empty");
 
@@ -1054,24 +1099,17 @@ namespace el1::io::text::string
 		return n_replace;
 	}
 
-	bool TString::Contains(const TString& needle) const
+	bool TString::Contains(const TStringView needle) const
 	{
-		if(this->Length() < needle.Length())
-			return false;
-
-		for(usys_t i = 0; i <= this->chars.Count() - needle.chars.Count(); i++)
-			if(memcmp(this->chars.ItemPtr(i), needle.chars.ItemPtr(0), needle.chars.Count() * sizeof(TUTF32)) == 0)
-				return true;
-
-		return false;
+		return View().Contains(needle);
 	}
 
 	bool TString::Contains(const TUTF32 needle) const
 	{
-		return this->chars.Contains(needle);
+		return View().Contains(needle);
 	}
 
-	TString TString::Join(array_t<const TString> list, const TString& delimiter)
+	TString TString::Join(array_t<const TString> list, const TStringView delimiter)
 	{
 		return list.Pipe().Aggregate([&delimiter](TString& result, const TString& append){
 			if(result.Length() > 0)
@@ -1080,7 +1118,7 @@ namespace el1::io::text::string
 		}, TString());
 	}
 
-	TList<TString> TString::Split(const TString& delimiter, const usys_t n_max, const bool skip_empty) const
+	TList<TString> TString::Split(const TStringView delimiter, const usys_t n_max, const bool skip_empty) const
 	{
 		usys_t start = 0;
 		TList<TString> list(n_max < 256 ? n_max : 8);
@@ -1175,7 +1213,7 @@ namespace el1::io::text::string
 		return lines;
 	}
 
-	kv_pair_tt<TString,TString> TString::SplitKV(const TString& delimiter) const
+	kv_pair_tt<TString,TString> TString::SplitKV(const TStringView delimiter) const
 	{
 		const usys_t idx = Find(delimiter);
 		EL_ERROR(idx == NEG1, TException, TString::Format("unable to find key/value delimiter %q", delimiter));
@@ -1189,28 +1227,14 @@ namespace el1::io::text::string
 		return { SliceBE(0, idx), SliceBE(idx + 1, Length()) };
 	}
 
-	TString TString::SliceSL(const ssys_t start, usys_t length) const
+	TString TString::SliceSL(const ssys_t start, const usys_t length) const
 	{
-		if(length == 0)
-			return "";
-
-		const usys_t idx_start = chars.AbsoluteIndex(start, true);
-		if(length == NEG1)
-			length = chars.Count() - start;
-
-		EL_ERROR(idx_start >= chars.Count(), TInvalidArgumentException, "start", "start is after the end of the string");
-		EL_ERROR(idx_start + length > chars.Count(), TInvalidArgumentException, "length", "start + length is after the end of the string");
-		return TString(&chars[idx_start], util::Min(this->Length() - idx_start, length));
+		return TString(View().SliceSL(start, length));
 	}
 
 	TString TString::SliceBE(const ssys_t begin, const ssys_t end) const
 	{
-		if(begin == end)
-			return "";
-		const usys_t start = chars.AbsoluteIndex(begin, false);
-		const usys_t end_abs = chars.AbsoluteIndex(end, true);
-		EL_ERROR(end_abs < start, TInvalidArgumentException, "end", "end is before start");
-		return SliceSL(start, end_abs - start);
+		return TString(View().SliceBE(begin, end));
 	}
 
 	TString& TString::Pad(const TUTF32 pad_sign, const usys_t min_length, const EPlacement placement)
@@ -1352,7 +1376,7 @@ namespace el1::io::text::string
 		return p;
 	}
 
-	void TString::_Format(TString& out, const TString& format, usys_t& pos)
+	void TString::_Format(TString& out, const TStringView format, usys_t& pos)
 	{
 		const TFormatVariable var = TFormatVariable::Find(format, pos);
 		EL_ERROR(var.len != 0, TTooManyFormatVariablesException, format);

@@ -11,6 +11,38 @@ namespace
 	using namespace el1::io::text::string;
 	using namespace el1::error;
 
+
+	TEST(io_text_string, TStringView_UnicodeLiteral)
+	{
+		constexpr TStringView ascii = "hello"_U;
+		static_assert(ascii.Length() == 5);
+
+		constexpr TStringView unicode = "Hällö 😀"_U;
+		static_assert(unicode.Length() == 7);
+
+		EXPECT_EQ(unicode[0].code, static_cast<u32_t>('H'));
+		EXPECT_EQ(unicode[1].code, 0x00e4U);
+		EXPECT_EQ(unicode[4].code, 0x00f6U);
+		EXPECT_EQ(unicode[-1].code, 0x1f600U);
+		EXPECT_EQ(unicode.Data()[unicode.Length()].code, 0U);
+
+		EXPECT_EQ("same storage"_U.Data(), "same storage"_U.Data());
+
+		const TString owned = unicode;
+		EXPECT_EQ(owned, unicode);
+		EXPECT_TRUE(owned.BeginsWith("Häll"_U));
+		EXPECT_TRUE(owned.EndsWith("ö 😀"_U));
+		EXPECT_TRUE(owned.Contains("llö"_U));
+		EXPECT_EQ(owned.Find("😀"_U), 6U);
+
+		const TStringView slice = unicode.SliceBE(1, 5);
+		EXPECT_EQ(slice, "ällö"_U);
+
+		EXPECT_EQ("-123"_U.ToInteger(), -123);
+		EXPECT_DOUBLE_EQ("12.5"_U.ToDouble(), 12.5);
+		EXPECT_EQ(TString::Format("%s/%s"_U, "ä"_U, "😀"_U), "ä/😀"_U);
+	}
+
 	TEST(io_text_string, TString_Construct)
 	{
 		{

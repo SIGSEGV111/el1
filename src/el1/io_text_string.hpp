@@ -7,6 +7,9 @@
 #include "def.hpp"
 #include "math.hpp"
 
+#include <array>
+#include <cstddef>
+
 namespace el1::io::bcd
 {
 	class TBCD;
@@ -18,6 +21,136 @@ namespace el1::io::text::string
 	using namespace io::text::encoding;
 	using namespace io::collection::list;
 	using namespace io::collection::array;
+
+	/**
+	 * Immutable, non-owning UTF-32 string view.
+	 *
+	 * TStringView never allocates and never owns character storage. It can point
+	 * at a TString, a TUTF32 array, or the static UTF-32 storage generated for a
+	 * _U literal. The referenced storage must outlive the view.
+	 */
+	class TStringView : public array_t<const TUTF32>
+	{
+		public:
+			using TBase = array_t<const TUTF32>;
+
+			constexpr TStringView() noexcept = default;
+			constexpr TStringView(const TUTF32* const chars, const usys_t n_chars) noexcept : TBase(chars, n_chars) {}
+			constexpr TStringView(const TBase chars) noexcept : TBase(chars) {}
+
+			constexpr usys_t Length() const noexcept EL_GETTER { return Count(); }
+
+			bool Contains(const TStringView needle) const EL_GETTER;
+			bool Contains(const TUTF32 needle) const EL_GETTER { return TBase::Contains(needle); }
+			usys_t Find(const TStringView needle, const ssys_t start = 0, const bool reverse = false) const EL_GETTER;
+			usys_t Find(const TUTF32 needle, const ssys_t start = 0, const bool reverse = false) const EL_GETTER;
+			usys_t FindFirst(const array_t<const TUTF32>& charset, const ssys_t start = 0, const bool reverse = false) const EL_GETTER;
+			bool BeginsWith(const TStringView txt) const EL_GETTER;
+			bool EndsWith(const TStringView txt) const EL_GETTER;
+
+			TStringView SliceSL(const ssys_t start, usys_t length = NEG1) const;
+			TStringView SliceBE(const ssys_t begin, const ssys_t end) const;
+
+			double ToDouble() const EL_GETTER;
+			s64_t ToInteger() const EL_GETTER;
+
+			bool operator==(const TStringView rhs) const EL_GETTER;
+			bool operator!=(const TStringView rhs) const EL_GETTER { return !operator==(rhs); }
+			bool operator>=(const TStringView rhs) const EL_GETTER;
+			bool operator<=(const TStringView rhs) const EL_GETTER;
+			bool operator> (const TStringView rhs) const EL_GETTER;
+			bool operator< (const TStringView rhs) const EL_GETTER;
+	};
+
+	template<std::size_t N>
+	struct utf8_literal_t
+	{
+		char bytes[N];
+
+		constexpr utf8_literal_t(const char (&str)[N]) noexcept : bytes{}
+		{
+			for(std::size_t i = 0; i < N; i++)
+				bytes[i] = str[i];
+		}
+	};
+
+	template<std::size_t N>
+	struct utf32_literal_t
+	{
+		std::array<TUTF32, N> chars;
+		usys_t count;
+	};
+
+	template<std::size_t N>
+	consteval utf32_literal_t<N> DecodeUTF8Literal(const utf8_literal_t<N>& input)
+	{
+		utf32_literal_t<N> output = {};
+		std::size_t i = 0;
+
+		auto continuation = [&input](const std::size_t index) consteval -> u32_t
+		{
+			if(index >= N - 1)
+				throw "truncated UTF-8 sequence in _U literal";
+
+			const u32_t byte = static_cast<unsigned char>(input.bytes[index]);
+			if((byte & 0xc0U) != 0x80U)
+				throw "invalid UTF-8 continuation byte in _U literal";
+			return byte & 0x3fU;
+		};
+
+		while(i < N - 1)
+		{
+			const u32_t b0 = static_cast<unsigned char>(input.bytes[i++]);
+			u32_t code = 0;
+
+			if(b0 <= 0x7fU)
+			{
+				code = b0;
+			}
+			else if(b0 >= 0xc2U && b0 <= 0xdfU)
+			{
+				code = ((b0 & 0x1fU) << 6) | continuation(i++);
+			}
+			else if(b0 >= 0xe0U && b0 <= 0xefU)
+			{
+				const u32_t b1 = continuation(i++);
+				const u32_t b2 = continuation(i++);
+				if((b0 == 0xe0U && b1 < 0x20U) || (b0 == 0xedU && b1 >= 0x20U))
+					throw "non-canonical or surrogate UTF-8 sequence in _U literal";
+				code = ((b0 & 0x0fU) << 12) | (b1 << 6) | b2;
+			}
+			else if(b0 >= 0xf0U && b0 <= 0xf4U)
+			{
+				const u32_t b1 = continuation(i++);
+				const u32_t b2 = continuation(i++);
+				const u32_t b3 = continuation(i++);
+				if((b0 == 0xf0U && b1 < 0x10U) || (b0 == 0xf4U && b1 >= 0x10U))
+					throw "UTF-8 code point outside Unicode range in _U literal";
+				code = ((b0 & 0x07U) << 18) | (b1 << 12) | (b2 << 6) | b3;
+			}
+			else
+			{
+				throw "invalid UTF-8 start byte in _U literal";
+			}
+
+			output.chars[output.count++] = TUTF32(code);
+		}
+
+		output.chars[output.count] = TUTF32(0U);
+		return output;
+	}
+
+	template<utf8_literal_t input>
+	inline constexpr auto UTF32_LITERAL = DecodeUTF8Literal(input);
+
+	/**
+	 * UTF-8 source literal decoded to immutable static TUTF32 storage at compile time.
+	 */
+	template<utf8_literal_t input>
+	constexpr TStringView operator ""_U() noexcept
+	{
+		return TStringView(UTF32_LITERAL<input>.chars.data(), UTF32_LITERAL<input>.count);
+	}
 
 	enum class EPlacement : u8_t
 	{
@@ -45,19 +178,19 @@ namespace el1::io::text::string
 	class TString
 	{
 		protected:
-			static void _Format(TString& out, const TString& format, usys_t& pos);
+			static void _Format(TString& out, const TStringView format, usys_t& pos);
 
 			template<typename T>
-			static void _Format(TString& out, const TString& format, usys_t& pos, const T& value);
+			static void _Format(TString& out, const TStringView format, usys_t& pos, const T& value);
 
 			template<typename T, typename ... R>
-			static void _Format(TString& out, const TString& format, usys_t& pos, const T& value, R const& ... rest);
+			static void _Format(TString& out, const TStringView format, usys_t& pos, const T& value, R const& ... rest);
 
 		public:
 			TList<TUTF32> chars;
 
 			template<typename ... A>
-			static TString Format(const TString& format, A const& ...args)
+			static TString Format(const TStringView format, A const& ...args)
 			{
 				TString out;
 				usys_t pos = 0;
@@ -67,28 +200,45 @@ namespace el1::io::text::string
 				return out;
 			}
 
-			static TString Join(array_t<const TString> list, const TString& delimiter);
+			template<typename ... A>
+			static TString Format(const TString& format, A const& ...args)
+			{
+				return Format(format.View(), args ...);
+			}
 
-			bool Contains(const TString& needle) const;
+			static TString Join(array_t<const TString> list, const TStringView delimiter);
+			static TString Join(array_t<const TString> list, const TString& delimiter) { return Join(list, delimiter.View()); }
+
+			bool Contains(const TStringView needle) const;
+			bool Contains(const TString& needle) const { return Contains(needle.View()); }
 			bool Contains(const TUTF32 needle) const;
-			usys_t Find(const TString& needle, const ssys_t start = 0, const bool reverse = false) const;
+			usys_t Find(const TStringView needle, const ssys_t start = 0, const bool reverse = false) const;
+			usys_t Find(const TString& needle, const ssys_t start = 0, const bool reverse = false) const { return Find(needle.View(), start, reverse); }
 			usys_t Find(const TUTF32 needle, const ssys_t start = 0, const bool reverse = false) const;
 			usys_t FindFirst(const array_t<const TUTF32>& charset, const ssys_t start = 0, const bool reverse = false) const;
 			TString& Trim(const bool start = true, const bool end = true, const array_t<const TUTF32> trim_chars = WHITESPACE_CHARS);
-			void ReplaceAt(const ssys_t pos, const usys_t length, const TString& substitute);
-			usys_t Replace(const TString& needle, const TString& substitute, const ssys_t start = 0, const bool reverse = false, const usys_t n_max_replacements = NEG1);
-			void Insert(const ssys_t pos, const TString& str);
-			void Append(const TString& str);
-			bool BeginsWith(const TString& txt) const EL_GETTER;
-			bool EndsWith(const TString& txt) const EL_GETTER;
+			void ReplaceAt(const ssys_t pos, const usys_t length, const TStringView substitute);
+			void ReplaceAt(const ssys_t pos, const usys_t length, const TString& substitute) { ReplaceAt(pos, length, substitute.View()); }
+			usys_t Replace(const TStringView needle, const TStringView substitute, const ssys_t start = 0, const bool reverse = false, const usys_t n_max_replacements = NEG1);
+			usys_t Replace(const TString& needle, const TString& substitute, const ssys_t start = 0, const bool reverse = false, const usys_t n_max_replacements = NEG1) { return Replace(needle.View(), substitute.View(), start, reverse, n_max_replacements); }
+			void Insert(const ssys_t pos, const TStringView str);
+			void Insert(const ssys_t pos, const TString& str) { Insert(pos, str.View()); }
+			void Append(const TStringView str);
+			void Append(const TString& str) { Append(str.View()); }
+			bool BeginsWith(const TStringView txt) const EL_GETTER;
+			bool BeginsWith(const TString& txt) const EL_GETTER { return BeginsWith(txt.View()); }
+			bool EndsWith(const TStringView txt) const EL_GETTER;
+			bool EndsWith(const TString& txt) const EL_GETTER { return EndsWith(txt.View()); }
 
 			TString SliceSL(const ssys_t start, usys_t length = NEG1) const;
 			TString SliceBE(const ssys_t begin, const ssys_t end) const;
 
-			TList<TString> Split(const TString& delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
+			TList<TString> Split(const TStringView delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
+			TList<TString> Split(const TString& delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER { return Split(delimiter.View(), n_max, skip_empty); }
 			TList<TString> Split(const TUTF32 delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			TList<TString> Split(const array_t<const TUTF32> split_chars, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
-			kv_pair_tt<TString,TString> SplitKV(const TString& delimiter) const;
+			kv_pair_tt<TString,TString> SplitKV(const TStringView delimiter) const;
+			kv_pair_tt<TString,TString> SplitKV(const TString& delimiter) const { return SplitKV(delimiter.View()); }
 			kv_pair_tt<TString,TString> SplitKV(const TUTF32 delimiter = '=') const;
 
 			TList<TString> BlockFormat(const unsigned n_line_len) const EL_GETTER;
@@ -126,20 +276,30 @@ namespace el1::io::text::string
 			double ToDouble() const EL_GETTER;
 			s64_t ToInteger() const EL_GETTER;
 
-			TString& operator+=(const TString& rhs);
-			TString  operator+ (const TString& rhs) const;
+			TString& operator+=(const TStringView rhs);
+			TString& operator+=(const TString& rhs) { return operator+=(rhs.View()); }
+			TString  operator+ (const TStringView rhs) const;
+			TString operator+ (const TString& rhs) const { return operator+(rhs.View()); }
 
 			TString& operator+=(const TUTF32 rhs);
 			TString  operator+ (const TUTF32 rhs) const;
 
-			bool operator==(const TString& rhs) const EL_GETTER;
-			bool operator!=(const TString& rhs) const EL_GETTER;
-			bool operator>=(const TString& rhs) const EL_GETTER;
-			bool operator<=(const TString& rhs) const EL_GETTER;
-			bool operator> (const TString& rhs) const EL_GETTER;
-			bool operator< (const TString& rhs) const EL_GETTER;
+			bool operator==(const TStringView rhs) const EL_GETTER;
+			bool operator==(const TString& rhs) const EL_GETTER { return operator==(rhs.View()); }
+			bool operator!=(const TStringView rhs) const EL_GETTER;
+			bool operator!=(const TString& rhs) const EL_GETTER { return operator!=(rhs.View()); }
+			bool operator>=(const TStringView rhs) const EL_GETTER;
+			bool operator>=(const TString& rhs) const EL_GETTER { return operator>=(rhs.View()); }
+			bool operator<=(const TStringView rhs) const EL_GETTER;
+			bool operator<=(const TString& rhs) const EL_GETTER { return operator<=(rhs.View()); }
+			bool operator> (const TStringView rhs) const EL_GETTER;
+			bool operator> (const TString& rhs) const EL_GETTER { return operator>(rhs.View()); }
+			bool operator< (const TStringView rhs) const EL_GETTER;
+			bool operator< (const TString& rhs) const EL_GETTER { return operator<(rhs.View()); }
 
 			inline usys_t Length() const noexcept EL_GETTER { return chars.Count(); }
+			TStringView View() const noexcept { return TStringView(chars.View()); }
+			operator TStringView() const noexcept { return View(); }
 			inline TUTF32 operator[](const ssys_t index) const EL_GETTER { return chars[index]; }
 			inline TUTF32& operator[](const ssys_t index) EL_GETTER { return chars[index]; }
 
@@ -153,12 +313,12 @@ namespace el1::io::text::string
 			TString(const TUTF32* const str, const usys_t maxlen = NEG1);
 			TString(TList<TUTF32> chars) : chars(chars) {}
 			TString(array_t<const TUTF32> chars) : chars(chars) {}
+			TString(const TStringView chars) : chars(static_cast<const array_t<const TUTF32>&>(chars)) {}
 
 			TString& operator=(const TString&) = default;
 			TString& operator=(TString&&) = default;
 	};
 
-	TString operator ""_U(const char* str, size_t len);
 
 	class TLineReader
 	{
@@ -257,6 +417,7 @@ namespace el1::io::text::string
 		virtual TString Format(const char* const value) const;
 		virtual TString Format(const wchar_t* const value) const;
 		virtual TString Format(const TString& value) const;
+		virtual TString Format(const TStringView value) const;
 		virtual TString Format(const char value) const;
 		virtual TString Format(const wchar_t value) const;
 		virtual TString Format(const TUTF32 value) const;
@@ -296,6 +457,7 @@ namespace el1::io::text::string
 		TString Format(const char* const value) const final override;
 		TString Format(const wchar_t* const value) const final override;
 		TString Format(const TString& value) const final override;
+		TString Format(const TStringView value) const final override;
 		TString Format(const char value) const final override;
 		TString Format(const wchar_t value) const final override;
 		TString Format(const TUTF32 value) const final override;
@@ -399,13 +561,13 @@ namespace el1::io::text::string
 			return formatter->Format(value);
 		}
 
-		static TFormatVariable Find(const TString& str, const usys_t start_pos);
-		static TFormatVariable Parse(const TUTF32 format_char, const TString& arg_str);
+		static TFormatVariable Find(const TStringView str, const usys_t start_pos);
+		static TFormatVariable Parse(const TUTF32 format_char, const TStringView arg_str);
 
-		static TFormatVariable ParseNumberFormatterArguments(const TString& arg_str, const TNumberFormatter* const default_format);
-		static TFormatVariable ParseStringFormatterArguments(const TString& arg_str);
-		static TFormatVariable ParseCharacterFormatterArguments(const TString& arg_str);
-		static TFormatVariable ParseQuotedFormatterArguments(const TString& arg_str);
+		static TFormatVariable ParseNumberFormatterArguments(const TStringView arg_str, const TNumberFormatter* const default_format);
+		static TFormatVariable ParseStringFormatterArguments(const TStringView arg_str);
+		static TFormatVariable ParseCharacterFormatterArguments(const TStringView arg_str);
+		static TFormatVariable ParseQuotedFormatterArguments(const TStringView arg_str);
 
 		// valid format variable definitions (extended regex):
 		// number: %[ 0]?([1-9][0-9]*(\.(0|[1-9][0-9]*))?)?n
@@ -433,7 +595,7 @@ namespace el1::io::text::string
 	/********************************************/
 
 	template<typename T>
-	void TString::_Format(TString& out, const TString& format, usys_t& pos, const T& value)
+	void TString::_Format(TString& out, const TStringView format, usys_t& pos, const T& value)
 	{
 		bool forwarded = false;
 		try
@@ -443,7 +605,7 @@ namespace el1::io::text::string
 			{
 				EL_ERROR(var.formatter == nullptr, TMissingFormatVariableException, format);
 				TString slice = format.SliceBE(pos, var.pos);
-				slice.Replace("%%", "%");
+				slice.Replace("%%"_U, "%"_U);
 				out += slice;
 				out += var.Evaluate(value);
 				pos = var.pos + var.len;
@@ -451,7 +613,7 @@ namespace el1::io::text::string
 			catch(const error::IException& e)
 			{
 				forwarded = true;
-				EL_FORWARD(e, TException, TString::Format("error while processing format string %q near pos %d", format, var.pos + 1));
+				EL_FORWARD(e, TException, TString::Format("error while processing format string %q near pos %d"_U, format, var.pos + 1));
 			}
 		}
 		catch(const error::IException& e)
@@ -459,12 +621,12 @@ namespace el1::io::text::string
 			if(forwarded)
 				throw;
 			else
-				EL_FORWARD(e, TException, TString::Format("error while processing format string %q", format));
+				EL_FORWARD(e, TException, TString::Format("error while processing format string %q"_U, format));
 		}
 	}
 
 	template<typename T, typename ... R>
-	void TString::_Format(TString& out, const TString& format, usys_t& pos, const T& value, R const& ... rest)
+	void TString::_Format(TString& out, const TStringView format, usys_t& pos, const T& value, R const& ... rest)
 	{
 		_Format(out, format, pos, value);
 		_Format(out, format, pos, rest ...);
