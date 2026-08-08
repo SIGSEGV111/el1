@@ -8,8 +8,22 @@ using namespace ::testing;
 namespace
 {
 	using namespace el1::io::collection::list;
+	namespace array = el1::io::collection::array;
 	using namespace el1::io::text::string;
 	using namespace el1::testing;
+
+
+	TEST(io_collection_list, array_namespace)
+	{
+		int values[] = { 1, 2, 3 };
+		array::array_t<int> view(values);
+		EXPECT_EQ(view.Count(), 3U);
+		EXPECT_EQ(view[1], 2);
+
+		// Compatibility name for code written before array_t moved namespaces.
+		array_t<int> legacy_view(values);
+		EXPECT_EQ(legacy_view.Data(), view.Data());
+	}
 
 	TEST(io_collection_list, TList_Construct_InitList)
 	{
@@ -591,23 +605,62 @@ namespace
 		}
 	}
 
-	TEST(io_collection_list, ConstCast)
+	TEST(io_collection_list, ConstView)
 	{
-		{
-			TList<std::unique_ptr<int>> list;
-			[[maybe_unused]] TList<const std::unique_ptr<int>>& a = list;
-			[[maybe_unused]] const TList<const std::unique_ptr<int>>& b = list;
-			[[maybe_unused]] array_t<std::unique_ptr<int>>& c = list;
-			[[maybe_unused]] array_t<const std::unique_ptr<int>>& d = list;
-		}
+		static_assert(std::is_same_v<decltype(std::declval<array_t<int>&>()[0]), int&>);
+		static_assert(std::is_same_v<decltype(std::declval<const array_t<int>&>()[0]), const int&>);
+		static_assert(std::is_same_v<decltype(std::declval<array_t<const int>&>()[0]), const int&>);
 
-		{
-			const TList<std::unique_ptr<int>> list;
-			[[maybe_unused]] const TList<const std::unique_ptr<int>>& a = list;
-			[[maybe_unused]] const TList<const std::unique_ptr<int>>& b = list;
-			[[maybe_unused]] const array_t<std::unique_ptr<int>>& c = list;
-			[[maybe_unused]] const array_t<const std::unique_ptr<int>>& d = list;
-		}
+		TList<std::unique_ptr<int>> list;
+		[[maybe_unused]] array_t<std::unique_ptr<int>>& mutable_view = list;
+		[[maybe_unused]] array_t<const std::unique_ptr<int>> readonly_view = list;
+
+		const TList<std::unique_ptr<int>>& const_list = list;
+		[[maybe_unused]] const array_t<std::unique_ptr<int>>& const_view = const_list;
+		[[maybe_unused]] array_t<const std::unique_ptr<int>> readonly_const_view = const_list;
+	}
+
+	TEST(io_collection_list, ArrayView)
+	{
+		static_assert(sizeof(array_t<int>) == sizeof(int*) + sizeof(usys_t));
+
+		int data[] = { 0, 1, 2, 3, 4, 5 };
+		array_t<int> array(data);
+
+		EXPECT_EQ(array.Count(), 6U);
+		EXPECT_EQ(array.Data(), data);
+		EXPECT_EQ(array.First(), 0);
+		EXPECT_EQ(array.Last(), 5);
+
+		auto middle = array.Slice(2, 3);
+		EXPECT_EQ(middle.Count(), 3U);
+		EXPECT_EQ(middle[0], 2);
+		EXPECT_EQ(middle[2], 4);
+		middle[1] = 30;
+		EXPECT_EQ(data[3], 30);
+
+		auto [head, tail] = array.SplitAt(2);
+		EXPECT_EQ(head.Count(), 2U);
+		EXPECT_EQ(tail.Count(), 4U);
+		EXPECT_EQ(head.Last(), 1);
+		EXPECT_EQ(tail.First(), 2);
+
+		const array_t<int>& const_array = array;
+		auto const_slice = const_array.Tail(2);
+		static_assert(std::is_same_v<decltype(const_slice), array_t<const int>>);
+		EXPECT_EQ(const_slice[0], 4);
+		EXPECT_EQ(const_slice[1], 5);
+		EXPECT_EQ(const_array.Pipe().Count(), 6U);
+
+		auto collected = const_array.Pipe().Collect();
+		static_assert(std::is_same_v<decltype(collected), TList<int>>);
+		EXPECT_EQ(collected.Count(), 6U);
+		EXPECT_EQ(collected[3], 30);
+
+		auto source = const_array.Source();
+		int copied[6] = {};
+		EXPECT_EQ(source.Read(copied, 6), 6U);
+		EXPECT_EQ(copied[3], 30);
 	}
 
 	TEST(io_collection_list, Sort)

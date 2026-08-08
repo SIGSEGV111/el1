@@ -40,7 +40,7 @@ namespace el1::io::path
 
 			void Rebase(const TPath& old_prefix, const TPath& new_prefix);
 			TPath Parent() const EL_GETTER;
-			const array_t<const TString>& Components() const EL_GETTER { return components; }
+			array_t<const TString> Components() const EL_GETTER { return components; }
 			void ReplaceComponent(ssys_t index, const TPath& new_path);
 			usys_t CountCommonPrefix(const TPath& other) const;
 			usys_t StripCommonPrefix(const TPath& other);

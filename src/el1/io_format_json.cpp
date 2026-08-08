@@ -121,8 +121,8 @@ namespace el1::io::format::json
 
 				case EType::ARRAY:
 				{
-					auto& a1 = this->Array();
-					auto& a2 = rhs.Array();
+					auto a1 = this->Array();
+					auto a2 = rhs.Array();
 
 					if(a1.Count() != a2.Count())
 						return false;
@@ -233,14 +233,14 @@ namespace el1::io::format::json
 		return *reinterpret_cast<TJsonArray*>(__placeholder);
 	}
 
-	const array_t<const TJsonValue>& TJsonValue::Array() const
+	array_t<const TJsonValue> TJsonValue::Array() const
 	{
 		return const_cast<TJsonValue*>(this)->Array();
 	}
 
-	const array_t<const TJsonValue>& TJsonValue::Array(const array_t<const TJsonValue>& _default) const
+	array_t<const TJsonValue> TJsonValue::Array(const array_t<const TJsonValue>& _default) const
 	{
-		return IsArray() ? (const array_t<const TJsonValue>&)const_cast<TJsonValue*>(this)->Array() : _default;
+		return IsArray() ? array_t<const TJsonValue>(const_cast<TJsonValue*>(this)->Array()) : _default;
 	}
 
 	////////////////////////////////////////////////////////////////////

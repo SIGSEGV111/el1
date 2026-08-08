@@ -23,7 +23,10 @@ namespace el1::io::collection::list
 {
 	template<typename T>
 	class TList;
+}
 
+namespace el1::io::collection::array
+{
 	template<typename T>
 	class array_t;
 }
@@ -161,7 +164,7 @@ namespace el1::io::stream
 		*
 		* @param arr_items The array to store read items.
 		*/
-		void ReadAll(io::collection::list::array_t<T> arr_items) { this->ReadAll(arr_items.ItemPtr(0), arr_items.Count()); }
+		void ReadAll(io::collection::array::array_t<T> arr_items) { this->ReadAll(arr_items.ItemPtr(0), arr_items.Count()); }
 
 		/**
 		* Closes the input side of a full-duplex connection.
@@ -250,7 +253,7 @@ namespace el1::io::stream
 		*
 		* @param arr_items The array containing items to write.
 		*/
-		void WriteAll(io::collection::list::array_t<const T> arr_items) { this->WriteAll(arr_items.ItemPtr(0), arr_items.Count()); }
+		void WriteAll(io::collection::array::array_t<const T> arr_items) { this->WriteAll(arr_items.ItemPtr(0), arr_items.Count()); }
 
 		/**
 		* Closes the output side of a full-duplex connection.
@@ -273,7 +276,7 @@ namespace el1::io::stream
 		// use Discard() or Read() to remove the items from the source when you no longer need them
 		// this invalidates the previously returned buffer
 		// and allows the source to retrieve or produce the next batch of items
-		virtual collection::list::array_t<T> Peek() = 0;
+		virtual collection::array::array_t<T> Peek() = 0;
 	};
 
 	using IBinarySink = ISink<byte_t>;
@@ -326,14 +329,14 @@ namespace el1::io::stream
 		template<typename L>
 		void ForEach(L callable);
 
-		template<typename L, typename T = TOut>
+		template<typename L, typename T = std::remove_const_t<TOut>>
 		T Aggregate(L lambda, T init = T());
 
-		iosize_t ToStream(ISink<TOut>& sink);
-		usys_t AppendTo(collection::list::TList<TOut>& list);
+		iosize_t ToStream(ISink<std::remove_const_t<TOut>>& sink);
+		usys_t AppendTo(collection::list::TList<std::remove_const_t<TOut>>& list);
 		iosize_t Count();
 		const TOut& First();
-		io::collection::list::TList<TOut> Collect(const usys_t n_prealloc = 0);
+		io::collection::list::TList<std::remove_const_t<TOut>> Collect(const usys_t n_prealloc = 0);
 	};
 
 	template<typename T>
@@ -736,13 +739,13 @@ namespace el1::io::stream
 	}
 
 	template<typename TPipe, typename TOut>
-	iosize_t IPipe<TPipe, TOut>::ToStream(ISink<TOut>& sink)
+	iosize_t IPipe<TPipe, TOut>::ToStream(ISink<std::remove_const_t<TOut>>& sink)
 	{
 		TPipe* source = static_cast<TPipe*>(this);
 		iosize_t n_total = 0;
 
 		const usys_t sz_buffer = util::Max<usys_t>(1, 4096 / sizeof(TOut));
-		TOut buffer[sz_buffer];
+		std::remove_const_t<TOut> buffer[sz_buffer];
 
 		for(;;)
 		{
@@ -766,7 +769,7 @@ namespace el1::io::stream
 	}
 
 	template<typename TPipe, typename TOut>
-	usys_t IPipe<TPipe, TOut>::AppendTo(collection::list::TList<TOut>& list)
+	usys_t IPipe<TPipe, TOut>::AppendTo(collection::list::TList<std::remove_const_t<TOut>>& list)
 	{
 		TPipe* source = static_cast<TPipe*>(this);
 		usys_t i = 0;

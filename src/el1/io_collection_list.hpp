@@ -1,7 +1,6 @@
 #pragma once
 
-#include "io_types.hpp"
-#include "io_stream.hpp"
+#include "io_collection_array.hpp"
 #include "error.hpp"
 #include "util.hpp"
 #include "system_memory.hpp"
@@ -10,173 +9,14 @@
 #include <new>
 #include <malloc.h>
 #include <string.h>
+#include <type_traits>
 
 namespace el1::io::collection::list
 {
 	using namespace io::types;
 
-	// WARNING: T must be trivially moveable!
-
-	template<typename T>
-	class array_t;
-
-	template<typename T>
-	class TList;
-
-	template<typename T>
-	static bool EqualsComparator(const T& a, const T& b) EL_GETTER;
-
-	template<typename T>
-	static int StdSorter(const T& a, const T& b) EL_GETTER;
-
-	template<typename T>
-	static bool EqualsComparator(const T& a, const T& b)
-	{
-		return a == b;
-	}
-
-	template<typename T>
-	static int StdSorter(const T& a, const T& b)
-	{
-		if(a == b)
-			return 0;
-		if(a > b)
-			return 1;
-		else
-			return -1;
-	}
-
-	enum class ESortOrder : u8_t
-	{
-		ASCENDING = 1,
-		DESCENDING = 2
-	};
-
-	struct range_t
-	{
-		usys_t index;
-		usys_t count;
-	};
-
-	template<typename T>
-	class TIterator
-	{
-		protected:
-			array_t<T>* const array;
-			usys_t index;
-
-		public:
-			explicit TIterator(array_t<T>* const array, const usys_t index = 0) : array(array), index(index) {}
-
-			TIterator& operator++()
-			{
-				index++;
-				return *this;
-			}
-
-			TIterator operator++(int)
-			{
-				TIterator retval = *this;
-				++(*this);
-				return retval;
-			}
-
-			bool operator==(TIterator other) const { return this->array == other.array && this->index == other.index; }
-			bool operator!=(TIterator other) const { return this->array != other.array || this->index != other.index; }
-
-			T& operator*() const
-			{
-				return (*array)[index];
-			}
-	};
-
 	template<typename T>
 	struct TListSink;
-
-	template<typename T>
-	class TArrayPipe;
-
-	// const array_t => everything is const, but you can just create a copy of the array_t and then everything is writeable
-	// array_t<const T> => array-pointers can be modified, but data cannot (this is the only safe option, since an array_t can be copied)
-
-	template<typename T>
-	class array_t
-	{
-		protected:
-			T* arr_items;
-			usys_t n_items;
-
-			template<typename C>
-			usys_t BinarySearch(C comparator, const bool closest_match, usys_t idx_start, usys_t n_items_search) const EL_GETTER;
-
-		public:
-			// FIXME: never use Shift() on a TList !
-			void Shift(const usys_t n_items);
-
-			bool IsEmpty() const EL_GETTER { return n_items == 0; }
-
-			system::waitable::TMemoryWaitable<usys_t> MakeItemCountWaitable(const usys_t* const n_expected_count) const;
-
-			usys_t AbsoluteIndex(const ssys_t rel_index, const bool allow_tail) const;
-			usys_t Count() const noexcept EL_GETTER { return n_items; }
-			void Reverse();
-
-			template<typename N, typename C = decltype(EqualsComparator<T>)>
-			bool Contains(const N needle, C comparator = EqualsComparator<T>) const EL_GETTER; // TODO: binary search vs. linear search
-
-			template<typename C = decltype(EqualsComparator<T>)>
-			usys_t FindFirst(const T& needle, C comparator = EqualsComparator<T>) const EL_GETTER;
-
-			template<typename C = decltype(EqualsComparator<T>)>
-			TList<range_t> Find(const T& needle, const usys_t n_max = NEG1, C comparator = EqualsComparator<T>) const EL_GETTER; // TODO: binary search vs. linear search
-
-			template<typename C>
-			usys_t BinarySearch(C comparator, const bool closest_match = false) const EL_GETTER; // TODO: => generic Find()
-
-			template<typename L>
-			void ForEach(L lambda) const;
-
-			template<typename L>
-			void Apply(L lambda);
-
-			template<typename S = decltype(StdSorter<T>)>
-			void Sort(const ESortOrder order = ESortOrder::ASCENDING, S sorter = StdSorter<T>);
-
-			TArrayPipe<T> Pipe() const;
-
-			TIterator<T> begin() { return TIterator<T>(this, 0); }
-			TIterator<T> end()   { return TIterator<T>(this, this->n_items); }
-			TIterator<const T> begin() const { return TIterator<const T>(this->operator array_t<const T>*(), 0); }
-			TIterator<const T> end()   const { return TIterator<const T>(this->operator array_t<const T>*(), this->n_items); }
-
-			T* ItemPtr(const usys_t index) EL_GETTER;
-			const T* ItemPtr(const usys_t index) const EL_GETTER;
-
-			T& operator[](const ssys_t index) const EL_GETTER { return this->arr_items[this->AbsoluteIndex(index, false)]; }
-			// T& operator[](const ssys_t index) const EL_GETTER { return const_cast<array_t&>(*this)[index]; }
-
-			constexpr operator const array_t<const T>&() const    { return reinterpret_cast<array_t<const T>&>(const_cast<array_t&>(*this)); }
-			constexpr explicit operator array_t<const T>*() const { return reinterpret_cast<array_t<const T>*>(const_cast<array_t*>( this)); }
-
-			constexpr array_t& operator=(array_t&&) = default;
-			constexpr array_t& operator=(const array_t&) = default;
-
-			constexpr array_t() noexcept : arr_items(nullptr), n_items(0) {}
-			constexpr array_t(T* const arr_items, const usys_t n_items) noexcept : arr_items(arr_items), n_items(n_items) {}
-			constexpr array_t(array_t arr_items, const usys_t n_items_max) noexcept : arr_items(arr_items.arr_items), n_items(util::Min(n_items_max, arr_items.n_items)) {}
-			constexpr array_t(const array_t&) = default;
-			constexpr array_t(array_t&& other) = default;
-			~array_t() = default;
-
-			template<typename ... A>
-			static array_t Build(A&& ... a)
-			{
-				static const T arr[] = { std::move(a) ... };
-				return array_t(arr, sizeof(arr) / sizeof(T));
-			}
-	};
-
-	/*****************************************************************************/
 
 	template<typename T, bool is_copyable>
 	struct TList_Insert_Impl;
@@ -216,15 +56,21 @@ namespace el1::io::collection::list
 	template<typename T>
 	class TList : public TList_Insert_Impl<T, std::is_copy_constructible<T>::value>, public array_t<T>
 	{
+		static_assert(!std::is_const_v<T>, "TList owns mutable objects; use array_t<const T> for a read-only view");
 		friend struct TList_Insert_Impl<T, std::is_copy_constructible<T>::value>;
 		friend struct TListSink<T>;
 		protected:
+			using array_t<T>::Shift;
+
 			void Shrink(const usys_t n_items_shrink);
 			void CopyConstruct(const T* arr_items_source, const usys_t n_items_source, const usys_t n_prealloc = 0);
 			void MoveItems(const usys_t idx_to, const usys_t idx_from, const usys_t n_items_move);
 			void DestructItems(const usys_t index, const usys_t n_items_destruct);
 
 		public:
+			array_t<T> View() noexcept { return array_t<T>(this->arr_items, this->n_items); }
+			array_t<const T> View() const noexcept { return array_t<const T>(this->arr_items, this->n_items); }
+
 			void Prealloc(const usys_t n_items_need);
 			void Truncate() noexcept;
 			void Clear() noexcept;
@@ -272,7 +118,7 @@ namespace el1::io::collection::list
 
 			TList& operator+=(array_t<const T> items_append)
 			{
-				AppendItems(items_append);
+				Append(items_append);
 				return *this;
 			}
 
@@ -286,8 +132,6 @@ namespace el1::io::collection::list
 			TList& operator=(const TList& rhs);
 			TList& operator=(TList&& rhs);
 
-			constexpr operator TList<const T>&() { return reinterpret_cast<TList<const T>&>(*this); }
-			constexpr operator const TList<const T>&() const  { return reinterpret_cast<const TList<const T>&>(*this); }
 
 			constexpr TList() noexcept {}
 			explicit TList(const usys_t n_prealloc);
@@ -301,27 +145,6 @@ namespace el1::io::collection::list
 			~TList();
 	};
 
-	template<typename T>
-	class TArrayPipe : public stream::IPipe<TArrayPipe<T>, T>
-	{
-		protected:
-			const array_t<T>* const array;
-			usys_t index;
-
-		public:
-			using TOut = T;
-			using TIn = void;
-
-			TOut* NextItem() final override
-			{
-				if(index < array->Count())
-					return &((*array)[index++]);
-				else
-					return nullptr;
-			}
-
-			TArrayPipe(const array_t<T>* const array) : array(array), index(0) {}
-	};
 
 	template<typename T>
 	struct TListSink : stream::ISink<T>
@@ -369,117 +192,17 @@ namespace el1::io::collection::list
 		constexpr TListSink(TList<T>* list, const usys_t n_items_prealloc = util::Max<iosize_t>(1, 4096U / sizeof(T))) : list(list), n_items_prealloc(n_items_prealloc) {}
 	};
 
-	template<typename T>
-	struct TArraySource : stream::ISource<T>
-	{
-		const array_t<const T> array;
-		usys_t pos;
 
-		usys_t Remaining() const EL_GETTER
-		{
-			return array.Count() - pos;
-		}
 
-		usys_t Read(T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
-		{
-			const usys_t n = util::Min(Remaining(), n_items_max);
-			for(usys_t i = 0; i < n; i++)
-				arr_items[i] = array[pos++];
-			return n;
-		}
+}
 
-		iosize_t WriteOut(stream::ISink<T>& sink, const iosize_t n_items_max, const bool) final override
-		{
-			const iosize_t n_want = util::Min<iosize_t>(Remaining(), n_items_max);
-			const iosize_t n_wrote = sink.Write(&array[pos], n_want);
-			pos += n_wrote;
-			return n_wrote;
-		}
-
-		void Discard(const usys_t n_items) final override
-		{
-			EL_ERROR(Remaining() < n_items, stream::TStreamDryException);
-			pos += n_items;
-		}
-
-		TArraySource(const TArraySource&) = delete;
-		TArraySource(const array_t<const T> array) : array(array), pos(0) {}
-	};
-
-	/*****************************************************************************/
-
-	template<typename T>
-	system::waitable::TMemoryWaitable<usys_t> array_t<T>::MakeItemCountWaitable(const usys_t* const n_expected_count) const
-	{
-		return system::waitable::TMemoryWaitable<usys_t>(&n_items, n_expected_count, io::types::NEG1);
-	}
-
-	template<typename T>
-	TArrayPipe<T> array_t<T>::Pipe() const
-	{
-		return TArrayPipe<T>(this);
-	}
-
-	template<typename T>
-	void array_t<T>::Shift(const usys_t n_shift)
-	{
-		EL_ERROR(n_shift > this->n_items, TIndexOutOfBoundsException, 0, this->n_items, n_shift);
-		this->arr_items += n_shift;
-		this->n_items -= n_shift;
-	}
-
-	template<typename T>
-	usys_t array_t<T>::AbsoluteIndex(const ssys_t rel_index, const bool allow_tail) const
-	{
-		if(rel_index >= 0)
-		{
-			EL_ERROR(rel_index > (ssys_t)n_items - (allow_tail ? 0 : 1), TIndexOutOfBoundsException, -n_items, n_items - 1, rel_index);
-			return rel_index;
-		}
-		else
-		{
-			EL_ERROR(-rel_index > (ssys_t)n_items + (allow_tail ? 1 : 0), TIndexOutOfBoundsException, -n_items, n_items - 1, rel_index);
-
-			if(-rel_index > (ssys_t)n_items && allow_tail)
-				return n_items + rel_index + 1;
-			else
-				return n_items + rel_index;
-		}
-	}
-
-	template<typename T>
-	template<typename L>
-	void array_t<T>::ForEach(L lambda) const
-	{
-		for(usys_t i = 0; i < n_items; i++)
-			lambda((const T&)arr_items[i]);
-	}
-
-	template<typename T>
-	template<typename N, typename C>
-	bool array_t<T>::Contains(const N needle, C comparator) const
-	{
-		for(usys_t i = 0; i < n_items; i++)
-			if(comparator(needle, arr_items[i]))
-				return true;
-		return false;
-	}
-
+namespace el1::io::collection::array
+{
 	template<typename T>
 	template<typename C>
-	usys_t array_t<T>::FindFirst(const T& needle, C comparator) const
+	list::TList<range_t> array_t<T>::Find(const value_t& needle, const usys_t n_max, C comparator) const
 	{
-		for(usys_t i = 0; i < n_items; i++)
-			if(comparator(needle, arr_items[i]))
-				return i;
-		return NEG1;
-	}
-
-	template<typename T>
-	template<typename C>
-	TList<range_t> array_t<T>::Find(const T& needle, const usys_t n_max, C comparator) const
-	{
-		TList<range_t> indices;
+		list::TList<range_t> indices;
 		usys_t n_left_to_find = n_max;
 
 		if(n_max > 0)
@@ -504,141 +227,10 @@ namespace el1::io::collection::list
 
 		return indices;
 	}
+}
 
-	template<typename T>
-	template<typename C>
-	usys_t array_t<T>::BinarySearch(C comparator, const bool closest_match, usys_t idx_start, usys_t n_items_search) const
-	{
-		//TODO implement using util::BinarySearch()
-		usys_t idx_pivot = NEG1;
-
-		while(n_items_search != 0)
-		{
-			idx_pivot = idx_start + n_items_search / 2;	// TODO: add some small amount of randomness
-
-			const T& item = this->arr_items[idx_pivot];
-			const int comp_result = comparator(item);
-
-			// 0 exact match
-			// >0 item is bigger than reference
-			// <0 item is smaller than reference
-
-			if(comp_result == 0)
-				return idx_pivot;
-
-			if(comp_result < 0)	// item was to small, go to upper half
-			{
-				idx_start = idx_pivot + 1;
-				n_items_search--;
-				n_items_search /= 2;
-			}
-			else //if(comp_result > 0)	// item was too big, go to lower half
-			{
-				n_items_search /= 2;
-			}
-		}
-
-		if(closest_match)
-			return idx_pivot;
-		else
-			return NEG1;
-	}
-
-	template<typename T>
-	template<typename C>
-	usys_t array_t<T>::BinarySearch(C comparator, const bool closest_match) const
-	{
-		return this->BinarySearch(comparator, closest_match, 0, this->n_items);
-	}
-
-	template<typename T>
-	void array_t<T>::Reverse()
-	{
-		if(this->n_items <= 1) return;
-
-		for(usys_t i = 0; i < this->n_items / 2; i++)
-			util::Swap(this->arr_items[i], this->arr_items[this->n_items - 1 - i]);
-	}
-
-
-	template<typename T>
-	template<typename L>
-	void array_t<T>::Apply(L lambda)
-	{
-		for(usys_t i = 0; i < this->n_items; i++)
-			lambda(this->arr_items[i]);
-	}
-
-	template<typename T>
-	template<typename S>
-	void array_t<T>::Sort(const ESortOrder order, S sorter)
-	{
-		if(this->n_items <= 1)
-			return;
-
-		auto item_should_follow = [order, sorter](const T& a, const T& b) -> bool
-		{
-			const int result = sorter(a, b);
-
-			if(order == ESortOrder::DESCENDING)
-				return result < 0;
-			else
-				return result > 0;
-		};
-
-		auto sift_down = [this, item_should_follow](usys_t idx_root, const usys_t idx_end)
-		{
-			while(true)
-			{
-				const usys_t idx_child_left = idx_root * 2 + 1;
-				if(idx_child_left >= idx_end)
-					break;
-
-				usys_t idx_swap = idx_root;
-				if(item_should_follow(this->arr_items[idx_child_left], this->arr_items[idx_swap]))
-					idx_swap = idx_child_left;
-
-				const usys_t idx_child_right = idx_child_left + 1;
-				if(idx_child_right < idx_end && item_should_follow(this->arr_items[idx_child_right], this->arr_items[idx_swap]))
-					idx_swap = idx_child_right;
-
-				if(idx_swap == idx_root)
-					break;
-
-				util::Swap(this->arr_items[idx_root], this->arr_items[idx_swap]);
-				idx_root = idx_swap;
-			}
-		};
-
-		for(usys_t idx_start = this->n_items / 2; idx_start > 0; idx_start--)
-			sift_down(idx_start - 1, this->n_items);
-
-		for(usys_t idx_end = this->n_items; idx_end > 1; idx_end--)
-		{
-			util::Swap(this->arr_items[0], this->arr_items[idx_end - 1]);
-			sift_down(0, idx_end - 1);
-		}
-	}
-
-	template<typename T>
-	T* array_t<T>::ItemPtr(const usys_t index)
-	{
-		if(index >= n_items)
-			return nullptr;
-		else
-			return arr_items + index;
-	}
-
-	template<typename T>
-	const T* array_t<T>::ItemPtr(const usys_t index) const
-	{
-		if(index >= n_items)
-			return nullptr;
-		else
-			return arr_items + index;
-	}
-
-	/*****************************************************************************/
+namespace el1::io::collection::list
+{
 
 	template<typename T>
 	T* TList_Insert_Impl<T, false>::MoveInsert(const ssys_t index, array_t<T> array)
@@ -1142,13 +734,18 @@ namespace el1::io::collection::list
 namespace el1::io::stream
 {
 	template<typename TStream, typename TOut>
-	collection::list::TList<TOut> IPipe<TStream, TOut>::Collect(const usys_t n_prealloc)
+	collection::list::TList<std::remove_const_t<TOut>> IPipe<TStream, TOut>::Collect(const usys_t n_prealloc)
 	{
-		collection::list::TList<TOut> list;
+		collection::list::TList<std::remove_const_t<TOut>> list;
 		TStream* source = static_cast<TStream*>(this);
 
 		for(TOut* item = source->NextItem(); item != nullptr; item = source->NextItem())
-			list.MoveAppend(std::move(*item));
+		{
+			if constexpr(std::is_const_v<TOut>)
+				list.Append(*item);
+			else
+				list.MoveAppend(std::move(*item));
+		}
 
 		return list;
 	}

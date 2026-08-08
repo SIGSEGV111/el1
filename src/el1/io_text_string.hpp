@@ -17,6 +17,7 @@ namespace el1::io::text::string
 	using namespace io::types;
 	using namespace io::text::encoding;
 	using namespace io::collection::list;
+	using namespace io::collection::array;
 
 	enum class EPlacement : u8_t
 	{

@@ -130,8 +130,8 @@ namespace el1::io::format::json
 
 			bool IsArray() const { return Type() == EType::ARRAY; }
 			TJsonArray& Array() EL_GETTER;
-			const array_t<const TJsonValue>& Array() const EL_GETTER;
-			const array_t<const TJsonValue>& Array(const array_t<const TJsonValue>& _default) const EL_GETTER;
+			array_t<const TJsonValue> Array() const EL_GETTER;
+			array_t<const TJsonValue> Array(const array_t<const TJsonValue>& _default) const EL_GETTER;
 			explicit operator TJsonArray&() { return Array(); }
 			explicit operator array_t<const TJsonValue>() const { return Array(); }
 
