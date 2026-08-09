@@ -90,11 +90,11 @@ int main(const int argc, char* argv[])
 		});
 
 		const TString header = TString::Format(
-			L"const el1::io::types::byte_t %s[] =\n\t\"",
+			U"const el1::io::types::byte_t %s[] =\n\t\"",
 			variable_name
 		);
 		body += TString::Format(
-			L"\";\nconst el1::io::types::usys_t %s_size = sizeof(%s) - 1;\n",
+			U"\";\nconst el1::io::types::usys_t %s_size = sizeof(%s) - 1;\n",
 			variable_name,
 			variable_name
 		);

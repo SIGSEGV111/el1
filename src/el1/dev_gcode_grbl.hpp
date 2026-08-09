@@ -85,7 +85,7 @@ namespace el1::dev::gcode::grbl
 		TDecimal(TString& str);
 	};
 
-	using TArgumentMap = TSortedMap<TUTF32, TDecimal>;
+	using TArgumentMap = TSortedMap<char32_t, TDecimal>;
 	struct parser_state_t;
 
 	struct TDecimalVector : math::vector::TVector<TDecimal, 3>
@@ -486,7 +486,7 @@ namespace el1::dev::gcode::grbl
  //
 	// 	auto space = Discard(OneOrMore(' '_P));
 	// 	auto arg = Translate<arg_t>(space + CharList('X', 'Y', 'Z', 'I', 'J', 'K', 'F', 'P', 'R', 'Q'), decimal);
-	// 	auto args = Translate([](TList<arg_t> args){ args.Sort(ESortOrder::ASCENDING, [](auto a, auto b) { if(a.key.code > b.key.code) return 1; if(b.key .code> a.key.code) return -1; return 0; }); return TSortedMap<TUTF32, TDecimal>(args); }, OneOrMore(arg));
+	// 	auto args = Translate([](TList<arg_t> args){ args.Sort(ESortOrder::ASCENDING, [](auto a, auto b) { if(a.key > b.key) return 1; if(b.key > a.key) return -1; return 0; }); return TSortedMap<char32_t, TDecimal>(args); }, OneOrMore(arg));
  //
 	// 	auto linear_move = TranslateCast<TLinearMoveCommand, ICommand>(("G0"_P || "G1"_P), args);
 	// 	auto arc_move = TranslateCast<TArcMoveCommand, ICommand>(("G2"_P || "G3"_P), args);

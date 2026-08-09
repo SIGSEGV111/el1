@@ -107,7 +107,7 @@ namespace el1::dev::gpio::hd44780
 	{
 		const u8_t real_address = GetRaw(false) & 0b01111111;
 		const u8_t addr = real_address >= 64 ? real_address - 24 : real_address;
-		EL_ERROR(!DEBUG && addr >= 80, TException, TString::Format("HD44780 returned invalid DRAM address %d", addr));
+		EL_ERROR(!DEBUG && addr >= 80, TException, TString::Format(U"HD44780 returned invalid DRAM address %d", addr));
 		return addr;
 	}
 
@@ -123,7 +123,7 @@ namespace el1::dev::gpio::hd44780
 		if(DEBUG)
 		{
 			u8_t ret_addr;
-			EL_WARN((ret_addr = GetAddress()) != addr, TException, TString::Format("failed to set DRAM address %d (LCD returned address %d)", addr, ret_addr));
+			EL_WARN((ret_addr = GetAddress()) != addr, TException, TString::Format(U"failed to set DRAM address %d (LCD returned address %d)", addr, ret_addr));
 		}
 	}
 
@@ -174,13 +174,13 @@ namespace el1::dev::gpio::hd44780
 		return addr;
 	}
 
-	TUTF32 THD44780::Character(const unsigned x, const unsigned y) const
+	char32_t THD44780::Character(const unsigned x, const unsigned y) const
 	{
 		const u8_t dram_addr = CoordinateToAddress(x, y);
 		return TranslateDramToChar(dram_new[dram_addr]);
 	}
 
-	void THD44780::Character(const unsigned x, const unsigned y, const TUTF32 chr)
+	void THD44780::Character(const unsigned x, const unsigned y, const char32_t chr)
 	{
 		const u8_t dram_addr = CoordinateToAddress(x, y);
 		dram_new[dram_addr] = TranslateCharToDram(chr);
@@ -193,7 +193,7 @@ namespace el1::dev::gpio::hd44780
 
 		memset(dram_new, TranslateCharToDram(' '), sizeof(dram_new));
 
-		for(TUTF32 chr : str.chars)
+		for(char32_t chr : str.chars)
 		{
 			if(chr == '\n')
 			{
@@ -281,7 +281,7 @@ namespace el1::dev::gpio::hd44780
 			{
 				u8_t ret_addr;
 
-				EL_WARN((ret_addr = GetAddress()) != expected_addr, TException, TString::Format("DRAM address suddenly changed to an unexpected value before writing byte %d (expected: %d, received: %d)", i, expected_addr, ret_addr));
+				EL_WARN((ret_addr = GetAddress()) != expected_addr, TException, TString::Format(U"DRAM address suddenly changed to an unexpected value before writing byte %d (expected: %d, received: %d)", i, expected_addr, ret_addr));
 				expected_addr = ret_addr;
 
 				SendData('#');
@@ -290,7 +290,7 @@ namespace el1::dev::gpio::hd44780
 				if(expected_addr == 80)
 					expected_addr = 0;
 
-				EL_WARN((ret_addr = GetAddress()) != expected_addr, TException, TString::Format("DRAM address suddenly changed to an unexpected value after writing byte %d (expected: %d, received: %d)", i, expected_addr, ret_addr));
+				EL_WARN((ret_addr = GetAddress()) != expected_addr, TException, TString::Format(U"DRAM address suddenly changed to an unexpected value after writing byte %d (expected: %d, received: %d)", i, expected_addr, ret_addr));
 				expected_addr = ret_addr;
 			}
 

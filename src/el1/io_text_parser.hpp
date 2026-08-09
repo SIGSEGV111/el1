@@ -45,12 +45,12 @@ namespace el1::io::text::parser
 
 		struct TCharRangeNode
 		{
-			using return_t = TUTF32;
-			const TUTF32 from;
-			const TUTF32 to;
-			constexpr TCharRangeNode(const TUTF32 from, const TUTF32 to) : from(from), to(to) {}
+			using return_t = char32_t;
+			const char32_t from;
+			const char32_t to;
+			constexpr TCharRangeNode(const char32_t from, const char32_t to) : from(from), to(to) {}
 
-			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
+			auto Parse(const array_t<char32_t> chars, usys_t& pos) -> std::optional<return_t>
 			{
 				if(pos >= chars.Count())
 					return std::nullopt;
@@ -65,13 +65,13 @@ namespace el1::io::text::parser
 		template<usys_t n>
 		struct TCharListNode
 		{
-			using return_t = TUTF32;
-			const TUTF32 list[n];
+			using return_t = char32_t;
+			const char32_t list[n];
 
 			template<typename ... A>
-			constexpr TCharListNode(A ... a) : list{a...} {}
+			constexpr TCharListNode(A ... a) : list{static_cast<char32_t>(a)...} {}
 
-			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
+			auto Parse(const array_t<char32_t> chars, usys_t& pos) -> std::optional<return_t>
 			{
 				if(pos >= chars.Count())
 					return std::nullopt;
@@ -85,11 +85,11 @@ namespace el1::io::text::parser
 
 		struct TLiteralNode
 		{
-			using return_t = array_t<const TUTF32>;
+			using return_t = array_t<const char32_t>;
 			const TString literal;
 			TLiteralNode(TString _literal) : literal(std::move(_literal)) {}
 
-			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
+			auto Parse(const array_t<char32_t> chars, usys_t& pos) -> std::optional<return_t>
 			{
 				usys_t s = pos;
 				for(auto lchr : literal.chars)
@@ -98,8 +98,8 @@ namespace el1::io::text::parser
 						return std::nullopt;
 					pos++;
 				}
-				// term<<TString::Format("TLiteralNode(%q) returning success (pos@%d)\n", literal, pos);
-				return array_t<const TUTF32>(&chars[s], pos - s);
+				// term<<TString::Format(U"TLiteralNode(%q) returning success (pos@%d)\n", literal, pos);
+				return array_t<const char32_t>(&chars[s], pos - s);
 			}
 		};
 
@@ -111,7 +111,7 @@ namespace el1::io::text::parser
 			std::tuple<N...> nodes;
 			constexpr TTranslateNode(L _lambda, std::tuple<N...> _nodes) : lambda(std::move(_lambda)), nodes(std::move(_nodes)) {}
 
-			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
+			auto Parse(const array_t<char32_t> chars, usys_t& pos) -> std::optional<return_t>
 			{
 				try
 				{
@@ -133,7 +133,7 @@ namespace el1::io::text::parser
 			usys_t n_min;
 			usys_t n_max;
 
-			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
+			auto Parse(const array_t<char32_t> chars, usys_t& pos) -> std::optional<return_t>
 			{
 				return_t r;
 				for(usys_t i = 0; i < n_max; i++)
@@ -150,7 +150,7 @@ namespace el1::io::text::parser
 					pos = s;
 					r.Append(*v);
 				}
-				// term<<TString::Format("TRepeatNode(%d,%d) returning success (pos@%d)\n", n_min, n_max, pos);
+				// term<<TString::Format(U"TRepeatNode(%d,%d) returning success (pos@%d)\n", n_min, n_max, pos);
 				return r;
 			}
 		};
@@ -164,16 +164,16 @@ namespace el1::io::text::parser
 			using return_t = discard_t;
 			N node;
 
-			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
+			auto Parse(const array_t<char32_t> chars, usys_t& pos) -> std::optional<return_t>
 			{
 				if(node.Parse(chars, pos) == std::nullopt)
 				{
-					// term<<TString::Format("TDiscardNode() returning failure (pos@%d)\n", pos);
+					// term<<TString::Format(U"TDiscardNode() returning failure (pos@%d)\n", pos);
 					return std::nullopt;
 				}
 				else
 				{
-					// term<<TString::Format("TDiscardNode() returning success (pos@%d)\n", pos);
+					// term<<TString::Format(U"TDiscardNode() returning success (pos@%d)\n", pos);
 					return discard_t();
 				}
 			}
@@ -202,22 +202,22 @@ namespace el1::io::text::parser
 			N2 rhs;
 			constexpr TSequenceNode(N1 lhs, N2 rhs) : lhs(lhs), rhs(rhs) {}
 
-			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
+			auto Parse(const array_t<char32_t> chars, usys_t& pos) -> std::optional<return_t>
 			{
 				auto v_lhs = lhs.Parse(chars, pos);
 				if(v_lhs == std::nullopt)
 				{
-					// term<<TString::Format("TSequenceNode() returning failure lhs (pos@%d)\n", pos);
+					// term<<TString::Format(U"TSequenceNode() returning failure lhs (pos@%d)\n", pos);
 					return std::nullopt;
 				}
 				auto v_rhs = rhs.Parse(chars, pos);
 				if(v_rhs == std::nullopt)
 				{
-					// term<<TString::Format("TSequenceNode() returning failure rhs (pos@%d)\n", pos);
+					// term<<TString::Format(U"TSequenceNode() returning failure rhs (pos@%d)\n", pos);
 					return std::nullopt;
 				}
 
-				// term<<TString::Format("TSequenceNode() returning success (pos@%d)\n", pos);
+				// term<<TString::Format(U"TSequenceNode() returning success (pos@%d)\n", pos);
 
 				if constexpr (std::is_same<T1, A1>::value || std::is_same<T2, A2>::value)
 				{
@@ -277,13 +277,13 @@ namespace el1::io::text::parser
 			N2 rhs;
 			constexpr TXorNode(N1 lhs, N2 rhs) : lhs(lhs), rhs(rhs) {}
 
-			auto Parse(const array_t<TUTF32> chars, usys_t& pos) -> std::optional<return_t>
+			auto Parse(const array_t<char32_t> chars, usys_t& pos) -> std::optional<return_t>
 			{
 				usys_t s = pos;
 				auto v_lhs = lhs.Parse(chars, s);
 				if(v_lhs != std::nullopt)
 				{
-					// term<<TString::Format("TXorNode() returning success lhs (pos@%d)\n", pos);
+					// term<<TString::Format(U"TXorNode() returning success lhs (pos@%d)\n", pos);
 					pos = s;
 					return std::move(*v_lhs);
 				}
@@ -291,11 +291,11 @@ namespace el1::io::text::parser
 				auto v_rhs = lhs.Parse(chars, pos);
 				if(v_rhs != std::nullopt)
 				{
-					// term<<TString::Format("TXorNode() returning success rhs (pos@%d)\n", pos);
+					// term<<TString::Format(U"TXorNode() returning success rhs (pos@%d)\n", pos);
 					return std::move(*v_rhs);
 				}
 
-				// term<<TString::Format("TXorNode() returning failure (pos@%d)\n", pos);
+				// term<<TString::Format(U"TXorNode() returning failure (pos@%d)\n", pos);
 				return std::nullopt;
 			}
 		};
@@ -324,7 +324,7 @@ namespace el1::io::text::parser
 			usys_t pos = 0;
 			auto v = root.Parse(str.chars, pos);
 			EL_ERROR(v == std::nullopt, TException, "unable to parse");
-			EL_ERROR(pos != str.Length(), TException, TString::Format("unable to parse full string - only %d out of %d characters accepted by parser", pos, str.Length()));
+			EL_ERROR(pos != str.Length(), TException, TString::Format(U"unable to parse full string - only %d out of %d characters accepted by parser", pos, str.Length()));
 			return *v;
 		}
 	};
@@ -354,7 +354,7 @@ namespace el1::io::text::parser
 		return TParser(ast::TRepeatNode<N>(parser.root, 1, NEG1));
 	}
 
-	constexpr auto CharRange(const TUTF32 from, const TUTF32 to)
+	constexpr auto CharRange(const char32_t from, const char32_t to)
 	{
 		return TParser(ast::TCharRangeNode(from, to));
 	}

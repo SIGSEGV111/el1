@@ -27,8 +27,8 @@ namespace el1::dev::dht22
 		for(; n < max && Bit(buffer, bitpos) == value; bitpos++)
 			n++;
 
-		EL_ERROR(n > max, TException, TString::Format("too many %s bits (max: %d, got: %d) at bitpos %d", max, n, value ? "HIGH" : "LOW", bitpos));
-		EL_ERROR(n < min, TException, TString::Format("too few %s bits (min: %d, got: %d) at bitpos %d", min, n, value ? "HIGH" : "LOW", bitpos));
+		EL_ERROR(n > max, TException, TString::Format(U"too many %s bits (max: %d, got: %d) at bitpos %d", value ? "HIGH" : "LOW", max, n, bitpos));
+		EL_ERROR(n < min, TException, TString::Format(U"too few %s bits (min: %d, got: %d) at bitpos %d", value ? "HIGH" : "LOW", min, n, bitpos));
 
 		return n;
 	}
@@ -60,7 +60,7 @@ namespace el1::dev::dht22
 		// ...if the DHT22 and SPI bus are working to specs...
 
 		// so if it is 4 high bits, we have no idea what this is supposed to mean
-		EL_ERROR(n == 4, TException, TString::Format("misleading PWM data encountered (4 high bits) at bitpos %d", bitpos));
+		EL_ERROR(n == 4, TException, TString::Format(U"misleading PWM data encountered (4 high bits) at bitpos %d", bitpos));
 
 		return n >= 5;
 	}
@@ -85,7 +85,7 @@ namespace el1::dev::dht22
 		const u8_t checksum_rx     = ParsePwmByte(buffer, bitpos);
 		const u8_t checksum_calc   = humidity_int + humidity_dec + temperature_int + temperature_dec;
 
-		EL_ERROR(checksum_calc != checksum_rx, TException, TString::Format("checksum does not match (expected: %d, received: %d)", checksum_calc, checksum_rx));
+		EL_ERROR(checksum_calc != checksum_rx, TException, TString::Format(U"checksum does not match (expected: %d, received: %d)", checksum_calc, checksum_rx));
 
 		// write sensor readings
 		percent_humidity = (humidity_int * 256 + humidity_dec) / 10.0f;
@@ -152,7 +152,7 @@ namespace el1::dev::dht22
 				Hexdump(rx, sz_buffer);
 			}
 			else
-				EL_FORWARD(e, TException, TString::Format("Error while refreshing DHT22 sensor data.\n\ntx-buffer:\n%s\nrx-buffer:\n%s", HexdumpStr(tx, sz_buffer), HexdumpStr(rx, sz_buffer)));
+				EL_FORWARD(e, TException, TString::Format(U"Error while refreshing DHT22 sensor data.\n\ntx-buffer:\n%s\nrx-buffer:\n%s", HexdumpStr(tx, sz_buffer), HexdumpStr(rx, sz_buffer)));
 		}
 	}
 }

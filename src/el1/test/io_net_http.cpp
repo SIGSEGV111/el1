@@ -135,7 +135,7 @@ namespace
 			response.body = std::move(file);
 		});
 
-		const TString url = TString::Format(L"http://localhost:%d/", tcp_server.LocalAddress().port);
+		const TString url = TString::Format(U"http://localhost:%d/", tcp_server.LocalAddress().port);
 		TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", url, url, url });
 		str_curl.Cut(0, str_curl.Length() / 3 * 2);
 		const TString str_ref = TFile(L"gen/testdata/test1.json").Pipe().Transform(TUTF8Decoder()).Collect();
@@ -154,7 +154,7 @@ namespace
 			response.body = std::move(file);
 		});
 
-		const TString url = TString::Format(L"https://localhost:%d/secure", tls_server.LocalAddress().port);
+		const TString url = TString::Format(U"https://localhost:%d/secure", tls_server.LocalAddress().port);
 		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--cacert", L"support/tls-test-cert.pem", L"--tlsv1.2", url });
 		const TString str_ref = TFile(L"gen/testdata/freecad_v1_0_0.gcode").Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
@@ -172,7 +172,7 @@ namespace
 			response.body = std::move(body);
 		});
 
-		const TString url = TString::Format(L"https://localhost:%d/stream", tls_server.LocalAddress().port);
+		const TString url = TString::Format(U"https://localhost:%d/stream", tls_server.LocalAddress().port);
 		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--cacert", L"support/tls-test-cert.pem", url });
 		EXPECT_EQ(str_curl, L"secure-stream");
 	}
@@ -189,7 +189,7 @@ namespace
 			response.body = std::move(file);
 		});
 
-		const TString url = TString::Format(L"http://localhost:%d/", tcp_server.LocalAddress().port);
+		const TString url = TString::Format(U"http://localhost:%d/", tcp_server.LocalAddress().port);
 		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url }), TProcess::TNonZeroExitException);
 		EXPECT_FALSE(fail);
 	}
@@ -206,7 +206,7 @@ namespace
 			response.status = EStatus::OK;
 		});
 
-		const TString url = TString::Format(L"http://localhost:%d/test?foo=bar&abc", tcp_server.LocalAddress().port);
+		const TString url = TString::Format(U"http://localhost:%d/test?foo=bar&abc", tcp_server.LocalAddress().port);
 		TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url });
 	}
 
@@ -219,7 +219,7 @@ namespace
 			response.status = EStatus::OK;
 		});
 
-		const TString url = TString::Format(L"http://localhost:%d/test?foo=bar&abc&", tcp_server.LocalAddress().port);
+		const TString url = TString::Format(U"http://localhost:%d/test?foo=bar&abc&", tcp_server.LocalAddress().port);
 		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url }), TProcess::TNonZeroExitException);
 		EXPECT_FALSE(fail);
 	}
@@ -236,7 +236,7 @@ namespace
 			response.status = EStatus::OK;
 		});
 
-		const TString url = TString::Format(L"http://localhost:%d/test%%2f?ü=1%%2f%%5f%%3f", tcp_server.LocalAddress().port);
+		const TString url = TString::Format(U"http://localhost:%d/test%%2f?ü=1%%2f%%5f%%3f", tcp_server.LocalAddress().port);
 		TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url });
 		THttpServer::DEBUG = false;
 	}
@@ -505,7 +505,7 @@ namespace
 			{
 				byte_t byte = 0;
 				client->ReadAll(&byte, 1);
-				request_header += TUTF32((u32_t)byte);
+				request_header += char32_t((u32_t)byte);
 				if(byte == (byte_t)terminator[matched])
 					matched++;
 				else
@@ -525,7 +525,7 @@ namespace
 							line.chars.Remove(-1);
 						return line;
 					}
-					line += TUTF32((u32_t)byte);
+					line += char32_t((u32_t)byte);
 				}
 			};
 

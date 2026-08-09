@@ -24,7 +24,7 @@ namespace el1::io::collection::ringbuffer
 
 		TString Message() const final override
 		{
-			return TString::Format("ring buffer consumer was overrun by producer; %d samples were dropped", dropped_samples);
+			return TString::Format(U"ring buffer consumer was overrun by producer; %d samples were dropped", dropped_samples);
 		}
 
 		error::IException* Clone() const final override

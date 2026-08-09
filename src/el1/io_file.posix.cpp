@@ -10,7 +10,7 @@
 
 namespace el1::io::file
 {
-	const TUTF32 TPath::SEPERATOR('/');
+	const char32_t TPath::SEPERATOR('/');
 	const char* const TPath::PARENT_DIR = "..";
 	const char* const TPath::CURRENT_DIR = ".";
 

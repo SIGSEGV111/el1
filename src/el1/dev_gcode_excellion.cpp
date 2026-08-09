@@ -57,7 +57,7 @@ namespace el1::dev::gcode::excellion
 					toolset.Add(index, {dia});
 				}
 				else
-					EL_THROW(TException, TString::Format("unknown header directive %q", line));
+					EL_THROW(TException, TString::Format(U"unknown header directive %q", line));
 			}
 			else
 			{
@@ -87,7 +87,7 @@ namespace el1::dev::gcode::excellion
 				else if(line == "M30")
 					end = true;
 				else
-					EL_THROW(TException, TString::Format("unknown body directive %q", line));
+					EL_THROW(TException, TString::Format(U"unknown body directive %q", line));
 			}
 		});
 	}

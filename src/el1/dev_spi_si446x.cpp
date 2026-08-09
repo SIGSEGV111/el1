@@ -121,7 +121,7 @@ namespace el1::dev::spi::si446x
 			if(n == 0 || n_command_bytes == 0)
 				break;
 
-			EL_ERROR(n_command_bytes > N_COMMAND_BYTES_MAX, TException, TString::Format("invalid Si446x configuration command length: %u", (unsigned)n_command_bytes));
+			EL_ERROR(n_command_bytes > N_COMMAND_BYTES_MAX, TException, TString::Format(U"invalid Si446x configuration command length: %u", (unsigned)n_command_bytes));
 			byte_t command[N_COMMAND_BYTES_MAX];
 			source.ReadAll(command, n_command_bytes);
 			SendCommand(array_t<const byte_t>(command, n_command_bytes));
@@ -356,7 +356,7 @@ namespace el1::dev::spi::si446x
 		EL_ERROR(poll_interval <= 0, TInvalidArgumentException, "poll_interval", "poll interval must be positive");
 
 		const u64_t effective_clock = this->device->Clock(hz_clock);
-		EL_ERROR(effective_clock == 0 || effective_clock > HZ_CLOCK_SPI_MAX, TException, TString::Format("SPI bus configured unsupported Si446x clock frequency: %llu Hz", (unsigned long long)effective_clock));
+		EL_ERROR(effective_clock == 0 || effective_clock > HZ_CLOCK_SPI_MAX, TException, TString::Format(U"SPI bus configured unsupported Si446x clock frequency: %d Hz", (unsigned long long)effective_clock));
 
 		this->shutdown->Mode(gpio::EMode::OUTPUT);
 		this->shutdown->State(false);

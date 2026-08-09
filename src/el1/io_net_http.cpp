@@ -160,12 +160,12 @@ namespace el1::io::net::http
 		return false;
 	}
 
-	static bool IsHeaderNameChar(const TUTF32 chr)
+	static bool IsHeaderNameChar(const char32_t chr)
 	{
-		if(chr.code <= 0x20 || chr.code >= 0x7f)
+		if(chr <= 0x20 || chr >= 0x7f)
 			return false;
 
-		switch(chr.code)
+		switch(chr)
 		{
 			case '(': case ')': case '<': case '>': case '@':
 			case ',': case ';': case ':': case '\\': case '"':
@@ -179,18 +179,18 @@ namespace el1::io::net::http
 	static void ValidateHeaderField(const TString& name, const TString& value)
 	{
 		EL_ERROR(name.Length() == 0, TInvalidArgumentException, "header name", "HTTP header name must not be empty");
-		for(const TUTF32 chr : name.chars)
+		for(const char32_t chr : name.chars)
 			EL_ERROR(!IsHeaderNameChar(chr), TInvalidArgumentException, "header name", "HTTP header name contains an invalid character");
 
-		for(const TUTF32 chr : value.chars)
-			EL_ERROR(chr.code == '\r' || chr.code == '\n' || chr.code == 0, TInvalidArgumentException, "header value", "HTTP header value contains CR, LF or NUL");
+		for(const char32_t chr : value.chars)
+			EL_ERROR(chr == '\r' || chr == '\n' || chr == 0, TInvalidArgumentException, "header value", "HTTP header value contains CR, LF or NUL");
 	}
 
 	static void ValidateRequestTarget(const TString& target)
 	{
 		EL_ERROR(target.Length() == 0, TInvalidArgumentException, "url", "request URL must not be empty");
-		for(const TUTF32 chr : target.chars)
-			EL_ERROR(chr.code <= 0x20 || chr.code == 0x7f, TInvalidArgumentException, "url", "HTTP request target contains whitespace or a control character");
+		for(const char32_t chr : target.chars)
+			EL_ERROR(chr <= 0x20 || chr == 0x7f, TInvalidArgumentException, "url", "HTTP request target contains whitespace or a control character");
 	}
 
 	static bool HeaderHasToken(const TString& value, TString token)
@@ -243,7 +243,7 @@ namespace el1::io::net::http
 			}
 
 			EL_ERROR(line.Length() >= limit, TException, "HTTP line exceeds configured limit");
-			line += TUTF32((u32_t)byte);
+			line += char32_t((u32_t)byte);
 		}
 	}
 
@@ -293,11 +293,11 @@ namespace el1::io::net::http
 		usys_t value = 0;
 		for(usys_t i = 0; i < str.Length(); i++)
 		{
-			const TUTF32 chr = str[i];
+			const char32_t chr = str[i];
 			u8_t digit;
-			if(chr >= '0' && chr <= '9') digit = chr.code - '0';
-			else if(chr >= 'a' && chr <= 'f') digit = chr.code - 'a' + 10;
-			else if(chr >= 'A' && chr <= 'F') digit = chr.code - 'A' + 10;
+			if(chr >= '0' && chr <= '9') digit = chr - '0';
+			else if(chr >= 'a' && chr <= 'f') digit = chr - 'a' + 10;
+			else if(chr >= 'A' && chr <= 'F') digit = chr - 'A' + 10;
 			else EL_THROW(TException, "invalid HTTP chunk size");
 			EL_ERROR(value > (NEG1 - digit) / 16U, TException, "HTTP chunk size overflow");
 			value = value * 16U + digit;
@@ -309,7 +309,7 @@ namespace el1::io::net::http
 	{
 		const char* const str_version = VersionToString(response.version);
 		const char* const str_status_text = StatusToString(response.status);
-		auto str_status_code = TString::Format("%d", (u16_t)response.status).MakeCStr();
+		auto str_status_code = TString::Format(U"%d", (u16_t)response.status).MakeCStr();
 
 		if(response.body == nullptr)
 			response.header_fields.ContentLength(0);
@@ -359,7 +359,7 @@ namespace el1::io::net::http
 
 	void THttpHeaderFields::ContentLength(const usys_t new_content_length)
 	{
-		SetHeaderField(*this, L"Content-Length", TString::Format("%d", new_content_length));
+		SetHeaderField(*this, L"Content-Length", TString::Format(U"%d", new_content_length));
 	}
 
 	EStatus THttpServer::HandleSingleRequest(ISource<byte_t>& source, ISink<byte_t>& sink, request_handler_t handler, const ipport_t remote_address)
@@ -378,7 +378,7 @@ namespace el1::io::net::http
 
 			usys_t sz_header = 0;
 			auto ss = source.Pipe();
-			auto ds = ss.Map([](byte_t chr){ return TUTF32((u32_t)chr); });
+			auto ds = ss.Map([](byte_t chr){ return char32_t((u32_t)chr); });
 			auto lr = ds.Transform(TLineReader(HEADER_CHAR_LIMIT));
 
 			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): reading first line of request\n");
@@ -430,7 +430,7 @@ namespace el1::io::net::http
 			while((request_line = lr.NextItem()) != nullptr && request_line->Length() > 0U)
 			{
 				sz_header += request_line->Length();
-				EL_ERROR(sz_header > HEADER_CHAR_LIMIT, THttpProcessingException, EStatus::REQUEST_HEADER_FIELDS_TOO_LARGE, TString::Format("maximum request header length of %d characters exeeded (linebreaks do not count against this limit)", HEADER_CHAR_LIMIT));
+				EL_ERROR(sz_header > HEADER_CHAR_LIMIT, THttpProcessingException, EStatus::REQUEST_HEADER_FIELDS_TOO_LARGE, TString::Format(U"maximum request header length of %d characters exeeded (linebreaks do not count against this limit)", HEADER_CHAR_LIMIT));
 
 				arr_req = request_line->Split(':', 2U);
 				EL_ERROR(arr_req.Count() != 2U, THttpProcessingException, EStatus::BAD_REQUEST, "invalid header field encountered");
@@ -1035,7 +1035,7 @@ namespace el1::io::net::http
 			if(FindHeaderField(headers, L"Host") == nullptr)
 			{
 				const bool default_port = (!use_tls && port == 80) || (use_tls && port == 443);
-				SetHeaderField(headers, L"Host", default_port ? host : TString::Format(L"%s:%d", host, port));
+				SetHeaderField(headers, L"Host", default_port ? host : TString::Format(U"%s:%d", host, port));
 			}
 
 			const TString request_path = RequestPath(request.url);
@@ -1061,7 +1061,7 @@ namespace el1::io::net::http
 				else
 				{
 					RemoveHeaderField(headers, L"Transfer-Encoding");
-					SetHeaderField(headers, L"Content-Length", TString::Format(L"%d", request.content_length));
+					SetHeaderField(headers, L"Content-Length", TString::Format(U"%d", request.content_length));
 				}
 			}
 
@@ -1187,10 +1187,10 @@ namespace el1::io::net::http
 			if(url[i] == '%')
 			{
 				auto str = url.SliceSL(i + 1, 2).ToLower().Reverse();
-				url.chars[i].code = TBCD::FromString(str, hex).ToUnsignedInt();
+				url.chars[i] = TBCD::FromString(str, hex).ToUnsignedInt();
 				url.chars.Remove(i + 1, 2);
 			}
-		return url.chars.Pipe().Map([](TUTF32 chr){ return (byte_t)chr.code; }).Transform(TUTF8Decoder()).Collect();
+		return url.chars.Pipe().Map([](char32_t chr){ return (byte_t)chr; }).Transform(TUTF8Decoder()).Collect();
 	}
 
 	TString UrlEncode(TString url)

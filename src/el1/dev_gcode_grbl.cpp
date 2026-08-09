@@ -23,7 +23,7 @@ namespace el1::dev::gcode::grbl
 		}
 		catch(const IException& e)
 		{
-			EL_FORWARD(e, TException, TString::Format("while parsing decimal value %q", str));
+			EL_FORWARD(e, TException, TString::Format(U"while parsing decimal value %q", str));
 		}
 	}
 
@@ -67,7 +67,7 @@ namespace el1::dev::gcode::grbl
 
 	TArgumentMap ICommand::ParseArgs(TList<TString>& fields, const usys_t idx_start, const char* const mandatory_args, const char* const optional_args)
 	{
-		TUTF32 key = 0U;
+		char32_t key = 0U;
 		try
 		{
 			TArgumentMap m;
@@ -76,7 +76,7 @@ namespace el1::dev::gcode::grbl
 				key = fields[i][0];
 				bool known = false;
 				for(const char* p = optional_args; *p; p++)
-					if(key == *p)
+					if(key == static_cast<char32_t>(static_cast<unsigned char>(*p)))
 					{
 						known = true;
 						break;
@@ -84,26 +84,26 @@ namespace el1::dev::gcode::grbl
 
 				if(!known)
 					for(const char* p = mandatory_args; *p; p++)
-						if(key == *p)
+						if(key == static_cast<char32_t>(static_cast<unsigned char>(*p)))
 						{
 							known = true;
 							break;
 						}
 
-				EL_ERROR(!known, TException, TString::Format("unknown argument key %q in field #%d (%q)", key, i, fields[i]));
+				EL_ERROR(!known, TException, TString::Format(U"unknown argument key %q in field #%d (%q)", key, i, fields[i]));
 
 				fields[i].Cut(1,0);
 				m.Add(key, TDecimal(fields[i]));
 			}
 
 			for(const char* p = mandatory_args; *p; p++)
-				EL_ERROR(!m.Contains(*p), TException, TString::Format("argument %q is mandatory", *p));
+				EL_ERROR(!m.Contains(*p), TException, TString::Format(U"argument %q is mandatory", *p));
 
 			return m;
 		}
 		catch(const IException& e)
 		{
-			EL_FORWARD(e, TException, TString::Format("while processing argument %q to command %q", key, fields[0]));
+			EL_FORWARD(e, TException, TString::Format(U"while processing argument %q to command %q", key, fields[0]));
 		}
 	}
 
@@ -136,7 +136,7 @@ namespace el1::dev::gcode::grbl
 
 	TString TLinearMoveCommand::ToString() const
 	{
-		return TString::Format("G01 X%d Y%d Z%d F%d", target[0], target[1], target[2], feedrate);
+		return TString::Format(U"G01 X%d Y%d Z%d F%d", target[0], target[1], target[2], feedrate);
 	}
 
 	TArcMoveCommand::TArcMoveCommand(parser_state_t& state, TList<TString>& fields)
@@ -154,7 +154,7 @@ namespace el1::dev::gcode::grbl
 	TString TArcMoveCommand::ToString() const
 	{
 		const TDecimalVector rel_center = center - start;
-		return TString::Format("G03 X%d Y%d Z%d I%d J%d K%d F%d", target[0], target[1], target[2], rel_center[0], rel_center[1], rel_center[2], feedrate);
+		return TString::Format(U"G03 X%d Y%d Z%d I%d J%d K%d F%d", target[0], target[1], target[2], rel_center[0], rel_center[1], rel_center[2], feedrate);
 	}
 
 	TDwellCommand::TDwellCommand(parser_state_t& state, TList<TString>& fields)
@@ -165,7 +165,7 @@ namespace el1::dev::gcode::grbl
 
 	TString TDwellCommand::ToString() const
 	{
-		return TString::Format("G04 P%d", time.ConvertToI(system::time::EUnit::MILLISECONDS));
+		return TString::Format(U"G04 P%d", time.ConvertToI(system::time::EUnit::MILLISECONDS));
 	}
 
 	TSetWorkCoordOffsetCommand::TSetWorkCoordOffsetCommand(parser_state_t& state, TList<TString>& fields)
@@ -174,7 +174,7 @@ namespace el1::dev::gcode::grbl
 		preset_index = (u8_t)args['P'].ToUnsignedInt();
 		origin = TDecimalVector(state.unit, "XYZ", args);
 		const int ref = args['L'].ToSignedInt();
-		EL_ERROR(ref != 2 && ref != 20, TException, TString::Format("unknown position reference '%d'", ref));
+		EL_ERROR(ref != 2 && ref != 20, TException, TString::Format(U"unknown position reference '%d'", ref));
 		if(ref == 20)
 			origin += state.pos;
 		state.wcs[preset_index] = origin;
@@ -182,7 +182,7 @@ namespace el1::dev::gcode::grbl
 
 	TString TSetWorkCoordOffsetCommand::ToString() const
 	{
-		return TString::Format("G10 L2 P%d X%d Y%d Z%d", preset_index, origin[0], origin[1], origin[2]);
+		return TString::Format(U"G10 L2 P%d X%d Y%d Z%d", preset_index, origin[0], origin[1], origin[2]);
 	}
 
 	TPlaneSelectCommand::TPlaneSelectCommand(parser_state_t& state, TList<TString>& fields)
@@ -243,7 +243,7 @@ namespace el1::dev::gcode::grbl
 		else //if(trigger != ETrigger::CONTACT && !error_on_miss)
 			code = "G38.5";
 
-		return TString::Format("%s X%d Y%d Z%d F%d", code, target[0], target[1], target[2], feedrate);
+		return TString::Format(U"%s X%d Y%d Z%d F%d", code, target[0], target[1], target[2], feedrate);
 	}
 
 	TSelectWorkCoordOffsetCommand::TSelectWorkCoordOffsetCommand(parser_state_t& state, TList<TString>& fields)
@@ -349,7 +349,7 @@ namespace el1::dev::gcode::grbl
 			state.spindle_on = spindle_on = true;
 		}
 		else
-			EL_THROW(TException, TString::Format("unknown spindle command %q", fields[0]));
+			EL_THROW(TException, TString::Format(U"unknown spindle command %q", fields[0]));
 	}
 
 	TSpindelDirCommand::TSpindelDirCommand(ERotation dir, TDecimal _rpm, bool spindle_on) : dir(dir), rpm(std::move(_rpm)), spindle_on(spindle_on)
@@ -359,7 +359,7 @@ namespace el1::dev::gcode::grbl
 	TString TSpindelDirCommand::ToString() const
 	{
 		if(spindle_on)
-			return TString::Format("%s S%d", dir == ERotation::CLOCKWISE ? "M03" : "M04", rpm);
+			return TString::Format(U"%s S%d", dir == ERotation::CLOCKWISE ? "M03" : "M04", rpm);
 		else
 			return "M05";
 	}
@@ -411,7 +411,7 @@ namespace el1::dev::gcode::grbl
 
 	TString TSetVariableCommand::ToString() const
 	{
-		return TString::Format("$%d=%d", key, value);
+		return TString::Format(U"$%d=%d", key, value);
 	}
 
 	TComment::TComment(TString _comment) : comment(std::move(_comment))
@@ -420,7 +420,7 @@ namespace el1::dev::gcode::grbl
 
 	TString TComment::ToString() const
 	{
-		return TString::Format(";%s", comment);
+		return TString::Format(U";%s", comment);
 	}
 
 	std::unique_ptr<ICommand> TGrblParser::ParseCommand(const TString& line)
@@ -503,11 +503,11 @@ namespace el1::dev::gcode::grbl
 				return New<TToolChangeCommand, ICommand>(*state, fields);
 			}
 			else
-				EL_THROW(TException, TString::Format("unknown g-code %q in line %d", str_cmd, state->idx_line));
+				EL_THROW(TException, TString::Format(U"unknown g-code %q in line %d", str_cmd, state->idx_line));
 		}
 		catch(const IException& e)
 		{
-			EL_FORWARD(e, TException, TString::Format("while processing line %d", state->idx_line));
+			EL_FORWARD(e, TException, TString::Format(U"while processing line %d", state->idx_line));
 		}
 	}
 }

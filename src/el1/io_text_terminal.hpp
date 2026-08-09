@@ -32,9 +32,9 @@ namespace el1::io::text::terminal
 		virtual math::vector::TVector<u16_t, 2> WindowSize() const = 0;
 
 		template<typename ... R>
-		void Print(string::TString format, R&& ... r)
+		void Print(const format::TFormatString<std::type_identity_t<std::decay_t<const R>>...>& format, R const& ... r)
 		{
-			(*this)<<string::TString::Format(std::move(format), std::forward<R>(r) ...);
+			(*this)<<string::TString::Format(format, r...);
 		}
 	};
 

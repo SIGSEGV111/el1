@@ -11,7 +11,7 @@ namespace el1::io::graphics::image::format::pnm
 	{
 		using namespace io::text::encoding::utf8;
 		EL_ERROR(max_value == 0, TInvalidArgumentException, "max_value", "max_value must be greater than 0");
-		TString::Format("P6 %d %d %d\n", img.Width(), img.Height(), max_value).chars.Pipe().Transform(TUTF8Encoder()).ToStream(stream);
+		TString::Format(U"P6 %d %d %d\n", img.Width(), img.Height(), max_value).chars.Pipe().Transform(TUTF8Encoder()).ToStream(stream);
 
 		const float f_max_value = max_value;
 
@@ -66,7 +66,7 @@ namespace el1::io::graphics::image::format::pnm
 		byte_t buffer = EatWhitespace(stream);
 		for(;;)
 		{
-			s.chars.Append(TUTF32((u32_t)buffer));
+			s.chars.Append(char32_t((u32_t)buffer));
 			stream.ReadAll(&buffer, 1);
 			if(IsWhitespace(buffer))
 				break;

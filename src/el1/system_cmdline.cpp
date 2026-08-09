@@ -20,7 +20,7 @@ namespace el1::system::cmdline
 			.progname = argv[0],
 			.defs = defs,
 			.args = TList<TString>(),
-			.shorthand_map = TSortedMap<TUTF32, IArgument*>(),
+			.shorthand_map = TSortedMap<char32_t, IArgument*>(),
 			.longname_map = TSortedMap<TString, IArgument*>(),
 			.env = system::task::EnvironmentVariables(),
 			.idx_argument = 0
@@ -43,16 +43,16 @@ namespace el1::system::cmdline
 		for(IArgument* def : state.defs)
 		{
 			if(def->name.Length() > 0)
-				EL_ANNOTATE_ERROR(state.longname_map.Add(def->name, def), TException, TString::Format("while processing option name %q", def->name));
+				EL_ANNOTATE_ERROR(state.longname_map.Add(def->name, def), TException, TString::Format(U"while processing option name %q", def->name));
 
-			if(def->shorthand != TUTF32::TERMINATOR)
-				EL_ANNOTATE_ERROR(state.shorthand_map.Add(def->shorthand, def), TException, TString::Format("while processing option with shorthand %q", def->shorthand));
+			if(def->shorthand != U'\0')
+				EL_ANNOTATE_ERROR(state.shorthand_map.Add(def->shorthand, def), TException, TString::Format(U"while processing option with shorthand %q", def->shorthand));
 		}
 
 		return IArgument::ParseCmdlineArguments(state);
 	}
 
-	IArgument::IArgument(const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help, const EArgumentType type) : name(std::move(name)), env(std::move(env)), help(std::move(help)), shorthand(shorthand), optional(optional ? 1 : 0), anonymous(anonymous ? 1 : 0), type((u8_t)type), assigned(0)
+	IArgument::IArgument(const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help, const EArgumentType type) : name(std::move(name)), env(std::move(env)), help(std::move(help)), shorthand(shorthand), optional(optional ? 1 : 0), anonymous(anonymous ? 1 : 0), type((u8_t)type), assigned(0)
 	{
 		EL_ERROR(name.chars.Contains('='), TInvalidArgumentException, "name", "the argument name must not contain '=' signs");
 		EL_ERROR( env.chars.Contains('='), TInvalidArgumentException, "env", "the environment variable name must not contain '=' signs");
@@ -93,7 +93,7 @@ namespace el1::system::cmdline
 		return "boolean";
 	}
 
-	TShowVersionArgument::TShowVersionArgument(const TUTF32 shorthand, TString name, const char* const proginfo) : IArgument(shorthand, name, TString(), true, false, "Show copyright and version information and exit.", EArgumentType::FLAG), proginfo(proginfo)
+	TShowVersionArgument::TShowVersionArgument(const char32_t shorthand, TString name, const char* const proginfo) : IArgument(shorthand, name, TString(), true, false, "Show copyright and version information and exit.", EArgumentType::FLAG), proginfo(proginfo)
 	{
 	}
 
@@ -118,7 +118,7 @@ namespace el1::system::cmdline
 		return "boolean";
 	}
 
-	TFlagArgument::TFlagArgument(bool* const var, const TUTF32 shorthand, TString name, TString env, TString help) : IArgument(shorthand, std::move(name), std::move(env), true, false, std::move(help), EArgumentType::FLAG), var(var)
+	TFlagArgument::TFlagArgument(bool* const var, const char32_t shorthand, TString name, TString env, TString help) : IArgument(shorthand, std::move(name), std::move(env), true, false, std::move(help), EArgumentType::FLAG), var(var)
 	{
 		*var = false;
 	}
@@ -140,7 +140,7 @@ namespace el1::system::cmdline
 		return "boolean";
 	}
 
-	TBooleanArgument::TBooleanArgument(bool* const var, const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
+	TBooleanArgument::TBooleanArgument(bool* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
 	{
 	}
 
@@ -161,7 +161,7 @@ namespace el1::system::cmdline
 		return "string";
 	}
 
-	TStringArgument::TStringArgument(TString* const var, const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
+	TStringArgument::TStringArgument(TString* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
 	{
 	}
 
@@ -174,7 +174,7 @@ namespace el1::system::cmdline
 
 	TString TIntegerArgument::DefaultValue() const
 	{
-		return TString::Format("%d", *var);
+		return TString::Format(U"%d", *var);
 	}
 
 	TString TIntegerArgument::ExpectedType() const
@@ -182,7 +182,7 @@ namespace el1::system::cmdline
 		return "integer";
 	}
 
-	TIntegerArgument::TIntegerArgument(s64_t* const var, const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
+	TIntegerArgument::TIntegerArgument(s64_t* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
 	{
 	}
 
@@ -195,7 +195,7 @@ namespace el1::system::cmdline
 
 	TString TFloatArgument::DefaultValue() const
 	{
-		return TString::Format("%d", *var);
+		return TString::Format(U"%d", *var);
 	}
 
 	TString TFloatArgument::ExpectedType() const
@@ -203,7 +203,7 @@ namespace el1::system::cmdline
 		return "decimal";
 	}
 
-	TFloatArgument::TFloatArgument(double* const var, const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
+	TFloatArgument::TFloatArgument(double* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
 	{
 	}
 
@@ -227,7 +227,7 @@ namespace el1::system::cmdline
 		return "array";
 	}
 
-	TArrayArgument::TArrayArgument(TList<TString>* const var, const TString delimiter, const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::ARRAY), var(var), delimiter(delimiter)
+	TArrayArgument::TArrayArgument(TList<TString>* const var, const TString delimiter, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::ARRAY), var(var), delimiter(delimiter)
 	{
 	}
 
@@ -274,12 +274,12 @@ namespace el1::system::cmdline
 		var->MakeAbsolute();
 		var->Simplify();
 
-		EL_ERROR(create_mode == ECreateMode::OPEN && var->Type() == EObjectType::NX, TException, TString::Format("no such file or directory %q", var->operator TString()));
+		EL_ERROR(create_mode == ECreateMode::OPEN && var->Type() == EObjectType::NX, TException, TString::Format(U"no such file or directory %q", var->operator TString()));
 
-		EL_ERROR(create_mode == ECreateMode::EXCLUSIVE && var->Type() != EObjectType::NX, TException, TString::Format("expected to create %q, but it already exists", var->operator TString()));
+		EL_ERROR(create_mode == ECreateMode::EXCLUSIVE && var->Type() != EObjectType::NX, TException, TString::Format(U"expected to create %q, but it already exists", var->operator TString()));
 
 		EL_ERROR(var->Type() != EObjectType::NX && expected_type != EObjectType::UNKNOWN && var->Type() != expected_type,
-				 TException, TString::Format("expected %q to be a %s, but it is actually a %s",
+				 TException, TString::Format(U"expected %q to be a %s, but it is actually a %s",
 					var->operator TString(),
 					ObjectTypeToString(expected_type),
 					ObjectTypeToString(var->Type()
@@ -359,11 +359,11 @@ namespace el1::system::cmdline
 		return str_create_mode + " " + str_expected_type;
 	}
 
-	TPathArgument::TPathArgument(TPath* const var, const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var), expected_type(EObjectType::UNKNOWN), create_mode(ECreateMode::OPEN)
+	TPathArgument::TPathArgument(TPath* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var), expected_type(EObjectType::UNKNOWN), create_mode(ECreateMode::OPEN)
 	{
 	}
 
-	TPathArgument::TPathArgument(TPath* const var, const EObjectType expected_type, const io::file::ECreateMode create_mode, const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var), expected_type(expected_type), create_mode(create_mode)
+	TPathArgument::TPathArgument(TPath* const var, const EObjectType expected_type, const io::file::ECreateMode create_mode, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var), expected_type(expected_type), create_mode(create_mode)
 	{
 		EL_ERROR(expected_type == EObjectType::NX, TInvalidArgumentException, "expected_type", "expected type cannot be NX");
 	}
@@ -389,7 +389,7 @@ namespace el1::system::cmdline
 		return "boolean";
 	}
 
-	THelpArgument::THelpArgument(TString program_description, TString website_url, TString bugtracker_url, TString scm_url, const TUTF32 shorthand) : IArgument(shorthand, "help", "", true, false, "Show the command-line help text and exit.", EArgumentType::FLAG)
+	THelpArgument::THelpArgument(TString program_description, TString website_url, TString bugtracker_url, TString scm_url, const char32_t shorthand) : IArgument(shorthand, "help", "", true, false, "Show the command-line help text and exit.", EArgumentType::FLAG)
 	{
 	}
 
@@ -397,7 +397,7 @@ namespace el1::system::cmdline
 
 	void IArgument::ShowHelpGenerated(const TString& progname, const TList<IArgument*>& defs)
 	{
-		TString usage = TString::Format("usage: %q", progname);
+		TString usage = TString::Format(U"usage: %q", progname);
 
 		const bool multi_line = defs.Count() > 4 || defs.Pipe().Filter([](auto def) { return def->help.Length() > 0; }).Count() > 0;
 		if(multi_line)
@@ -406,18 +406,18 @@ namespace el1::system::cmdline
 		TList<TString> lines;
 
 		for(const IArgument* def : defs)
-			if(def->name.Length() > 0 || def->shorthand != TUTF32::TERMINATOR)
+			if(def->name.Length() > 0 || def->shorthand != U'\0')
 			{
 				TString line;
 				line += def->optional ? '[' : '{';
 
-				if(def->shorthand != TUTF32::TERMINATOR)
+				if(def->shorthand != U'\0')
 				{
 					line += "-";
 					line += def->shorthand;
 				}
 
-				if(def->name.Length() > 0 && def->shorthand != TUTF32::TERMINATOR)
+				if(def->name.Length() > 0 && def->shorthand != U'\0')
 					line += '|';
 
 				if(def->name.Length() > 0)
@@ -536,7 +536,7 @@ namespace el1::system::cmdline
 							kv.key = arg;
 
 						kv.key.Cut(2,0);
-						EL_ANNOTATE_ERROR(def = state.longname_map[kv.key], TException, TString::Format("unrecognized option %q @ pos %d", kv.key, state.idx_argument + 1));
+						EL_ANNOTATE_ERROR(def = state.longname_map[kv.key], TException, TString::Format(U"unrecognized option %q @ pos %d", kv.key, state.idx_argument + 1));
 
 						if(!arg.chars.Contains('='))
 						{
@@ -547,7 +547,7 @@ namespace el1::system::cmdline
 							else
 							{
 								i++;
-								EL_ANNOTATE_ERROR(kv.value = state.args[i], TException, TString::Format("missing value for option %q @ pos %d", kv.key, state.idx_argument + 1));
+								EL_ANNOTATE_ERROR(kv.value = state.args[i], TException, TString::Format(U"missing value for option %q @ pos %d", kv.key, state.idx_argument + 1));
 							}
 						}
 					}
@@ -557,8 +557,8 @@ namespace el1::system::cmdline
 					// shorthand
 					// shorthand arguments never use the key=value syntax
 					// thus the value (if any) is always in the next argument
-					EL_ERROR(arg.Length() > 2, TException, TString::Format("unrecognized option %q @ pos %d", arg, state.idx_argument + 1));
-					EL_ANNOTATE_ERROR(def = state.shorthand_map[arg[1]], TException, TString::Format("unrecognized option %q @ pos %d", arg, state.idx_argument + 1));
+					EL_ERROR(arg.Length() > 2, TException, TString::Format(U"unrecognized option %q @ pos %d", arg, state.idx_argument + 1));
+					EL_ANNOTATE_ERROR(def = state.shorthand_map[arg[1]], TException, TString::Format(U"unrecognized option %q @ pos %d", arg, state.idx_argument + 1));
 
 					kv.key = arg.SliceSL(1,1);
 
@@ -569,7 +569,7 @@ namespace el1::system::cmdline
 					else
 					{
 						i++;
-						EL_ANNOTATE_ERROR(kv.value = state.args[i], TException, TString::Format("missing value for option %q @ pos %d", kv.key, state.idx_argument + 1));
+						EL_ANNOTATE_ERROR(kv.value = state.args[i], TException, TString::Format(U"missing value for option %q @ pos %d", kv.key, state.idx_argument + 1));
 					}
 				}
 			}
@@ -590,12 +590,12 @@ namespace el1::system::cmdline
 				if(def == nullptr && eof)
 					return i;
 
-				EL_ERROR(def == nullptr, TException, TString::Format("unable to match anonymous value %q with any defined option", arg));
+				EL_ERROR(def == nullptr, TException, TString::Format(U"unable to match anonymous value %q with any defined option", arg));
 			}
 
 			EL_ERROR(def == nullptr, TLogicException);
-			EL_ERROR(def->assigned == 1, TException, TString::Format("option value for %q specified multiple times", kv.key));
-			EL_ANNOTATE_ERROR(def->ParseValue(kv.value, state), TException, TString::Format("unable to parse value %q for option %q at pos %d", kv.value, kv.key, state.idx_argument + 1));
+			EL_ERROR(def->assigned == 1, TException, TString::Format(U"option value for %q specified multiple times", kv.key));
+			EL_ANNOTATE_ERROR(def->ParseValue(kv.value, state), TException, TString::Format(U"unable to parse value %q for option %q at pos %d", kv.value, kv.key, state.idx_argument + 1));
 			def->assigned = 1;
 		}
 
@@ -606,12 +606,12 @@ namespace el1::system::cmdline
 				const TString* const env_value = state.env.Get(def->env);
 				if(env_value != nullptr)
 				{
-					EL_ANNOTATE_ERROR(def->ParseValue(*env_value, state), TException, TString::Format("unable to parse value %q from environment variable %q for option %q", *env_value, def->env, def->name));
+					EL_ANNOTATE_ERROR(def->ParseValue(*env_value, state), TException, TString::Format(U"unable to parse value %q from environment variable %q for option %q", *env_value, def->env, def->name));
 					def->assigned = 1;
 				}
 			}
 
-			EL_ERROR(def->assigned == 0 && def->optional == 0, TException, TString::Format("option %q is not optional but was not specified", def->name.Length() > 0 ? def->name : TString() += def->shorthand));
+			EL_ERROR(def->assigned == 0 && def->optional == 0, TException, TString::Format(U"option %q is not optional but was not specified", def->name.Length() > 0 ? def->name : TString() += def->shorthand));
 		}
 
 		return state.args.Count();

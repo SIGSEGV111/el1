@@ -2,7 +2,7 @@
 
 namespace el1::io::format::base64
 {
-	TUTF32 __ARR_BASE64_SYMBOLS[] = {
+	char32_t __ARR_BASE64_SYMBOLS[] = {
 		'A',
 		'B',
 		'C',
@@ -70,5 +70,5 @@ namespace el1::io::format::base64
 		'='
 	};
 
-	const array_t<const TUTF32> BASE64_SYMBOLS(__ARR_BASE64_SYMBOLS, sizeof(__ARR_BASE64_SYMBOLS) / sizeof(__ARR_BASE64_SYMBOLS[0]));
+	const array_t<const char32_t> BASE64_SYMBOLS(__ARR_BASE64_SYMBOLS, sizeof(__ARR_BASE64_SYMBOLS) / sizeof(__ARR_BASE64_SYMBOLS[0]));
 }

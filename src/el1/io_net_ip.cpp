@@ -41,13 +41,13 @@ namespace el1::io::net::ip
 
 	u32_t& ipaddr_t::IPv4()
 	{
-		EL_ERROR(!this->IsV4(), TException, TString::Format("%q is not an IPv4 address", this->operator TString()));
+		EL_ERROR(!this->IsV4(), TException, TString::Format(U"%q is not an IPv4 address", this->operator TString()));
 		return u32[3];
 	}
 
 	const u32_t& ipaddr_t::IPv4() const
 	{
-		EL_ERROR(!this->IsV4(), TException, TString::Format("%q is not an IPv4 address", this->operator TString()));
+		EL_ERROR(!this->IsV4(), TException, TString::Format(U"%q is not an IPv4 address", this->operator TString()));
 		return u32[3];
 	}
 
@@ -111,7 +111,7 @@ namespace el1::io::net::ip
 	{
 		if(IsV4())
 		{
-			return TString::Format("%d.%d.%d.%d",
+			return TString::Format(U"%d.%d.%d.%d",
 				octet[12],
 				octet[13],
 				octet[14],
@@ -120,7 +120,7 @@ namespace el1::io::net::ip
 		}
 		else
 		{
-			return TString::Format("%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x",
+			return TString::Format(U"%04x:%04x:%04x:%04x:%04x:%04x:%04x:%04x",
 				group[0],
 				group[1],
 				group[2],

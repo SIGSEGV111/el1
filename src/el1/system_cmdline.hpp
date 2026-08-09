@@ -23,7 +23,7 @@ namespace el1::system::cmdline
 		TString progname;
 		io::collection::list::TList<IArgument*> defs;
 		io::collection::list::TList<TString> args;
-		io::collection::map::TSortedMap<TUTF32, IArgument*> shorthand_map;
+		io::collection::map::TSortedMap<char32_t, IArgument*> shorthand_map;
 		io::collection::map::TSortedMap<TString, IArgument*> longname_map;
 		const io::collection::map::TSortedMap<TString, const TString>& env;
 
@@ -37,7 +37,7 @@ namespace el1::system::cmdline
 			virtual TString DefaultValue() const EL_GETTER = 0;
 			virtual TString ExpectedType() const EL_GETTER = 0;
 
-			IArgument(const TUTF32 shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help, const EArgumentType type);
+			IArgument(const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help, const EArgumentType type);
 
 		public:
 			static usys_t ParseCmdlineArguments(const TParserState& state);
@@ -46,7 +46,7 @@ namespace el1::system::cmdline
 			const TString name;
 			const TString env;
 			const TString help;
-			const TUTF32 shorthand;
+			const char32_t shorthand;
 			const u32_t optional : 1;
 			const u32_t anonymous : 1;
 			const u32_t type : 2;
@@ -63,7 +63,7 @@ namespace el1::system::cmdline
 			TString ExpectedType() const final override EL_GETTER;
 
 		public:
-			TShowVersionArgument(const TUTF32 shorthand, TString name, const char* const proginfo);
+			TShowVersionArgument(const char32_t shorthand, TString name, const char* const proginfo);
 			TShowVersionArgument(const char* const proginfo);
 	};
 
@@ -78,7 +78,7 @@ namespace el1::system::cmdline
 
 		public:
 			bool Value() const EL_GETTER { return *var; }
-			TFlagArgument(bool* const var, const TUTF32 shorthand, TString name, TString env = L"", TString help = L"");
+			TFlagArgument(bool* const var, const char32_t shorthand, TString name, TString env = L"", TString help = L"");
 	};
 
 	class TBooleanArgument : public IArgument
@@ -92,7 +92,7 @@ namespace el1::system::cmdline
 
 		public:
 			bool Value() const EL_GETTER { return *var; }
-			TBooleanArgument(bool* const var, const TUTF32 shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
+			TBooleanArgument(bool* const var, const char32_t shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
 	};
 
 
@@ -107,7 +107,7 @@ namespace el1::system::cmdline
 
 		public:
 			const TString& Value() const EL_GETTER { return *var; }
-			TStringArgument(TString* const var, const TUTF32 shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
+			TStringArgument(TString* const var, const char32_t shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
 	};
 
 	class TIntegerArgument : public IArgument
@@ -121,7 +121,7 @@ namespace el1::system::cmdline
 
 		public:
 			s64_t Value() const EL_GETTER { return *var; }
-			TIntegerArgument(s64_t* const var, const TUTF32 shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
+			TIntegerArgument(s64_t* const var, const char32_t shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
 	};
 
 	class TFloatArgument : public IArgument
@@ -135,7 +135,7 @@ namespace el1::system::cmdline
 
 		public:
 			double Value() const EL_GETTER { return *var; }
-			TFloatArgument(double* const var, const TUTF32 shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
+			TFloatArgument(double* const var, const char32_t shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
 	};
 
 	class TArrayArgument : public IArgument
@@ -150,7 +150,7 @@ namespace el1::system::cmdline
 
 		public:
 			const io::collection::list::TList<TString>& Value() const EL_GETTER { return *var; }
-			TArrayArgument(io::collection::list::TList<TString>* const var, const TString delimiter, const TUTF32 shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
+			TArrayArgument(io::collection::list::TList<TString>* const var, const TString delimiter, const char32_t shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
 	};
 
 	class TPathArgument : public IArgument
@@ -167,9 +167,9 @@ namespace el1::system::cmdline
 		public:
 			const io::file::TPath& Value() const EL_GETTER { return *var; }
 
-			TPathArgument(io::file::TPath* const var, const TUTF32 shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
+			TPathArgument(io::file::TPath* const var, const char32_t shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
 
-			TPathArgument(io::file::TPath* const var, const io::file::EObjectType expected_type, const io::file::ECreateMode create_mode, const TUTF32 shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
+			TPathArgument(io::file::TPath* const var, const io::file::EObjectType expected_type, const io::file::ECreateMode create_mode, const char32_t shorthand, TString name, TString env = L"", const bool optional = false, const bool anonymous = false, TString help = L"");
 	};
 
 	class THelpArgument : public IArgument
@@ -185,7 +185,7 @@ namespace el1::system::cmdline
 			TString ExpectedType() const final override EL_GETTER;
 
 		public:
-			THelpArgument(TString program_description = L"", TString website_url = L"", TString bugtracker_url = L"", TString scm_url = L"", const TUTF32 shorthand = 'h');
+			THelpArgument(TString program_description = L"", TString website_url = L"", TString bugtracker_url = L"", TString scm_url = L"", const char32_t shorthand = 'h');
 	};
 
 	// class TVersionArgument : public IArgument

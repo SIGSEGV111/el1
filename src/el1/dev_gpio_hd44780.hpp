@@ -28,16 +28,16 @@ namespace el1::dev::gpio::hd44780
 			u8_t dram_state[80];
 			u8_t dram_new[80];
 
-			static u8_t TranslateCharToDram(const TUTF32 chr);
-			static TUTF32 TranslateDramToChar(const u8_t dram);
+			static u8_t TranslateCharToDram(const char32_t chr);
+			static char32_t TranslateDramToChar(const u8_t dram);
 			static u8_t CoordinateToAddress(const unsigned x, const unsigned y);
 
 		public:
 			void Render();
 			void Text(const TString str);
 
-			TUTF32 Character(const unsigned x, const unsigned y) const EL_GETTER;
-			void Character(const unsigned x, const unsigned y, const TUTF32 chr) EL_SETTER;
+			char32_t Character(const unsigned x, const unsigned y) const EL_GETTER;
+			void Character(const unsigned x, const unsigned y, const char32_t chr) EL_SETTER;
 
 			void Backlight(const bool) EL_SETTER;
 			bool Backlight() const EL_GETTER;

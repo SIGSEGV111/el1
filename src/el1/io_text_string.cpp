@@ -7,7 +7,7 @@
 
 namespace el1::io::text::string
 {
-	extern const array_t<const TUTF32> WHITESPACE_CHARS;
+	extern const array_t<const char32_t> WHITESPACE_CHARS;
 
 	bool TStringView::Contains(const TStringView needle) const
 	{
@@ -17,7 +17,7 @@ namespace el1::io::text::string
 			return false;
 
 		for(usys_t i = 0; i <= Count() - needle.Count(); i++)
-			if(memcmp(ItemPtr(i), needle.ItemPtr(0), needle.Count() * sizeof(TUTF32)) == 0)
+			if(memcmp(ItemPtr(i), needle.ItemPtr(0), needle.Count() * sizeof(char32_t)) == 0)
 				return true;
 
 		return false;
@@ -55,7 +55,7 @@ namespace el1::io::text::string
 		return NEG1;
 	}
 
-	usys_t TStringView::Find(const TUTF32 needle, const ssys_t start, const bool reverse) const
+	usys_t TStringView::Find(const char32_t needle, const ssys_t start, const bool reverse) const
 	{
 		if(Length() == 0)
 			return NEG1;
@@ -76,7 +76,7 @@ namespace el1::io::text::string
 		return NEG1;
 	}
 
-	usys_t TStringView::FindFirst(const array_t<const TUTF32>& charset, const ssys_t start, const bool reverse) const
+	usys_t TStringView::FindFirst(const array_t<const char32_t>& charset, const ssys_t start, const bool reverse) const
 	{
 		if(Length() == 0)
 			return NEG1;
@@ -152,31 +152,31 @@ namespace el1::io::text::string
 
 		for(usys_t i = 0; i < Length(); i++)
 		{
-			const TUTF32 chr = (*this)[i];
-			if(chr.code == '-' && parse_int && ii == 0 && !negative)
+			const char32_t chr = (*this)[i];
+			if(chr == '-' && parse_int && ii == 0 && !negative)
 			{
 				negative = true;
 			}
-			else if(chr.code == '.' && parse_int)
+			else if(chr == '.' && parse_int)
 			{
 				parse_int = false;
 			}
-			else if(chr.code >= '0' && chr.code <= '9')
+			else if(chr >= '0' && chr <= '9')
 			{
 				if(parse_int)
 				{
 					EL_ERROR(ii >= sizeof(integer_part), TException, "number integer-part is too big");
-					integer_part[ii++] = static_cast<u8_t>(chr.code - '0');
+					integer_part[ii++] = static_cast<u8_t>(chr - '0');
 				}
 				else
 				{
-					number += (chr.code - '0') / divider;
+					number += (chr - '0') / divider;
 					divider *= 10.0;
 				}
 			}
 			else
 			{
-				EL_THROW(TException, TString::Format("encountered non-numeric character '%c' at index %d"_U, chr, i));
+				EL_THROW(TException, TString::Format(U"encountered non-numeric character '%c' at index %d", chr, i));
 			}
 		}
 
@@ -200,19 +200,19 @@ namespace el1::io::text::string
 
 		for(usys_t i = 0; i < Length(); i++)
 		{
-			const TUTF32 chr = (*this)[i];
-			if(chr.code == '-' && ii == 0 && !negative)
+			const char32_t chr = (*this)[i];
+			if(chr == '-' && ii == 0 && !negative)
 			{
 				negative = true;
 			}
-			else if(chr.code >= '0' && chr.code <= '9')
+			else if(chr >= '0' && chr <= '9')
 			{
 				EL_ERROR(ii >= sizeof(integer_part), TException, "number integer-part is too big");
-				integer_part[ii++] = static_cast<u8_t>(chr.code - '0');
+				integer_part[ii++] = static_cast<u8_t>(chr - '0');
 			}
 			else
 			{
-				EL_THROW(TException, TString::Format("encountered non-numeric character '%c' at index %d"_U, chr, i));
+				EL_THROW(TException, TString::Format(U"encountered non-numeric character '%c' at index %d", chr, i));
 			}
 		}
 
@@ -229,7 +229,7 @@ namespace el1::io::text::string
 
 	bool TStringView::operator==(const TStringView rhs) const
 	{
-		return Count() == rhs.Count() && (Count() == 0 || memcmp(Data(), rhs.Data(), Count() * sizeof(TUTF32)) == 0);
+		return Count() == rhs.Count() && (Count() == 0 || memcmp(Data(), rhs.Data(), Count() * sizeof(char32_t)) == 0);
 	}
 
 	bool TStringView::operator>=(const TStringView rhs) const
@@ -271,7 +271,7 @@ namespace el1::io::text::string
 
 	TString TUndefineFormatException::Message() const
 	{
-		return TString::Format("cannot convert from argument type %q to requested format %q", argument_type, format_name);
+		return TString::Format(U"cannot convert from argument type %q to requested format %q", argument_type, format_name);
 	}
 
 	error::IException* TUndefineFormatException::Clone() const
@@ -283,7 +283,7 @@ namespace el1::io::text::string
 
 	TString TMissingFormatVariableException::Message() const
 	{
-		return TString::Format("unable to find a placeholder for a format variable in format string %q", format);
+		return TString::Format(U"unable to find a placeholder for a format variable in format string %q", format);
 	}
 
 	error::IException* TMissingFormatVariableException::Clone() const
@@ -293,7 +293,7 @@ namespace el1::io::text::string
 
 	TString TTooManyFormatVariablesException::Message() const
 	{
-		return TString::Format("format string %q contains more placeholders than variables were passed as function arguments", format);
+		return TString::Format(U"format string %q contains more placeholders than variables were passed as function arguments", format);
 	}
 
 	error::IException* TTooManyFormatVariablesException::Clone() const
@@ -308,7 +308,7 @@ namespace el1::io::text::string
 	TString IFormatter::Format(const TStringView) const     { EL_THROW(TUndefineFormatException, "TStringView", FormatName()); }
 	TString IFormatter::Format(const char) const           { EL_THROW(TUndefineFormatException, "char",     FormatName()); }
 	TString IFormatter::Format(const wchar_t) const        { EL_THROW(TUndefineFormatException, "wchar_t",  FormatName()); }
-	TString IFormatter::Format(const TUTF32) const         { EL_THROW(TUndefineFormatException, "TUTF32",   FormatName()); }
+	TString IFormatter::Format(const char32_t) const         { EL_THROW(TUndefineFormatException, "char32_t",   FormatName()); }
 	TString IFormatter::Format(const s8_t) const           { EL_THROW(TUndefineFormatException, "s8_t",     FormatName()); }
 	TString IFormatter::Format(const u8_t) const           { EL_THROW(TUndefineFormatException, "u8_t",     FormatName()); }
 	TString IFormatter::Format(const s16_t) const          { EL_THROW(TUndefineFormatException, "s16_t",    FormatName()); }
@@ -339,11 +339,11 @@ namespace el1::io::text::string
 		.prefix = "",
 		.suffix = "",
 		.decimal_point_sign = '.',
-		.grouping_sign = TUTF32::TERMINATOR,
+		.grouping_sign = U'\0',
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
-		.positive_sign = TUTF32::TERMINATOR,
+		.positive_sign = U'\0',
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
@@ -355,11 +355,11 @@ namespace el1::io::text::string
 		.prefix = "",
 		.suffix = "",
 		.decimal_point_sign = '.',
-		.grouping_sign = TUTF32::TERMINATOR,
+		.grouping_sign = U'\0',
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
-		.positive_sign = TUTF32::TERMINATOR,
+		.positive_sign = U'\0',
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
@@ -371,11 +371,11 @@ namespace el1::io::text::string
 		.prefix = "",
 		.suffix = "",
 		.decimal_point_sign = '.',
-		.grouping_sign = TUTF32::TERMINATOR,
+		.grouping_sign = U'\0',
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
-		.positive_sign = TUTF32::TERMINATOR,
+		.positive_sign = U'\0',
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
@@ -387,11 +387,11 @@ namespace el1::io::text::string
 		.prefix = "",
 		.suffix = "",
 		.decimal_point_sign = '.',
-		.grouping_sign = TUTF32::TERMINATOR,
+		.grouping_sign = U'\0',
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
-		.positive_sign = TUTF32::TERMINATOR,
+		.positive_sign = U'\0',
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
@@ -403,11 +403,11 @@ namespace el1::io::text::string
 		.prefix = "",
 		.suffix = "",
 		.decimal_point_sign = '.',
-		.grouping_sign = TUTF32::TERMINATOR,
+		.grouping_sign = U'\0',
 		.integer_pad_sign = ' ',
 		.decimal_pad_sign = '0',
 		.negative_sign = '-',
-		.positive_sign = TUTF32::TERMINATOR,
+		.positive_sign = U'\0',
 		.n_digits_per_group = 0,
 		.n_decimal_places = -1U,
 		.n_min_integer_places = -1U,
@@ -457,7 +457,7 @@ namespace el1::io::text::string
 
 		if(config.n_decimal_places != -1U && config.n_decimal_places != 0)
 		{
-			if(config.decimal_point_sign != TUTF32::TERMINATOR)
+			if(config.decimal_point_sign != U'\0')
 				out.chars.Append(config.decimal_point_sign);
 			out.chars.Inflate(config.n_decimal_places, (*config.symbols)[0]);
 		}
@@ -471,7 +471,7 @@ namespace el1::io::text::string
 
 		if(config.n_decimal_places != -1U && config.n_decimal_places != 0)
 		{
-			if(config.decimal_point_sign != TUTF32::TERMINATOR)
+			if(config.decimal_point_sign != U'\0')
 				out.chars.Append(config.decimal_point_sign);
 			out.chars.Inflate(config.n_decimal_places, (*config.symbols)[0]);
 		}
@@ -488,7 +488,7 @@ namespace el1::io::text::string
 		double value = _value;
 		TString out = MakeDecimalPart(value);
 
-		if(config.decimal_point_sign != TUTF32::TERMINATOR && out.Length() > 0)
+		if(config.decimal_point_sign != U'\0' && out.Length() > 0)
 			out.chars.Insert(0, config.decimal_point_sign);
 
 		const bool is_negative = value < 0.0;
@@ -506,9 +506,9 @@ namespace el1::io::text::string
 		if(_value.IsInfinity())
 		{
 			TString s = config.prefix;
-			if(_value.IsNegative() && config.negative_sign != TUTF32::TERMINATOR)
+			if(_value.IsNegative() && config.negative_sign != U'\0')
 				s += config.negative_sign;
-			else if(!_value.IsNegative() && config.positive_sign != TUTF32::TERMINATOR)
+			else if(!_value.IsNegative() && config.positive_sign != U'\0')
 				s += config.positive_sign;
 			s += "INF";
 			s += config.suffix;
@@ -518,17 +518,17 @@ namespace el1::io::text::string
 		const bcd::TBCD& value = _value.Base() == output_base ? _value : bcd::TBCD(_value, output_base);
 		const bool int_pad_is_digit = config.symbols->Contains(config.integer_pad_sign);
 		const int n_significant_integer = value.CountSignificantIntegerDigits();
-		const bool do_grouping = config.grouping_sign != TUTF32::TERMINATOR && config.n_digits_per_group > 0;
-		const TUTF32 int_pad_sign = config.integer_pad_sign == TUTF32::TERMINATOR ? (*config.symbols)[0] : config.integer_pad_sign;
-		const TUTF32 dec_pad_sign = config.decimal_pad_sign == TUTF32::TERMINATOR ? (*config.symbols)[0] : config.decimal_pad_sign;
+		const bool do_grouping = config.grouping_sign != U'\0' && config.n_digits_per_group > 0;
+		const char32_t int_pad_sign = config.integer_pad_sign == U'\0' ? (*config.symbols)[0] : config.integer_pad_sign;
+		const char32_t dec_pad_sign = config.decimal_pad_sign == U'\0' ? (*config.symbols)[0] : config.decimal_pad_sign;
 		TString s = config.prefix;
 
 		if(int_pad_is_digit)
 		{
 			// generate positive|negative sign
-			if(value.IsNegative() && config.negative_sign != TUTF32::TERMINATOR)
+			if(value.IsNegative() && config.negative_sign != U'\0')
 				s += config.negative_sign;
-			else if(!value.IsNegative() && config.positive_sign != TUTF32::TERMINATOR)
+			else if(!value.IsNegative() && config.positive_sign != U'\0')
 				s += config.positive_sign;
 
 			// generate integer padding with grouping
@@ -546,9 +546,9 @@ namespace el1::io::text::string
 				s += int_pad_sign;
 
 			// generate positive|negative sign
-			if(value.IsNegative() && config.negative_sign != TUTF32::TERMINATOR)
+			if(value.IsNegative() && config.negative_sign != U'\0')
 				s += config.negative_sign;
-			else if(!value.IsNegative() && config.positive_sign != TUTF32::TERMINATOR)
+			else if(!value.IsNegative() && config.positive_sign != U'\0')
 				s += config.positive_sign;
 		}
 
@@ -564,7 +564,7 @@ namespace el1::io::text::string
 		if((config.n_decimal_places > 0 && config.n_decimal_places != -1U) || (config.n_decimal_places == -1U && n_significant_decimal > 0))
 		{
 			// add decimal point
-			if(config.decimal_point_sign != TUTF32::TERMINATOR)
+			if(config.decimal_point_sign != U'\0')
 				s += config.decimal_point_sign;
 
 			// generate decimal digits
@@ -589,7 +589,7 @@ namespace el1::io::text::string
 	TString TNumberFormatter::MakeDecimalPart(double& value) const
 	{
 		EL_ERROR(!isfinite(value), TInvalidArgumentException, "value", "value must be a finite float number");
-		const TList< TUTF32>& symbols = *config.symbols;
+		const TList< char32_t>& symbols = *config.symbols;
 		const u64_t n_symbols = symbols.Count();
 		EL_ERROR(n_symbols < 2, TInvalidArgumentException, "config.symbols", "we need at least two symbols to format a number");
 		EL_ERROR(n_symbols >= -2U, TInvalidArgumentException, "config.symbols", "too many symbols");
@@ -598,7 +598,7 @@ namespace el1::io::text::string
 		const double abs_value = is_negative ? -value : value;
 		double remainder = abs_value - (u64_t)abs_value;
 
-		TList<TUTF32> digits;
+		TList<char32_t> digits;
 
 		for(unsigned i = 0; (config.n_decimal_places != -1U && i < config.n_decimal_places + 1) || (config.n_decimal_places == -1U && remainder != 0); i++)
 		{
@@ -612,7 +612,7 @@ namespace el1::io::text::string
 		{
 			// stopped because i >= n_decimal_places+1
 			// round to n_decimal_places
-			if(digits[-1].code >= n_symbols / 2)
+			if(digits[-1] >= n_symbols / 2)
 			{
 				// round away from zero
 				digits.Cut(0,1);
@@ -620,9 +620,9 @@ namespace el1::io::text::string
 				ssys_t i;
 				for(i = digits.Count() - 1; i >= 0; i--)
 				{
-					digits[i].code++;
-					if(digits[i].code >= n_symbols)
-						digits[i].code = 0;
+					digits[i]++;
+					if(digits[i] >= n_symbols)
+						digits[i] = 0;
 					else
 						break;
 				}
@@ -643,8 +643,8 @@ namespace el1::io::text::string
 			}
 		}
 
-		for(TUTF32& digit : digits)
-			digit = symbols[digit.code];
+		for(char32_t& digit : digits)
+			digit = symbols[digit];
 		TString out;
 		out.chars = std::move(digits);
 		return out;
@@ -652,7 +652,7 @@ namespace el1::io::text::string
 
 	TString TNumberFormatter::MakeIntegerPart(u64_t value, const bool is_negative) const
 	{
-		const TList< TUTF32>& symbols = *config.symbols;
+		const TList< char32_t>& symbols = *config.symbols;
 		const u64_t n_symbols = symbols.Count();
 		EL_ERROR(n_symbols < 2, TInvalidArgumentException, "config.symbols", "we need at least two symbols to format a number");
 		TString digits;
@@ -667,7 +667,7 @@ namespace el1::io::text::string
 			digits += symbols[value % n_symbols];
 			value /= n_symbols;
 
-			if(config.n_digits_per_group != -1U && config.grouping_sign != TUTF32::TERMINATOR)
+			if(config.n_digits_per_group != -1U && config.grouping_sign != U'\0')
 			{
 				if(--n_group == 0)
 				{
@@ -680,9 +680,9 @@ namespace el1::io::text::string
 		if(config.n_min_integer_places != -1U && config.n_min_integer_places != 0)
 			digits.Pad(config.integer_pad_sign, config.n_min_integer_places, EPlacement::END);
 
-		if(is_negative && config.negative_sign != TUTF32::TERMINATOR)
+		if(is_negative && config.negative_sign != U'\0')
 			digits += config.negative_sign;
-		else if(!is_negative && config.positive_sign != TUTF32::TERMINATOR)
+		else if(!is_negative && config.positive_sign != U'\0')
 			digits += config.positive_sign;
 
 		digits.Reverse();
@@ -699,7 +699,7 @@ namespace el1::io::text::string
 		.pad_sign = ' ',
 		.align = EPlacement::START,
 		.quote_symbols = nullptr,
-		.escape_symbol = TUTF32::TERMINATOR,
+		.escape_symbol = U'\0',
 	});
 
 	const TStringFormatter TStringFormatter::ASCII_QUOTED({
@@ -741,8 +741,8 @@ namespace el1::io::text::string
 
 		if(config.quote_symbols != nullptr)
 		{
-			const TUTF32 quote_symbol = DetectBestQuoteSymbol(s);
-			s.Quote(quote_symbol, config.escape_symbol == TUTF32::TERMINATOR ? quote_symbol : config.escape_symbol);
+			const char32_t quote_symbol = DetectBestQuoteSymbol(s);
+			s.Quote(quote_symbol, config.escape_symbol == U'\0' ? quote_symbol : config.escape_symbol);
 		}
 
 		s.Pad(config.pad_sign, config.n_min_length, config.align);
@@ -762,12 +762,12 @@ namespace el1::io::text::string
 		return Format(TString(&value, 1));
 	}
 
-	TString TStringFormatter::Format(const TUTF32 value) const
+	TString TStringFormatter::Format(const char32_t value) const
 	{
 		return Format(TString(&value, 1));
 	}
 
-	TUTF32 TStringFormatter::DetectBestQuoteSymbol(const TString& str) const
+	char32_t TStringFormatter::DetectBestQuoteSymbol(const TString& str) const
 	{
 		auto symbols = *config.quote_symbols;
 		usys_t counts[symbols.Count()];
@@ -791,133 +791,6 @@ namespace el1::io::text::string
 
 	/******************************************/
 
-	TFormatVariable TFormatVariable::Find(const TStringView str, const usys_t start_pos)
-	{
-		for(usys_t i = start_pos + 1; i < str.Length(); i++)
-		{
-			if(str[i-1] == L'%')
-			{
-				if(str[i] != L'%')
-				{
-					usys_t j = i;
-					for(; j < str.Length() && !str[j].IsAsciiAlpha(); j++);
-
-					EL_ERROR(j >= str.Length(), TInvalidArgumentException,"format", "invalid format string; format variable type missing or unescaped '%' encoutered");
-
-					if(str[j] == 'b' || str[j] == 'd' || str[j] == 'x' || str[j] == 'p' || str[j] == 's' || str[j] == 'q' || str[j] == 'c')
-					{
-						const char format_char = (char)str[j].code;
-						const TStringView arg_str = str.SliceBE(i, j);
-						TFormatVariable v = TFormatVariable::Parse(format_char, arg_str);
-						v.pos = i - 1;
-						v.len = j - i + 2;
-						return v;
-					}
-					else
-					{
-						EL_THROW(TInvalidArgumentException, "format", "format code must be one of: 'b', 'd', 'x', 'p', 's', 'q' or 'c'");
-					}
-				}
-				else
-					i++;
-			}
-		}
-
-		return TFormatVariable(false, nullptr);
-	}
-
-	TFormatVariable TFormatVariable::Parse(const TUTF32 format_char, const TStringView arg_str)
-	{
-		switch(format_char.code)
-		{
-			case 'b': return ParseNumberFormatterArguments(arg_str, TNumberFormatter::DEFAULT_BINARY);
-			case 'd': return ParseNumberFormatterArguments(arg_str, TNumberFormatter::DEFAULT_DECIMAL);
-			case 'x': return ParseNumberFormatterArguments(arg_str, TNumberFormatter::DEFAULT_HEXADECIMAL);
-			case 'p': return ParseNumberFormatterArguments(arg_str, TNumberFormatter::DEFAULT_ADDRESS);
-			case 's': return ParseStringFormatterArguments(arg_str);
-			case 'q': return ParseQuotedFormatterArguments(arg_str);
-			case 'c': return ParseCharacterFormatterArguments(arg_str);
-			default: EL_THROW(TInvalidArgumentException, "format_char", "valid values are: b, d, x, p, s, q, c");
-		}
-	}
-
-	TFormatVariable TFormatVariable::ParseNumberFormatterArguments(const TStringView arg_str, const TNumberFormatter* const default_format)
-	{
-		// %[<PAD>][<int part len>[.<dec part len>]](b|d|x|p)
-		// first non-numeric character is interpreted as pad character
-		// following numbers are interpreted as minimum integer part length
-		// if a '.' and another number follows, this is interpreted as exact decimal part length
-
-		if(arg_str.Length() > 0)
-		{
-			// std::cerr<<"DEBUG: arg_str = '"<<arg_str.MakeCStr().get()<<"'\n";
-			auto custom_formatter = New<TNumberFormatter>(default_format->config);
-
-			usys_t pos = 0;
-			const bool has_padding_chr = !(arg_str[0].code >= '1' && arg_str[0].code <= '9');
-
-			if(has_padding_chr)
-			{
-				// padding character
-				custom_formatter->config.integer_pad_sign = arg_str[0];
-				custom_formatter->config.decimal_pad_sign = arg_str[0];
-				pos++;
-
-				// std::cerr<<"DEBUG: has_padding_chr\n";
-			}
-
-			if(arg_str.Length() > pos)
-			{
-				const usys_t pos_dot = arg_str.Find('.', pos);
-
-				// std::cerr<<"DEBUG: pos_dot = "<<pos_dot<<std::endl;
-
-				if(pos_dot != NEG1)
-				{
-					// decimal part length
-					custom_formatter->config.n_decimal_places = arg_str.SliceSL(pos_dot + 1, arg_str.Length() - pos_dot - 1).ToInteger();
-
-					// integer part length
-					custom_formatter->config.n_min_integer_places = arg_str.SliceBE(pos, pos_dot).ToInteger();
-				}
-				else
-				{
-					// integer part length
-					custom_formatter->config.n_min_integer_places = arg_str.SliceSL(pos, arg_str.Length() - pos).ToInteger();
-				}
-			}
-
-			// std::cerr<<"DEBUG: n_min_integer_places = "<<custom_formatter->config.n_min_integer_places<<std::endl;
-			// std::cerr<<"DEBUG: n_decimal_places = "<<custom_formatter->config.n_decimal_places<<std::endl;
-
-			return TFormatVariable(false, custom_formatter.release());
-		}
-		else
-		{
-			return TFormatVariable(true, default_format);
-		}
-	}
-
-	TFormatVariable TFormatVariable::ParseStringFormatterArguments(const TStringView arg_str)
-	{
-		EL_ERROR(arg_str.Length() != 0, TNotImplementedException);
-
-		return TFormatVariable(true, &TStringFormatter::PLAIN);
-	}
-
-	TFormatVariable TFormatVariable::ParseQuotedFormatterArguments(const TStringView arg_str)
-	{
-		EL_ERROR(arg_str.Length() != 0, TNotImplementedException);
-
-		return TFormatVariable(true, &TStringFormatter::ASCII_QUOTED);
-	}
-
-	TFormatVariable TFormatVariable::ParseCharacterFormatterArguments(const TStringView arg_str)
-	{
-		EL_ERROR(arg_str.Length() != 0, TNotImplementedException);
-
-		return TFormatVariable(true, &TStringFormatter::PLAIN);
-	}
 
 	/************************************************************/
 
@@ -942,13 +815,13 @@ namespace el1::io::text::string
 		TString::TString(const wchar_t* const str, const usys_t maxlen)
 		{
 			const size_t len = maxlen == NEG1 ? wcslen(str) : wcsnlen(str, maxlen);
-			chars.Append((const TUTF32*)str, len);
+			chars.Append((const char32_t*)str, len);
 		}
 	#endif
 
-	TString::TString(const TUTF32* const str, const usys_t maxlen)
+	TString::TString(const char32_t* const str, const usys_t maxlen)
 	{
-		const usys_t len = TUTF32::StringLength(str, maxlen);
+		const usys_t len = UTF32StringLength(str, maxlen);
 		chars.Append(str, len);
 	}
 
@@ -965,13 +838,13 @@ namespace el1::io::text::string
 		return tmp;
 	}
 
-	TString& TString::operator+=(const TUTF32 rhs)
+	TString& TString::operator+=(const char32_t rhs)
 	{
 		chars.Append(rhs);
 		return *this;
 	}
 
-	TString  TString::operator+ (const TUTF32 rhs) const
+	TString  TString::operator+ (const char32_t rhs) const
 	{
 		TString tmp = *this;
 		tmp += rhs;
@@ -998,7 +871,7 @@ namespace el1::io::text::string
 		return View().EndsWith(txt);
 	}
 
-	TString TString::ExtractSequence(const array_t<const TUTF32> charset, const ssys_t _start, usys_t max_length) const
+	TString TString::ExtractSequence(const array_t<const char32_t> charset, const ssys_t _start, usys_t max_length) const
 	{
 		TString seq;
 		const usys_t start = chars.AbsoluteIndex(_start, false);
@@ -1006,7 +879,7 @@ namespace el1::io::text::string
 
 		for(usys_t i = start; i < end; i++)
 		{
-			const TUTF32 chr = chars[i];
+			const char32_t chr = chars[i];
 			if(!charset.Contains(chr))
 				break;
 			seq += chr;
@@ -1050,17 +923,17 @@ namespace el1::io::text::string
 		return View().Find(needle, start, reverse);
 	}
 
-	usys_t TString::Find(const TUTF32 needle, const ssys_t start, const bool reverse) const
+	usys_t TString::Find(const char32_t needle, const ssys_t start, const bool reverse) const
 	{
 		return View().Find(needle, start, reverse);
 	}
 
-	usys_t TString::FindFirst(const array_t<const TUTF32>& charset, const ssys_t start, const bool reverse) const
+	usys_t TString::FindFirst(const array_t<const char32_t>& charset, const ssys_t start, const bool reverse) const
 	{
 		return View().FindFirst(charset, start, reverse);
 	}
 
-	TString& TString::Trim(const bool start, const bool end, const array_t<const TUTF32> trim_chars)
+	TString& TString::Trim(const bool start, const bool end, const array_t<const char32_t> trim_chars)
 	{
 		usys_t s = 0;
 		usys_t e = 0;
@@ -1119,7 +992,7 @@ namespace el1::io::text::string
 		return View().Contains(needle);
 	}
 
-	bool TString::Contains(const TUTF32 needle) const
+	bool TString::Contains(const char32_t needle) const
 	{
 		return View().Contains(needle);
 	}
@@ -1159,7 +1032,7 @@ namespace el1::io::text::string
 		return list;
 	}
 
-	TList<TString> TString::Split(const TUTF32 delimiter, const usys_t n_max, const bool skip_empty) const
+	TList<TString> TString::Split(const char32_t delimiter, const usys_t n_max, const bool skip_empty) const
 	{
 		usys_t start = 0;
 		TList<TString> list;
@@ -1181,7 +1054,7 @@ namespace el1::io::text::string
 		return list;
 	}
 
-	TList<TString> TString::Split(const array_t<const TUTF32> split_chars, const usys_t n_max, const bool skip_empty) const
+	TList<TString> TString::Split(const array_t<const char32_t> split_chars, const usys_t n_max, const bool skip_empty) const
 	{
 		usys_t start = 0;
 		TList<TString> list;
@@ -1231,14 +1104,14 @@ namespace el1::io::text::string
 	kv_pair_tt<TString,TString> TString::SplitKV(const TStringView delimiter) const
 	{
 		const usys_t idx = Find(delimiter);
-		EL_ERROR(idx == NEG1, TException, TString::Format("unable to find key/value delimiter %q", delimiter));
+		EL_ERROR(idx == NEG1, TException, TString::Format(U"unable to find key/value delimiter %q", delimiter));
 		return { SliceBE(0, idx), SliceBE(idx + delimiter.Length(), Length()) };
 	}
 
-	kv_pair_tt<TString,TString> TString::SplitKV(const TUTF32 delimiter) const
+	kv_pair_tt<TString,TString> TString::SplitKV(const char32_t delimiter) const
 	{
 		const usys_t idx = Find(delimiter);
-		EL_ERROR(idx == NEG1, TException, TString::Format("unable to find key/value delimiter %q", delimiter));
+		EL_ERROR(idx == NEG1, TException, TString::Format(U"unable to find key/value delimiter %q", delimiter));
 		return { SliceBE(0, idx), SliceBE(idx + 1, Length()) };
 	}
 
@@ -1252,9 +1125,9 @@ namespace el1::io::text::string
 		return TString(View().SliceBE(begin, end));
 	}
 
-	TString& TString::Pad(const TUTF32 pad_sign, const usys_t min_length, const EPlacement placement)
+	TString& TString::Pad(const char32_t pad_sign, const usys_t min_length, const EPlacement placement)
 	{
-		if(chars.Count() >= min_length || placement == EPlacement::NONE || pad_sign == TUTF32::TERMINATOR)
+		if(chars.Count() >= min_length || placement == EPlacement::NONE || pad_sign == U'\0')
 			return *this;
 
 		const usys_t index = 	placement == EPlacement::START ? 0 :
@@ -1265,7 +1138,7 @@ namespace el1::io::text::string
 		return *this;
 	}
 
-	TString TString::Padded(const TUTF32 pad_sign, const usys_t length)
+	TString TString::Padded(const char32_t pad_sign, const usys_t length)
 	{
 		TString str;
 		str.Pad(pad_sign, length, EPlacement::END);
@@ -1278,7 +1151,7 @@ namespace el1::io::text::string
 		return *this;
 	}
 
-	void TString::Escape(const array_t<const TUTF32> special_chars, const TUTF32 escape_sign)
+	void TString::Escape(const array_t<const char32_t> special_chars, const char32_t escape_sign)
 	{
 		for(usys_t i = 0; i < chars.Count(); i++)
 			if(special_chars.Contains(chars[i]) || chars[i] == escape_sign)
@@ -1288,34 +1161,34 @@ namespace el1::io::text::string
 			}
 	}
 
-	void TString::Unescape(const array_t<const TUTF32> special_chars, const TUTF32 escape_char)
+	void TString::Unescape(const array_t<const char32_t> special_chars, const char32_t escape_char)
 	{
 		for(usys_t i = 0; i < chars.Count(); i++)
 		{
 			if(chars[i] == escape_char)
 			{
-				EL_ERROR(i + 1 == chars.Count(), TException, TString::Format("found escape character at last position of input string %q", *this));
+				EL_ERROR(i + 1 == chars.Count(), TException, TString::Format(U"found escape character at last position of input string %q", *this));
 				chars.Remove(i, 1);
 			}
 			else
 			{
-				EL_ERROR(special_chars.Contains(chars[i]), TException, TString::Format("found unescaped special character %c at position %d in input string %q", chars[i], i, *this));
+				EL_ERROR(special_chars.Contains(chars[i]), TException, TString::Format(U"found unescaped special character %c at position %d in input string %q", chars[i], i, *this));
 			}
 		}
 	}
 
-	void TString::Quote(const TUTF32 quote_sign, const TUTF32 escape_sign)
+	void TString::Quote(const char32_t quote_sign, const char32_t escape_sign)
 	{
-		Escape(array_t<const TUTF32>(&quote_sign, 1), escape_sign);
+		Escape(array_t<const char32_t>(&quote_sign, 1), escape_sign);
 		chars.Insert(0, quote_sign);
 		chars.Append(quote_sign);
 	}
 
-	void TString::Unquote(const TUTF32 quote_sign, const TUTF32 escape_sign)
+	void TString::Unquote(const char32_t quote_sign, const char32_t escape_sign)
 	{
 		EL_ERROR(chars[0] != quote_sign || chars[-1] != quote_sign, TInvalidArgumentException, "this", "the input string does not start and end with a quoute character");
 		chars.Cut(1, 1);
-		Unescape(array_t<const TUTF32>(&quote_sign, 1), escape_sign);
+		Unescape(array_t<const char32_t>(&quote_sign, 1), escape_sign);
 	}
 
 	void TString::Truncate(const usys_t n_max_length)
@@ -1334,7 +1207,7 @@ namespace el1::io::text::string
 
 	void TString::Translate(const array_t<const symbol_map_t> map, const bool reverse)
 	{
-		chars.Apply([&](TUTF32& current_char) {
+		chars.Apply([&](char32_t& current_char) {
 			for(usys_t i = 0; i < map.Count(); i++)
 				if(map[i].arr[reverse ? 1 : 0] == current_char)
 				{
@@ -1344,10 +1217,10 @@ namespace el1::io::text::string
 		});
 	}
 
-	usys_t TString::ReplaceChars(array_t<const TUTF32> list, const TUTF32 replacement, const bool whitelist)
+	usys_t TString::ReplaceChars(array_t<const char32_t> list, const char32_t replacement, const bool whitelist)
 	{
 		usys_t n = 0;
-		for(TUTF32& chr : chars)
+		for(char32_t& chr : chars)
 			if(list.Contains(chr) != whitelist)
 			{
 				chr = replacement;
@@ -1391,15 +1264,7 @@ namespace el1::io::text::string
 		return p;
 	}
 
-	void TString::_Format(TString& out, const TStringView format, usys_t& pos)
-	{
-		const TFormatVariable var = TFormatVariable::Find(format, pos);
-		EL_ERROR(var.len != 0, TTooManyFormatVariablesException, format);
-		TString slice = format.SliceBE(pos, format.Length());
-		slice.Replace("%%", "%");
-		out += slice;
-		pos = format.Length();
-	}
+
 }
 
 namespace std

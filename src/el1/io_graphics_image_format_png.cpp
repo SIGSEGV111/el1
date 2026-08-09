@@ -606,7 +606,7 @@ namespace el1::io::graphics::image::format::png
 		const unsigned ncc = ComponentsPerPixel(ihdr.color_type);
 		const usys_t sz_scanline = 1 + (ihdr.width * ihdr.bit_depth * ncc  + 7) / 8;
 		const usys_t sz_data = sz_scanline * ihdr.height;
-		EL_ERROR(sz_data != data.Count(), TException, TString::Format("invalid scanline data size - expected %d bytes, but got %d bytes", sz_data, data.Count()));
+		EL_ERROR(sz_data != data.Count(), TException, TString::Format(U"invalid scanline data size - expected %d bytes, but got %d bytes", sz_data, data.Count()));
 
 		return TRasterImage({ihdr.width, ihdr.height}, DecodePixels(data, sz_scanline, ihdr.color_type, ihdr.bit_depth, plte.get(), ihdr.width, ihdr.height));
 	}

@@ -31,7 +31,7 @@ namespace el1::io::collection::map
 
 		io::text::string::TString Message() const final override
 		{
-			return TString::Format("the requested key %q was not found", strigify_t<TKey>::ToString(key, "<non-text value>"));
+			return TString::Format(U"the requested key %q was not found", strigify_t<TKey>::ToString(key, "<non-text value>"));
 		}
 
 		IException* Clone() const override { return new TKeyNotFoundException(*this); }

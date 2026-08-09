@@ -34,7 +34,7 @@ namespace el1::db::postgres
 
 	static void ValidateOutputSize(array_t<byte_t> pg_out, const usys_t required_size)
 	{
-		EL_ERROR(pg_out.Count() < required_size, TException, TString::Format("datatype codec output buffer is too small (required: %d bytes, available: %d bytes)", (u64_t)required_size, (u64_t)pg_out.Count()));
+		EL_ERROR(pg_out.Count() < required_size, TException, TString::Format(U"datatype codec output buffer is too small (required: %d bytes, available: %d bytes)", (u64_t)required_size, (u64_t)pg_out.Count()));
 	}
 
 	template<typename T>
@@ -151,7 +151,7 @@ namespace el1::db::postgres
 
 			void Deserialize(const array_t<const byte_t> pg_in, void* const cxx_out) const final override
 			{
-				EL_ERROR(pg_in.Count() != sizeof(T), TException, TString::Format("invalid PostgreSQL integer binary size (expected: %d bytes, received: %d bytes)", (u64_t)sizeof(T), (u64_t)pg_in.Count()));
+				EL_ERROR(pg_in.Count() != sizeof(T), TException, TString::Format(U"invalid PostgreSQL integer binary size (expected: %d bytes, received: %d bytes)", (u64_t)sizeof(T), (u64_t)pg_in.Count()));
 				using TUnsigned = std::make_unsigned_t<T>;
 				TUnsigned value;
 				memcpy(&value, pg_in.ItemPtr(0), sizeof(value));
@@ -207,7 +207,7 @@ namespace el1::db::postgres
 
 			void Deserialize(const array_t<const byte_t> pg_in, void* const cxx_out) const final override
 			{
-				EL_ERROR(pg_in.Count() != sizeof(T), TException, TString::Format("invalid PostgreSQL floating-point binary size (expected: %d bytes, received: %d bytes)", (u64_t)sizeof(T), (u64_t)pg_in.Count()));
+				EL_ERROR(pg_in.Count() != sizeof(T), TException, TString::Format(U"invalid PostgreSQL floating-point binary size (expected: %d bytes, received: %d bytes)", (u64_t)sizeof(T), (u64_t)pg_in.Count()));
 				T decoded;
 				if constexpr(sizeof(T) == 4)
 				{
@@ -361,7 +361,7 @@ namespace el1::db::postgres
 			usys_t Serialize(const void* const cxx_in, array_t<byte_t> pg_out) const final override
 			{
 				const io::path::TPath& value = *reinterpret_cast<const io::path::TPath*>(cxx_in);
-				EL_ERROR(value.Separator() != TUTF32('.'), TInvalidArgumentException, "cxx_in", "ltree paths must use '.' as their component separator");
+				EL_ERROR(value.Separator() != U'.', TInvalidArgumentException, "cxx_in", "ltree paths must use '.' as their component separator");
 
 				const TString text = value.ToString();
 				EL_ERROR(text.Length() > (std::numeric_limits<usys_t>::max() - 1U) / 4U, TException, "ltree value is too large to encode as UTF-8");
@@ -437,7 +437,7 @@ namespace el1::db::postgres
 	const IDatatypeCodec& TTypeMap::LookupByOid(const oid_t oid) const
 	{
 		const IDatatypeCodec* const* const codec = TBase::Get(oid);
-		EL_ERROR(codec == nullptr, TException, TString::Format("PostgreSQL datatype OID %d has no registered codec", oid));
+		EL_ERROR(codec == nullptr, TException, TString::Format(U"PostgreSQL datatype OID %d has no registered codec", oid));
 		return **codec;
 	}
 
@@ -447,7 +447,7 @@ namespace el1::db::postgres
 			if(*binding.codec->cxx_type_info == cxx_type_info)
 				return binding;
 
-		EL_THROW(TException, TString::Format("C++ datatype %q has no registered PostgreSQL codec", debug::Demangle(cxx_type_info.name())));
+		EL_THROW(TException, TString::Format(U"C++ datatype %q has no registered PostgreSQL codec", debug::Demangle(cxx_type_info.name())));
 	}
 
 
@@ -474,7 +474,7 @@ namespace el1::db::postgres
 			for(usys_t j = 0; j < i; j++)
 			{
 				const IDatatypeCodec* const previous = registry[j];
-				EL_ERROR(strcmp(codec->namespace_name, previous->namespace_name) == 0 && strcmp(codec->datatype_name, previous->datatype_name) == 0, TException, TString::Format("PostgreSQL datatype codec %s.%s is registered more than once", codec->namespace_name, codec->datatype_name));
+				EL_ERROR(strcmp(codec->namespace_name, previous->namespace_name) == 0 && strcmp(codec->datatype_name, previous->datatype_name) == 0, TException, TString::Format(U"PostgreSQL datatype codec %s.%s is registered more than once", codec->namespace_name, codec->datatype_name));
 			}
 		}
 
@@ -515,7 +515,7 @@ namespace el1::db::postgres
 				const bool namespace_matches = strcmp(codec->namespace_name, "*") == 0 || strcmp(codec->namespace_name, namespace_name) == 0;
 				if(namespace_matches && strcmp(codec->datatype_name, datatype_name) == 0)
 				{
-					EL_ERROR(resolved_oids[i] != 0, TException, TString::Format("PostgreSQL datatype codec %s.%s matches more than one server datatype", codec->namespace_name, codec->datatype_name));
+					EL_ERROR(resolved_oids[i] != 0, TException, TString::Format(U"PostgreSQL datatype codec %s.%s matches more than one server datatype", codec->namespace_name, codec->datatype_name));
 					resolved_oids[i] = oid;
 					break;
 				}
@@ -527,7 +527,7 @@ namespace el1::db::postgres
 		{
 			const IDatatypeCodec* const codec = registry[i];
 			const oid_t oid = resolved_oids[i];
-			EL_ERROR(oid == 0 && codec->required, TException, TString::Format("PostgreSQL datatype %s.%s is not available on the server", codec->namespace_name, codec->datatype_name));
+			EL_ERROR(oid == 0 && codec->required, TException, TString::Format(U"PostgreSQL datatype %s.%s is not available on the server", codec->namespace_name, codec->datatype_name));
 			if(oid == 0)
 				continue;
 
@@ -579,11 +579,11 @@ namespace el1::db::postgres
 		return new TPostgresException(*this);
 	}
 
-	TPostgresException::TPostgresException(void* pg_connection, const TString& description) : message(TString::Format("%s: %s", description, PQerrorMessage((PGconn*)pg_connection)))
+	TPostgresException::TPostgresException(void* pg_connection, const TString& description) : message(TString::Format(U"%s: %s", description, PQerrorMessage((PGconn*)pg_connection)))
 	{
 	}
 
-	TPostgresException::TPostgresException(PGresult* pg_result, const TString& description) : message(TString::Format("%s: %s", description, PQresultErrorMessage(pg_result)))
+	TPostgresException::TPostgresException(PGresult* pg_result, const TString& description) : message(TString::Format(U"%s: %s", description, PQresultErrorMessage(pg_result)))
 	{
 	}
 
@@ -684,8 +684,8 @@ namespace el1::db::postgres
 			d.name = PQfname(current_result.get(), i);
 			const oid_t oid = (oid_t)PQftype(current_result.get(), i);
 			const IDatatypeCodec& codec = type_map.LookupByOid(oid);
-			EL_ERROR(codec.cxx_size > sizeof(d.buffer), TException, TString::Format("C++ datatype %q for PostgreSQL datatype %s.%s requires %d bytes, but result fields only provide %d bytes", debug::Demangle(codec.cxx_type_info->name()), codec.namespace_name, codec.datatype_name, (u64_t)codec.cxx_size, (u64_t)sizeof(d.buffer)));
-			EL_ERROR(codec.cxx_alignment > ALIGN_FIELD_BUFFER, TException, TString::Format("C++ datatype %q for PostgreSQL datatype %s.%s requires alignment %d, but result fields only provide alignment %d", debug::Demangle(codec.cxx_type_info->name()), codec.namespace_name, codec.datatype_name, (u64_t)codec.cxx_alignment, (u64_t)ALIGN_FIELD_BUFFER));
+			EL_ERROR(codec.cxx_size > sizeof(d.buffer), TException, TString::Format(U"C++ datatype %q for PostgreSQL datatype %s.%s requires %d bytes, but result fields only provide %d bytes", debug::Demangle(codec.cxx_type_info->name()), codec.namespace_name, codec.datatype_name, (u64_t)codec.cxx_size, (u64_t)sizeof(d.buffer)));
+			EL_ERROR(codec.cxx_alignment > ALIGN_FIELD_BUFFER, TException, TString::Format(U"C++ datatype %q for PostgreSQL datatype %s.%s requires alignment %d, but result fields only provide alignment %d", debug::Demangle(codec.cxx_type_info->name()), codec.namespace_name, codec.datatype_name, (u64_t)codec.cxx_alignment, (u64_t)ALIGN_FIELD_BUFFER));
 			d.codec = &codec;
 			d.type = codec.cxx_type_info;
 			d.is_null = true;
@@ -816,7 +816,7 @@ namespace el1::db::postgres
 	{
 		static std::atomic_uint i = 0;
 		i++;
-		return TString::Format("st_%d", (unsigned)i);
+		return TString::Format(U"st_%d", (unsigned)i);
 	}
 
 	TString TStatement::SQL() const
@@ -832,7 +832,7 @@ namespace el1::db::postgres
 		{
 			exec += "($1";
 			for(usys_t i = 1; i < args.Count(); i++)
-				exec += TString::Format(",$%d", i);
+				exec += TString::Format(U",$%d", i);
 			exec += ")";
 		}
 		return conn->Execute(exec, args);
@@ -840,12 +840,12 @@ namespace el1::db::postgres
 
 	TStatement::TStatement(TPostgresConnection* const conn, TString sql) : conn(conn), name(GenerateUniqueStatementName()), sql(sql)
 	{
-		conn->Execute(TString::Format("PREPARE %s AS %s", name, sql))->DiscardAllRows();
+		conn->Execute(TString::Format(U"PREPARE %s AS %s", name, sql))->DiscardAllRows();
 	}
 
 	TStatement::~TStatement()
 	{
-		conn->Execute(TString::Format("DEALLOCATE %s", name))->DiscardAllRows();
+		conn->Execute(TString::Format(U"DEALLOCATE %s", name))->DiscardAllRows();
 	}
 
 	/**********************************************************************************/
@@ -1147,12 +1147,12 @@ namespace el1::db::postgres
 
 	void TPostgresConnection::StartNotifyChannel(const TString& channel_name)
 	{
-		Execute(TString::Format("LISTEN %s", QuoteIdentifier(channel_name)))->DiscardAllRows();
+		Execute(TString::Format(U"LISTEN %s", QuoteIdentifier(channel_name)))->DiscardAllRows();
 	}
 
 	void TPostgresConnection::ShutdownNotifyChannel(const TString& channel_name)
 	{
-		Execute(TString::Format("UNLISTEN %s", QuoteIdentifier(channel_name)))->DiscardAllRows();
+		Execute(TString::Format(U"UNLISTEN %s", QuoteIdentifier(channel_name)))->DiscardAllRows();
 		notify_channels.Remove(channel_name);
 	}
 

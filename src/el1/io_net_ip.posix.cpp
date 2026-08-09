@@ -201,18 +201,18 @@ namespace el1::io::net::ip
 		if((version == EIP::ANY && str.Contains('.')) || version == EIP::V4)
 		{
 			ipaddr_t ip(EIP::V4);
-			EL_ERROR(inet_pton(AF_INET, cstr.get(), (char*)&ip.IPv4()) <= 0, TException, TString::Format("%q cannot be parsed as IPv4 address", str));
+			EL_ERROR(inet_pton(AF_INET, cstr.get(), (char*)&ip.IPv4()) <= 0, TException, TString::Format(U"%q cannot be parsed as IPv4 address", str));
 			*this = ipaddr_t(ip);
 		}
 		else if((version == EIP::ANY && str.Contains(':')) || version == EIP::V6)
 		{
 			ipaddr_t ip(EIP::V6);
-			EL_ERROR(inet_pton(AF_INET6, cstr.get(), (char*)&ip.octet) <= 0, TException, TString::Format("%q cannot be parsed as IPv6 address", str));
+			EL_ERROR(inet_pton(AF_INET6, cstr.get(), (char*)&ip.octet) <= 0, TException, TString::Format(U"%q cannot be parsed as IPv6 address", str));
 			*this = ipaddr_t(ip);
 		}
 		else
 		{
-			EL_THROW(TException, TString::Format("%q is not a valid IPv4 or IPv6 address", str));
+			EL_THROW(TException, TString::Format(U"%q is not a valid IPv4 or IPv6 address", str));
 		}
 	}
 
@@ -541,7 +541,7 @@ namespace el1::io::net::ip
 				return false;
 			}
 
-			EL_ERROR(r != (ssys_t)msg_buffer.Count(), TException, TString::Format("message truncated to %d bytes (out of %d bytes)", r, msg_buffer.Count()));
+			EL_ERROR(r != (ssys_t)msg_buffer.Count(), TException, TString::Format(U"message truncated to %d bytes (out of %d bytes)", r, msg_buffer.Count()));
 			return true;
 		}
 		else
@@ -554,7 +554,7 @@ namespace el1::io::net::ip
 				return false;
 			}
 
-			EL_ERROR(r != (ssys_t)msg_buffer.Count(), TException, TString::Format("message truncated to %d bytes (out of %d bytes)", r, msg_buffer.Count()));
+			EL_ERROR(r != (ssys_t)msg_buffer.Count(), TException, TString::Format(U"message truncated to %d bytes (out of %d bytes)", r, msg_buffer.Count()));
 			return true;
 		}
 	}

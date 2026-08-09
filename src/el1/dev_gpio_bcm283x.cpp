@@ -260,7 +260,7 @@ namespace el1::dev::gpio::bcm283x
 	TPin::TPin(TBCM283X* const controller, const u8_t index) : controller(controller), index(index), pull(EPull::UP)
 	{
 		EL_ERROR(index >= NUM_GPIO, TInvalidArgumentException, "index", "index must be < NUM_GPIO");
-		EL_ERROR( (controller->claimed_pins & (1<<index)) != 0, TException, TString::Format("GPIO pin #%d is already in use", index));
+		EL_ERROR( (controller->claimed_pins & (1<<index)) != 0, TException, TString::Format(U"GPIO pin #%d is already in use", index));
 		controller->claimed_pins |= (1<<index);
 		Mode(EMode::INPUT);
 		Pull(EPull::DISABLED);

@@ -17,15 +17,15 @@ namespace el1::io::path
 		protected:
 			TList<TString> components;
 			mutable std::unique_ptr<char[]> cached_cstr;
-			TUTF32 separator;
+			char32_t separator;
 			bool allow_absolute;
 
 			void Validate();
 			void ValidateCompatibility(const TPath& other) const;
 
-			TPath(TUTF32 separator, bool allow_absolute);
-			TPath(const TString& str, TUTF32 separator, bool allow_absolute);
-			TPath(std::initializer_list<TString> list, TUTF32 separator, bool allow_absolute);
+			TPath(char32_t separator, bool allow_absolute);
+			TPath(const TString& str, char32_t separator, bool allow_absolute);
+			TPath(std::initializer_list<TString> list, char32_t separator, bool allow_absolute);
 
 		public:
 			bool IsEmpty() const EL_GETTER { return components.Count() == 0; }
@@ -50,17 +50,17 @@ namespace el1::io::path
 			bool IsAbsolute() const EL_GETTER;
 			bool IsRelative() const EL_GETTER { return !IsAbsolute(); }
 			// The delimiter used to split and render path components.
-			TUTF32 Separator() const EL_GETTER { return separator; }
+			char32_t Separator() const EL_GETTER { return separator; }
 
 			operator TString() const EL_GETTER;
 			operator const char*() const EL_GETTER;
 			TString ToString() const EL_GETTER { return this->operator TString(); }
 
-			TPath(TUTF32 separator = '/');
-			TPath(const TString& str, TUTF32 separator);
-			TPath(const char* str, TUTF32 separator);
-			TPath(const wchar_t* str, TUTF32 separator);
-			TPath(std::initializer_list<TString> list, TUTF32 separator);
+			TPath(char32_t separator = '/');
+			TPath(const TString& str, char32_t separator);
+			TPath(const char* str, char32_t separator);
+			TPath(const wchar_t* str, char32_t separator);
+			TPath(std::initializer_list<TString> list, char32_t separator);
 
 			TPath(TPath&&) = default;
 			TPath(const TPath& other);

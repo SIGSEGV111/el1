@@ -34,7 +34,7 @@ namespace el1::io::file
 
 	static TPath GetHandlePath(const THandle& handle)
 	{
-		const TPath target = ReadLink(SYSFS_FD_PATH + TString::Format("%d", (int)handle));
+		const TPath target = ReadLink(SYSFS_FD_PATH + TString::Format(U"%d", (int)handle));
 
 		struct stat st1 = {};
 		struct stat st2 = {};
@@ -499,7 +499,7 @@ namespace el1::io::file
 		}
 		catch(const error::IException& e)
 		{
-			EL_FORWARD(e, TException, TString::Format("error while opening file %q", abspath.operator TString()));
+			EL_FORWARD(e, TException, TString::Format(U"error while opening file %q", abspath.operator TString()));
 		}
 	}
 

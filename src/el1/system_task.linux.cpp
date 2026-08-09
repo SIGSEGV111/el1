@@ -154,7 +154,7 @@ namespace el1::system::task
 	{
 		using namespace io::text::encoding::utf8;
 		key += ':';
-		return EL_ANNOTATE_ERROR(TFile(TString::Format("/proc/%d/status", thread_pid)), TException, "unable to read status file from procfs").Pipe()
+		return EL_ANNOTATE_ERROR(TFile(TString::Format(U"/proc/%d/status", thread_pid)), TException, "unable to read status file from procfs").Pipe()
 			.Transform(TUTF8Decoder())
 			.Transform(TLineReader())
 			.Filter([&](const TString& line){ return line.BeginsWith(key); })
@@ -242,7 +242,7 @@ namespace el1::system::task
 			return ETaskState::NOT_CREATED;
 
 		const TString status = GetStatusLine(thread_pid, "State");
-		switch(status[0].code)
+		switch(status[0])
 		{
 			case 'R': return ETaskState::RUNNING;
 			case 'S': return ETaskState::BLOCKED;
@@ -452,7 +452,7 @@ namespace el1::system::task
 
 		TSortedMap<TString, TString> map;
 
-		TFile status_file(TString::Format("/proc/%d/status", pid));
+		TFile status_file(TString::Format(U"/proc/%d/status", pid));
 		status_file.Pipe().Transform(TCharDecoder()).Transform(TLineReader()).ForEach([&](const TString & line){
 			auto kv = line.SplitKV(':');
 			kv.key.Trim();
@@ -468,8 +468,8 @@ namespace el1::system::task
 		if(pid == -1)
 			return ETaskState::NOT_CREATED;
 
-		const TUTF32 chr = Status()["State"][0];
-		switch(chr.code)
+		const char32_t chr = Status()["State"][0];
+		switch(chr)
 		{
 			case 'S': return ETaskState::RUNNING;
 			case 'Z': return ETaskState::ZOMBIE;

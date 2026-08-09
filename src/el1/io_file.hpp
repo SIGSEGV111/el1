@@ -162,7 +162,7 @@ namespace el1::io::file
 			TPath& operator=(const TPath&) = default;
 
 			static TPath CurrentWorkingDirectory();
-			static const TUTF32 SEPERATOR;
+			static const char32_t SEPERATOR;
 			static const char* const PARENT_DIR;
 			static const char* const CURRENT_DIR;
 	};

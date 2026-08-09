@@ -13,7 +13,7 @@ namespace el1::error
 
 	TString TSyscallException::Message() const
 	{
-		return TString::Format("syscall failed with error-code %d (%s)", error_code, strerror(error_code));
+		return TString::Format(U"syscall failed with error-code %d (%s)", error_code, strerror(error_code));
 	}
 
 	IException* TSyscallException::Clone() const
@@ -27,7 +27,7 @@ namespace el1::error
 
 	TString TPthreadException::Message() const
 	{
-		return TString::Format("pthread function call failed with error-code %d (%s)", error_code, strerror(error_code));
+		return TString::Format(U"pthread function call failed with error-code %d (%s)", error_code, strerror(error_code));
 	}
 
 	IException* TPthreadException::Clone() const

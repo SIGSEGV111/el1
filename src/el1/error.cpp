@@ -59,7 +59,7 @@ namespace el1::error
 			{
 				if(str.Length() > 0)
 					str.chars.Append('\n');
-				str += TString::Format("%s at %q:%d", current->Message(), current->File().operator TString(), current->line);
+				str += TString::Format(U"%s at %q:%d", current->Message(), current->File().operator TString(), current->line);
 			}
 
 			msg_cstr = std::shared_ptr<char[]>(str.MakeCStr().release());
@@ -79,7 +79,7 @@ namespace el1::error
 
 	TString TOutOfMemoryException::Message() const
 	{
-		return TString::Format("out of memory (requested %d bytes of memory)", n_bytes_requested);
+		return TString::Format(U"out of memory (requested %d bytes of memory)", n_bytes_requested);
 	}
 
 	IException* TOutOfMemoryException::Clone() const
@@ -89,7 +89,7 @@ namespace el1::error
 
 	TString TIndexOutOfBoundsException::Message() const
 	{
-		return TString::Format("index out of bounds (low-bound: %d, high_bound: %d, requested index: %d)", low_bound, high_bound, request_index);
+		return TString::Format(U"index out of bounds (low-bound: %d, high_bound: %d, requested index: %d)", low_bound, high_bound, request_index);
 	}
 
 	IException* TIndexOutOfBoundsException::Clone() const
@@ -99,7 +99,7 @@ namespace el1::error
 
 	TString TNotImplementedException::Message() const
 	{
-		return TString::Format("function %q not implemented yet", function);
+		return TString::Format(U"function %q not implemented yet", function);
 	}
 
 	IException* TNotImplementedException::Clone() const
@@ -119,7 +119,7 @@ namespace el1::error
 
 	TString TInvalidArgumentException::Message() const
 	{
-		return TString::Format("invalid argument value provided in %q: %s", argument_name, description);
+		return TString::Format(U"invalid argument value provided in %q: %s", argument_name, description);
 	}
 
 	IException* TInvalidArgumentException::Clone() const

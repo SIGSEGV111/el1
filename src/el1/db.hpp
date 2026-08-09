@@ -120,7 +120,7 @@ namespace el1::db
 	template<typename T, std::size_t I>
 	const T* IResultStream::_CheckAndCastCellValue(const void* const value) const
 	{
-		EL_ERROR( !(*Column(I).type == typeid(T) || typeid(T) == typeid(void)), TException, TString::Format("wrong datatype for result field (fetched: %s, expected: %s)", debug::Demangle(Column(I).type->name()), debug::Demangle(typeid(T).name())));
+		EL_ERROR( !(*Column(I).type == typeid(T) || typeid(T) == typeid(void)), TException, TString::Format(U"wrong datatype for result field (fetched: %s, expected: %s)", debug::Demangle(Column(I).type->name()), debug::Demangle(typeid(T).name())));
 		return reinterpret_cast<const T*>(value);
 	}
 
@@ -143,7 +143,7 @@ namespace el1::db
 		}
 		catch(const error::IException& e)
 		{
-			EL_FORWARD(e, TException, TString::Format("while processing result of query %q", SQL()));
+			EL_FORWARD(e, TException, TString::Format(U"while processing result of query %q", SQL()));
 		}
 	}
 

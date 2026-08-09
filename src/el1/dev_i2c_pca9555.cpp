@@ -144,7 +144,7 @@ namespace el1::dev::i2c::pca9555
 
 	void TPin::Trigger(const ETrigger new_trigger)
 	{
-		EL_ERROR(new_trigger != ETrigger::DISABLED && this->Mode() != EMode::INPUT, TException, TString::Format("pin #%d is not in input mode and thus cannot be set as trigger", this->index));
+		EL_ERROR(new_trigger != ETrigger::DISABLED && this->Mode() != EMode::INPUT, TException, TString::Format(U"pin #%d is not in input mode and thus cannot be set as trigger", this->index));
 		this->trigger = new_trigger;
 	}
 
@@ -177,7 +177,7 @@ namespace el1::dev::i2c::pca9555
 		index(index), auto_commit(true), trigger(ETrigger::DISABLED), state_ref(0)
 	{
 		const u16_t mask = MakeMask(1, this->index);
-		EL_ERROR((this->controller->claimed & mask) != 0, TException, TString::Format("pin #%d already claimed", this->index));
+		EL_ERROR((this->controller->claimed & mask) != 0, TException, TString::Format(U"pin #%d already claimed", this->index));
 		this->controller->claimed |= mask;
 	}
 

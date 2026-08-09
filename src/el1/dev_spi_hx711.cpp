@@ -169,7 +169,7 @@ namespace el1::dev::spi::hx711
 		config = 0;
 
 		const u64_t hz_clock_spi_eff = this->device->Clock(hz_clock);
-		EL_ERROR(hz_clock_spi_eff < HZ_CLOCK_SPI_MIN || hz_clock_spi_eff > HZ_CLOCK_SPI_MAX, TException, TString::Format("SPI bus was unable to provide the requested clock frequency of %d Hz. Instead it configured the clock for %d Hz, which is out of the valid range for the HX711.", hz_clock, hz_clock_spi_eff));
+		EL_ERROR(hz_clock_spi_eff < HZ_CLOCK_SPI_MIN || hz_clock_spi_eff > HZ_CLOCK_SPI_MAX, TException, TString::Format(U"SPI bus was unable to provide the requested clock frequency of %d Hz. Instead it configured the clock for %d Hz, which is out of the valid range for the HX711.", hz_clock, hz_clock_spi_eff));
 
 		if(DEBUG)
 		{

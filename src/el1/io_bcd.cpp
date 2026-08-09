@@ -1496,7 +1496,7 @@ namespace el1::io::bcd
 	TBCD::operator s64_t() const { return ToSignedInt(); }
 	TBCD::operator u64_t() const { return ToUnsignedInt(); }
 
-	TBCD TBCD::FromString(const text::string::TStringView str, const text::string::TStringView symbols, const text::encoding::TUTF32 decimal_seperator, const text::encoding::TUTF32 negative_symbol, const text::encoding::TUTF32 positive_symbol, const bool default_negative)
+	TBCD TBCD::FromString(const text::string::TStringView str, const text::string::TStringView symbols, const char32_t decimal_seperator, const char32_t negative_symbol, const char32_t positive_symbol, const bool default_negative)
 	{
 		if(str.Length() == 0)
 			return INVALID;

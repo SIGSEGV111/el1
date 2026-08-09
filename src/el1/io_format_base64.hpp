@@ -18,36 +18,36 @@ namespace el1::io::format::base64
 			byte_t index : 4;
 
 		public:
-			using TIn = TUTF32;
+			using TIn = char32_t;
 			using TOut = byte_t;
 
 			template<typename TSourceStream>
 			static byte_t ReadNextChar(TSourceStream* const source)
 			{
-				const TUTF32* const chr = source->NextItem();
+				const char32_t* const chr = source->NextItem();
 
 				if(chr == nullptr)
 					return 65;
 
-				if(chr->code >= 'A' && chr->code <= 'Z')
-					return chr->code - 'A' +  0;
+				if(*chr >= 'A' && *chr <= 'Z')
+					return *chr - 'A' +  0;
 
-				if(chr->code >= 'a' && chr->code <= 'z')
-					return chr->code - 'a' + 26;
+				if(*chr >= 'a' && *chr <= 'z')
+					return *chr - 'a' + 26;
 
-				if(chr->code >= '0' && chr->code <= '9')
-					return chr->code - '0' + 52;
+				if(*chr >= '0' && *chr <= '9')
+					return *chr - '0' + 52;
 
-				if(chr->code == '+')
+				if(*chr == '+')
 					return 62;
 
-				if(chr->code == '/')
+				if(*chr == '/')
 					return 63;
 
-				if(chr->code == '=')
+				if(*chr == '=')
 					return 64;
 
-				EL_THROW(TException, TString::Format("invalid base64 input %q", *chr));
+				EL_THROW(TException, TString::Format(U"invalid base64 input %q", *chr));
 			}
 
 			// arr_input must contain 4 bytes with values between 0-65, the value 64 is used to indicate padding, 65 indicates EOF
@@ -109,7 +109,7 @@ namespace el1::io::format::base64
 	};
 
 	// has actually 65 symbols - index 64 is translated to '='
-	extern const array_t<const TUTF32> BASE64_SYMBOLS;
+	extern const array_t<const char32_t> BASE64_SYMBOLS;
 
 	class TBase64Encoder
 	{
@@ -117,11 +117,11 @@ namespace el1::io::format::base64
 			byte_t index : 4;
 			byte_t n_remaining : 4;
 			byte_t buffer[3];
-			TUTF32 chr;
+			char32_t chr;
 
 		public:
 			using TIn = byte_t;
-			using TOut = TUTF32;
+			using TOut = char32_t;
 
 			template<typename TSourceStream>
 			static unsigned Read(TSourceStream* const source, byte_t* buffer)
@@ -169,7 +169,7 @@ namespace el1::io::format::base64
 			}
 
 			template<typename TSourceStream>
-			TUTF32* NextItem(TSourceStream* const source)
+			char32_t* NextItem(TSourceStream* const source)
 			{
 				if(n_remaining == 0)
 				{

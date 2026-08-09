@@ -46,20 +46,20 @@ namespace el1::io::text::encoding::utf8
 		EL_THROW(TLogicException);
 	}
 
-	u8_t GetEncodedSequenceLength(const TUTF32 chr)
+	u8_t GetEncodedSequenceLength(const char32_t chr)
 	{
-		if(chr.code <= 127)
+		if(chr <= 127)
 			return 1;
 
-		if(chr.code < 2048)
+		if(chr < 2048)
 			return 2;
 
-		if(chr.code < 65536)
+		if(chr < 65536)
 			return 3;
 
 		// actually UTF32 defines 1114111 (0x10FFFF) as the last valid code point, but it is *NOT* our duty to validate that here
 		// garbage in => garbage out
-		if(chr.code < 4194304)
+		if(chr < 4194304)
 			return 4;
 
 		EL_THROW(TInvalidUtf8SequenceException, 0, EDirection::ENCODING, 0, 0, ESequenceType::NONE, nullptr);
@@ -83,7 +83,7 @@ namespace el1::io::text::encoding::utf8
 		for(u8_t i = 0; i < n_bytes_buffer; i++)
 		{
 			const byte_t& byte = buffer[i];
-			msg += TString::Format(" %02x (%s)", byte, SequenceTypeMnemonic(IdentifyByteType(byte)));
+			msg += TString::Format(U" %02x (%s)", byte, SequenceTypeMnemonic(IdentifyByteType(byte)));
 		}
 		msg.Trim();
 		return msg;
@@ -91,7 +91,7 @@ namespace el1::io::text::encoding::utf8
 
 	TString TInvalidUtf8SequenceException::Message() const
 	{
-		return TString::Format("an invalid UTF8 byte-sequence was encountered at IO-index %d; bytes in buffer: %s", index, DumpBuffer());
+		return TString::Format(U"an invalid UTF8 byte-sequence was encountered at IO-index %d; bytes in buffer: %s", index, DumpBuffer());
 	}
 
 	error::IException* TInvalidUtf8SequenceException::Clone() const

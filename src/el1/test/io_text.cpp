@@ -88,8 +88,8 @@ namespace
 
 	// TEST(io_text, TTextWriter_basics)
 	// {
-	// 	TList<TUTF32> list;
-	// 	TListSink<TUTF32> sink(&list);
+	// 	TList<char32_t> list;
+	// 	TListSink<char32_t> sink(&list);
 	// 	TTextWriter::std.Format(sink, L"hello world %b %o %d %x %p %f %s %q", 112, 112, 112, 112, &list, 112.27, L"foobar", L"foobar");
 	// }
 }

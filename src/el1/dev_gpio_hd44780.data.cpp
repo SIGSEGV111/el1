@@ -4,7 +4,7 @@ namespace el1::dev::gpio::hd44780
 {
 	struct char_map_t
 	{
-		TUTF32 chr;
+		char32_t chr;
 		u8_t dram;
 	};
 
@@ -224,27 +224,27 @@ namespace el1::dev::gpio::hd44780
 
 	static const unsigned N_CHAR_MAP = sizeof(CHAR_MAP) / sizeof(CHAR_MAP[0]);
 
-	u8_t THD44780::TranslateCharToDram(const TUTF32 chr)
+	u8_t THD44780::TranslateCharToDram(const char32_t chr)
 	{
 		for(unsigned i = 0; i < N_CHAR_MAP; i++)
 			if(CHAR_MAP[i].chr == chr)
 				return CHAR_MAP[i].dram;
 
-		if(chr.code <= 127)
-			return (u8_t)chr.code;
+		if(chr <= 127)
+			return (u8_t)chr;
 
-		EL_THROW(TException, TString::Format("character '%c' (UTF+%x) is not included in the LCDs fontset", chr, chr.code));
+		EL_THROW(TException, TString::Format(U"character '%c' (UTF+%x) is not included in the LCDs fontset", chr, chr));
 	}
 
-	TUTF32 THD44780::TranslateDramToChar(const u8_t dram)
+	char32_t THD44780::TranslateDramToChar(const u8_t dram)
 	{
 		for(unsigned i = 0; i < N_CHAR_MAP; i++)
 			if(CHAR_MAP[i].dram == dram)
 				return CHAR_MAP[i].chr;
 
 		if(dram <= 127)
-			return TUTF32((u32_t)dram);
+			return char32_t((u32_t)dram);
 
-		EL_THROW(TException, TString::Format("dram value %xh is not mapped to any unicode character", dram));
+		EL_THROW(TException, TString::Format(U"dram value %xh is not mapped to any unicode character", dram));
 	}
 }

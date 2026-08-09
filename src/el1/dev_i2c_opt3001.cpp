@@ -68,7 +68,7 @@ namespace el1::dev::i2c::opt3001
 		}
 		else
 		{
-			EL_ERROR(this->config_cache.reg != 0xC810, TException, TString::Format("failed to reset OPT3001 device at address 0x%x", this->device->Address()));
+			EL_ERROR(this->config_cache.reg != 0xC810, TException, TString::Format(U"failed to reset OPT3001 device at address 0x%x", this->device->Address()));
 		}
 
 		this->irq->AutoCommit(true);

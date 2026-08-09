@@ -14,23 +14,23 @@ namespace el1::io::format::json
 		switch(reason)
 		{
 			case EReason::UNEXPECTED_EOF:
-				return TString::Format("unexpected EOF in line %d", line);
+				return TString::Format(U"unexpected EOF in line %d", line);
 				break;
 
 			case EReason::SYNTAX_ERROR:
-				return TString::Format("syntax error in line %d ('%c')", line, chr);
+				return TString::Format(U"syntax error in line %d ('%c')", line, chr);
 				break;
 
 			case EReason::NUMBER_TOO_BIG:
-				return TString::Format("number too big in line %d ('%c')", line, chr);
+				return TString::Format(U"number too big in line %d ('%c')", line, chr);
 				break;
 
 			case EReason::UNESCAPED_CTRL:
-				return TString::Format("unescaped control character in string encountered in line %d (0x%02x)", line, chr);
+				return TString::Format(U"unescaped control character in string encountered in line %d (0x%02x)", line, chr);
 				break;
 
 			case EReason::INVALID_ESCAPE:
-				return TString::Format("incorrect escape of character %q in line %d", chr, line);
+				return TString::Format(U"incorrect escape of character %q in line %d", chr, line);
 				break;
 		}
 
@@ -175,7 +175,7 @@ namespace el1::io::format::json
 
 	bool& TJsonValue::Boolean()
 	{
-		EL_ERROR(Type() != EType::BOOLEAN, TException, TString::Format("requested boolean value, but contains %s", JsonTypeToString(Type())));
+		EL_ERROR(Type() != EType::BOOLEAN, TException, TString::Format(U"requested boolean value, but contains %s", JsonTypeToString(Type())));
 		return boolean;
 	}
 
@@ -193,7 +193,7 @@ namespace el1::io::format::json
 
 	double& TJsonValue::Number()
 	{
-		EL_ERROR(Type() != EType::NUMBER, TException, TString::Format("requested number value, but contains %s", JsonTypeToString(Type())));
+		EL_ERROR(Type() != EType::NUMBER, TException, TString::Format(U"requested number value, but contains %s", JsonTypeToString(Type())));
 		return *reinterpret_cast<double*>(__placeholder);
 	}
 
@@ -211,7 +211,7 @@ namespace el1::io::format::json
 
 	TString& TJsonValue::String()
 	{
-		EL_ERROR(Type() != EType::STRING, TException, TString::Format("requested string value, but contains %s", JsonTypeToString(Type())));
+		EL_ERROR(Type() != EType::STRING, TException, TString::Format(U"requested string value, but contains %s", JsonTypeToString(Type())));
 		return *reinterpret_cast<TString*>(__placeholder);
 	}
 
@@ -229,7 +229,7 @@ namespace el1::io::format::json
 
 	TJsonArray& TJsonValue::Array()
 	{
-		EL_ERROR(Type() != EType::ARRAY, TException, TString::Format("requested array value, but contains %s", JsonTypeToString(Type())));
+		EL_ERROR(Type() != EType::ARRAY, TException, TString::Format(U"requested array value, but contains %s", JsonTypeToString(Type())));
 		return *reinterpret_cast<TJsonArray*>(__placeholder);
 	}
 
@@ -247,7 +247,7 @@ namespace el1::io::format::json
 
 	TJsonMap& TJsonValue::Map()
 	{
-		EL_ERROR(Type() != EType::MAP, TException, TString::Format("requested map value, but contains %s", JsonTypeToString(Type())));
+		EL_ERROR(Type() != EType::MAP, TException, TString::Format(U"requested map value, but contains %s", JsonTypeToString(Type())));
 		return *reinterpret_cast<TJsonMap*>(__placeholder);
 	}
 
@@ -428,7 +428,7 @@ namespace el1::io::format::json
 	TString TJsonValue::ToString() const
 	{
 		TString str;
-		TListSink<TUTF32> sink(&str.chars);
+		TListSink<char32_t> sink(&str.chars);
 		this->ToStream(sink);
 		return str;
 	}
@@ -444,10 +444,10 @@ namespace el1::io::format::json
 
 		for(usys_t i = 1; i < input.chars.Count() - 1; i++)
 		{
-			if(input.chars[i].code == '\\')
+			if(input.chars[i] == '\\')
 			{
 				i++;
-				switch(input.chars[i].code)
+				switch(input.chars[i])
 				{
 					case 'b':
 						output.chars.Append('\b');
@@ -477,7 +477,7 @@ namespace el1::io::format::json
 					}
 
 					default:
-						EL_THROW(TException, TString::Format("invalid escape of character %q encountered in input", input.chars[i]));
+						EL_THROW(TException, TString::Format(U"invalid escape of character %q encountered in input", input.chars[i]));
 				}
 			}
 			else
@@ -495,24 +495,24 @@ namespace el1::io::format::json
 
 		output.chars.Append('\"');
 		for(usys_t i = 0; i < input.chars.Count(); i++)
-			if(input.chars[i].code == '\"' || input.chars[i].code == '\\')
+			if(input.chars[i] == '\"' || input.chars[i] == '\\')
 			{
 				output.chars.Append('\\');
 				output.chars.Append(input.chars[i]);
 			}
-			else if(input.chars[i].code == '\n')
+			else if(input.chars[i] == '\n')
 			{
 				output.chars.Append('\\');
 				output.chars.Append('n');
 			}
-			else if(input.chars[i].code == '\t')
+			else if(input.chars[i] == '\t')
 			{
 				output.chars.Append('\\');
 				output.chars.Append('t');
 			}
-			else if(input.chars[i].code < 32)
+			else if(input.chars[i] < 32)
 			{
-				output += TString::Format("\\u%04x", input.chars[i].code);
+				output += TString::Format(U"\\u%04x", input.chars[i]);
 			}
 			else
 			{
@@ -525,7 +525,7 @@ namespace el1::io::format::json
 
 	// TODO: this function is ugly - implement ITextWriter and use this instead
 	// also this function should produce a stream NOT write to one
-	void TJsonValue::ToStream(stream::ISink<TUTF32>& sink) const
+	void TJsonValue::ToStream(stream::ISink<char32_t>& sink) const
 	{
 		TString str;
 		bool first = true;
@@ -551,12 +551,12 @@ namespace el1::io::format::json
 				if((double)i == this->Number())
 				{
 					// integer
-					str = TString::Format("%d", i);
+					str = TString::Format(U"%d", i);
 				}
 				else
 				{
 					// float
-					str = TString::Format("%d", this->Number());
+					str = TString::Format(U"%d", this->Number());
 				}
 				sink.WriteAll(str.chars);
 				break;
@@ -608,10 +608,10 @@ namespace el1::io::format::json
 		}
 	}
 
-	TProducerPipe<TUTF32> TJsonValue::Pipe() const
+	TProducerPipe<char32_t> TJsonValue::Pipe() const
 	{
-		return TProducerPipe<TUTF32>(
-			[this](ISink<TUTF32>& sink)
+		return TProducerPipe<char32_t>(
+			[this](ISink<char32_t>& sink)
 			{
 				this->ToStream(sink);
 			}

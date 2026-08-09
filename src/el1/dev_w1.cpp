@@ -11,7 +11,7 @@ namespace el1::dev::w1
 
 	TString TCrcMismatchException::Message() const
 	{
-		return TString::Format("1-wire data transfer checksum mismatch (rom = %s, received = %02x, calculated = %02x)", uuid.ToString(), received_crc, calculated_crc);
+		return TString::Format(U"1-wire data transfer checksum mismatch (rom = %s, received = %02x, calculated = %02x)", uuid.ToString(), received_crc, calculated_crc);
 	}
 
 	IException* TCrcMismatchException::Clone() const
@@ -46,7 +46,7 @@ namespace el1::dev::w1
 
 	TString uuid_t::ToString() const
 	{
-		return TString::Format("%02x|%02x:%02x:%02x:%02x:%02x:%02x|%02x",
+		return TString::Format(U"%02x|%02x:%02x:%02x:%02x:%02x:%02x|%02x",
 			this->type,
 			this->serial.octet[0],
 			this->serial.octet[1],
@@ -68,8 +68,8 @@ namespace el1::dev::w1
 	uuid_t uuid_t::FromString(const TString& text)
 	{
 		static const usys_t OCTET_POSITIONS[8] = { 0, 3, 6, 9, 12, 15, 18, 21 };
-		EL_ERROR(text.Length() != 23 || text[2].code != '|' || text[5].code != ':' || text[8].code != ':'
-			|| text[11].code != ':' || text[14].code != ':' || text[17].code != ':' || text[20].code != '|',
+		EL_ERROR(text.Length() != 23 || text[2] != '|' || text[5] != ':' || text[8] != ':'
+			|| text[11] != ':' || text[14] != ':' || text[17] != ':' || text[20] != '|',
 			TInvalidArgumentException, "text", "invalid 1-wire ROM; expected xx|xx:xx:xx:xx:xx:xx|xx");
 
 		const auto parse_hex_nibble = [](const u32_t code) -> u8_t
@@ -87,7 +87,7 @@ namespace el1::dev::w1
 		for(usys_t i = 0; i < sizeof(values); i++)
 		{
 			const usys_t pos = OCTET_POSITIONS[i];
-			values[i] = static_cast<u8_t>((parse_hex_nibble(text[pos].code) << 4) | parse_hex_nibble(text[pos + 1].code));
+			values[i] = static_cast<u8_t>((parse_hex_nibble(text[pos]) << 4) | parse_hex_nibble(text[pos + 1]));
 		}
 
 		uuid_t uuid;

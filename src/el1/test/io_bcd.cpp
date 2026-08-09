@@ -747,7 +747,7 @@ namespace
 	{
 		TString symbols;
 		for(u32_t i = 0; i < 256; i++)
-			symbols += TUTF32(0x1000U + i);
+			symbols += char32_t(0x1000U + i);
 
 		TString digits;
 		digits += symbols[5];
@@ -881,7 +881,7 @@ namespace
 	{
 		TString text;
 		for(usys_t i = 0; i < 320; i++)
-			text += TUTF32((char)('0' + (i % 10)));
+			text += char32_t((char)('0' + (i % 10)));
 		text[0] = '1';
 
 		const TBCD value = TBCD::FromString(text.Reverse(), DECIMAL_SYMBOLS);

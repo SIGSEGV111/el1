@@ -43,7 +43,7 @@ namespace el1::dev::w1::ds18x20
 		{
 			case EModel::DS18S20:
 			{
-				EL_ERROR(this->ds18s20.count_per_degc == 0, TException, TString::Format(L"invalid temperature data in local cache (rom = %s, temp_raw = %d, count_remain = %d, count_per_degc = %d)", this->w1dev->UUID().ToString(), this->ds18s20.temp_raw, this->ds18s20.count_remain, this->ds18s20.count_per_degc));
+				EL_ERROR(this->ds18s20.count_per_degc == 0, TException, TString::Format(U"invalid temperature data in local cache (rom = %s, temp_raw = %d, count_remain = %d, count_per_degc = %d)", this->w1dev->UUID().ToString(), this->ds18s20.temp_raw, this->ds18s20.count_remain, this->ds18s20.count_per_degc));
 				return (float)(this->ds18s20.temp_raw >> 1) - 0.25f + (float)(this->ds18s20.count_per_degc - this->ds18s20.count_remain) / (float)this->ds18s20.count_per_degc;
 			}
 
@@ -113,7 +113,7 @@ namespace el1::dev::w1::ds18x20
 		ds18s20.count_remain = 0;
 		ds18s20.count_per_degc = 0;
 		EL_ERROR(this->w1dev->UUID().type != (u8_t)EModel::DS18B20 && this->w1dev->UUID().type != (u8_t)EModel::DS18S20, TInvalidArgumentException, "w1dev", "w1dev does not point to a supported DS18X20 sensor");
-		EL_ERROR(this->bus_powered && !this->w1dev->Bus()->HasStrongPullUp(), TException, TString::Format(L"Insufficient power for %s @ %s. W1-Bus lacks strong pullup and sensor is currently bus powered.", this->ModelName(), this->w1dev->UUID().ToString()));
+		EL_ERROR(this->bus_powered && !this->w1dev->Bus()->HasStrongPullUp(), TException, TString::Format(U"Insufficient power for %s @ %s. W1-Bus lacks strong pullup and sensor is currently bus powered.", this->ModelName(), this->w1dev->UUID().ToString()));
 
 		if(Model() == EModel::DS18B20)
 		{

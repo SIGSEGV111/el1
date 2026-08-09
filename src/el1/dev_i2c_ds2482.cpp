@@ -52,7 +52,7 @@ namespace el1::dev::i2c::ds2482
 		EL_ERROR(bus == nullptr, TInvalidArgumentException, "bus", "must not be null");
 		const TMutexAutoLock lock(&bus->mutex);
 		for(const TDS2482Device* const claimed : bus->claimed_devices)
-			EL_ERROR(claimed->uuid == uuid, TException, TString::Format("1-wire device already claimed: %s", uuid.ToString()));
+			EL_ERROR(claimed->uuid == uuid, TException, TString::Format(U"1-wire device already claimed: %s", uuid.ToString()));
 		bus->claimed_devices.Append(this);
 	}
 
@@ -110,7 +110,7 @@ namespace el1::dev::i2c::ds2482
 		const u8_t encoded = low_nibble | static_cast<u8_t>((~low_nibble & 0x0F) << 4);
 		writeCommand(CMD_WRITE_CONFIGURATION, encoded);
 		const u8_t verified = readPointer(POINTER_CONFIGURATION);
-		EL_ERROR(verified != low_nibble, TException, TString::Format("DS2482 rejected configuration 0x%02x (read back 0x%02x)", low_nibble, verified));
+		EL_ERROR(verified != low_nibble, TException, TString::Format(U"DS2482 rejected configuration 0x%02x (read back 0x%02x)", low_nibble, verified));
 		configuration = low_nibble;
 	}
 
@@ -164,7 +164,7 @@ namespace el1::dev::i2c::ds2482
 	{
 		const TMutexAutoLock lock(&mutex);
 		prepare(speed);
-		EL_ERROR(!resetUnlocked(), TException, TString::Format("1-wire device not present: %s", uuid.ToString()));
+		EL_ERROR(!resetUnlocked(), TException, TString::Format(U"1-wire device not present: %s", uuid.ToString()));
 		matchRomUnlocked(uuid);
 		writeByteUnlocked(cmd);
 		for(usys_t i = 0; i < n_bytes; i++)
@@ -175,7 +175,7 @@ namespace el1::dev::i2c::ds2482
 	{
 		const TMutexAutoLock lock(&mutex);
 		prepare(speed);
-		EL_ERROR(!resetUnlocked(), TException, TString::Format("1-wire device not present: %s", uuid.ToString()));
+		EL_ERROR(!resetUnlocked(), TException, TString::Format(U"1-wire device not present: %s", uuid.ToString()));
 		matchRomUnlocked(uuid);
 
 		const byte_t* const bytes = reinterpret_cast<const byte_t*>(buffer);
@@ -300,7 +300,7 @@ namespace el1::dev::i2c::ds2482
 		EL_ERROR(this->device == nullptr, TInvalidArgumentException, "device", "I2C device must not be null");
 		writeCommand(CMD_DEVICE_RESET);
 		const u8_t status = readPointer(POINTER_STATUS);
-		EL_ERROR((status & STATUS_RESET) == 0, TException, TString::Format("DS2482 reset verification failed, status=0x%02x", status));
+		EL_ERROR((status & STATUS_RESET) == 0, TException, TString::Format(U"DS2482 reset verification failed, status=0x%02x", status));
 		configuration = 0;
 		writeConfiguration(active_pullup ? CONFIG_ACTIVE_PULLUP : 0);
 		resetUnlocked();

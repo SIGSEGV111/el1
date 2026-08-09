@@ -31,7 +31,7 @@ namespace el1::io::text
 		inline ITextWriter& Print(const char* const s)      { return (*this)<<s; }
 
 		template<typename ... A>
-		ITextWriter& Print(const string::TString& format, A&& ... a)
+		ITextWriter& Print(const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...>& format, A const& ... a)
 		{
 			return (*this)<<string::TString::Format(format, a...);
 		}

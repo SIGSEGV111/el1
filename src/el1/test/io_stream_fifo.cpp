@@ -20,7 +20,7 @@ namespace
 		}
 
 		{
-			TFifo<TUTF32> fifo(TFiber::Self(), TFiber::Self());
+			TFifo<char32_t> fifo(TFiber::Self(), TFiber::Self());
 		}
 	}
 

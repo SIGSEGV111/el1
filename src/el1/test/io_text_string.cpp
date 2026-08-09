@@ -2,8 +2,84 @@
 #include <el1/io_text.hpp>
 #include <el1/io_text_string.hpp>
 #include "util.hpp"
+#include <limits>
 
 using namespace ::testing;
+
+struct TCustomFormatValue
+{
+	el1::io::types::s64_t value;
+};
+
+struct TDefaultSpecFormatValue
+{
+	el1::io::types::s64_t value;
+};
+
+namespace el1::io::text::format
+{
+	struct TCustomValueSpec
+	{
+		bool hexadecimal = false;
+		bool unicode = false;
+	};
+
+	template<>
+	struct TFormatter<::TCustomFormatValue>
+	{
+		using TSpec = TCustomValueSpec;
+
+		static constexpr bool Supports(const char32_t code) noexcept
+		{
+			return code == 'h' || code == 'm';
+		}
+
+		static constexpr bool ParseSpec(TSpec& out, const char32_t, const TFormatSpecView& text) noexcept
+		{
+			if(text.Length() == 0)
+				return true;
+			if(text.IsBraced() && text.Length() == 1 && text[0] == 'h')
+			{
+				out.hexadecimal = true;
+				return true;
+			}
+			if(text.IsBraced() && text.Length() == 2 && text[0] == 0x00e4U && text[1] == 0x1f600U)
+			{
+				out.unicode = true;
+				return true;
+			}
+			return false;
+		}
+
+		static void Format(string::TString& out, const ::TCustomFormatValue& value, const char32_t, const TSpec& spec)
+		{
+			if(spec.unicode)
+				out += string::TString::Format(U"<U:%d>", value.value);
+			else
+				out += spec.hexadecimal ? string::TString::Format(U"<%x>", value.value) : string::TString::Format(U"<%d>", value.value);
+		}
+	};
+
+	template<>
+	struct TFormatter<::TDefaultSpecFormatValue>
+	{
+		static constexpr bool Supports(const char32_t code) noexcept
+		{
+			return code == 'm';
+		}
+
+		static void Format(string::TString& out, const ::TDefaultSpecFormatValue& value, const char32_t, const TDefaultFormatSpec& spec)
+		{
+			out += string::TString::Format(U"<%d:%d:%d>", spec.has_width ? spec.width : 0, spec.has_precision ? spec.precision : 0, value.value);
+		}
+	};
+}
+
+template<typename T>
+concept CCanUseRuntimeFormatString = requires(T value)
+{
+	el1::io::text::string::TString::Format(value, 1);
+};
 
 namespace
 {
@@ -14,33 +90,32 @@ namespace
 
 	TEST(io_text_string, TStringView_UnicodeLiteral)
 	{
-		constexpr TStringView ascii = "hello"_U;
+		constexpr TStringView ascii = U"hello";
 		static_assert(ascii.Length() == 5);
 
-		constexpr TStringView unicode = "Hällö 😀"_U;
+		constexpr TStringView unicode = U"Hällö 😀";
 		static_assert(unicode.Length() == 7);
 
-		EXPECT_EQ(unicode[0].code, static_cast<u32_t>('H'));
-		EXPECT_EQ(unicode[1].code, 0x00e4U);
-		EXPECT_EQ(unicode[4].code, 0x00f6U);
-		EXPECT_EQ(unicode[-1].code, 0x1f600U);
-		EXPECT_EQ(unicode.Data()[unicode.Length()].code, 0U);
+		EXPECT_EQ(unicode[0], static_cast<u32_t>('H'));
+		EXPECT_EQ(unicode[1], 0x00e4U);
+		EXPECT_EQ(unicode[4], 0x00f6U);
+		EXPECT_EQ(unicode[-1], 0x1f600U);
+		EXPECT_EQ(unicode.Data()[unicode.Length()], 0U);
 
-		EXPECT_EQ("same storage"_U.Data(), "same storage"_U.Data());
 
 		const TString owned = unicode;
 		EXPECT_EQ(owned, unicode);
-		EXPECT_TRUE(owned.BeginsWith("Häll"_U));
-		EXPECT_TRUE(owned.EndsWith("ö 😀"_U));
-		EXPECT_TRUE(owned.Contains("llö"_U));
-		EXPECT_EQ(owned.Find("😀"_U), 6U);
+		EXPECT_TRUE(owned.BeginsWith(U"Häll"));
+		EXPECT_TRUE(owned.EndsWith(U"ö 😀"));
+		EXPECT_TRUE(owned.Contains(U"llö"));
+		EXPECT_EQ(owned.Find(TStringView(U"😀")), 6U);
 
 		const TStringView slice = unicode.SliceBE(1, 5);
-		EXPECT_EQ(slice, "ällö"_U);
+		EXPECT_EQ(slice, U"ällö");
 
-		EXPECT_EQ("-123"_U.ToInteger(), -123);
-		EXPECT_DOUBLE_EQ("12.5"_U.ToDouble(), 12.5);
-		EXPECT_EQ(TString::Format("%s/%s"_U, "ä"_U, "😀"_U), "ä/😀"_U);
+		EXPECT_EQ(TStringView(U"-123").ToInteger(), -123);
+		EXPECT_DOUBLE_EQ(TStringView(U"12.5").ToDouble(), 12.5);
+		EXPECT_EQ(TString::Format(U"%s/%s", TStringView(U"ä"), TStringView(U"😀")), TStringView(U"ä/😀"));
 	}
 
 	TEST(io_text_string, TString_Construct)
@@ -53,27 +128,27 @@ namespace
 		{
 			TString s = "hello world";
 			EXPECT_EQ(s.Length(), 11U);
-			EXPECT_EQ(s[4], 'o');
+			EXPECT_EQ(s[4], U'o');
 		}
 
 		{
 			TString s = L"hello world äöü";
 			EXPECT_EQ(s.Length(), 15U);
-			EXPECT_EQ(s[4], 'o');
+			EXPECT_EQ(s[4], U'o');
 		}
 
 		{
-			const TUTF32 arr[] = { 'h', 'e', 'l', 'l', 'o', TUTF32::TERMINATOR, 'w', 'o', 'r', 'l', 'd', TUTF32::TERMINATOR };
-			TString s = arr;
+			const char32_t arr[] = { 'h', 'e', 'l', 'l', 'o', U'\0', 'w', 'o', 'r', 'l', 'd', U'\0' };
+			TString s(arr);
 			EXPECT_EQ(s.Length(), 5U);
-			EXPECT_EQ(s[4], 'o');
+			EXPECT_EQ(s[4], U'o');
 		}
 
 		{
-			const TUTF32 arr[] = { 'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', TUTF32::TERMINATOR };
+			const char32_t arr[] = { 'h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', U'\0' };
 			TString s(arr, 6);
 			EXPECT_EQ(s.Length(), 6U);
-			EXPECT_EQ(s[5], ' ');
+			EXPECT_EQ(s[5], U' ');
 		}
 	}
 
@@ -411,66 +486,145 @@ namespace
 
 	TEST(io_text_string, TString_Format)
 	{
-		EXPECT_EQ(TString::Format("hello %s", 'a'), "hello a");
-		EXPECT_EQ(TString::Format("hello %s", L'a'), "hello a");
-		EXPECT_EQ(TString::Format("hello %s", TUTF32('a')), "hello a");
-		EXPECT_EQ(TString::Format("hello %s", "foobar"), "hello foobar");
-		EXPECT_EQ(TString::Format("hello %s", ""), "hello ");
-		EXPECT_EQ(TString::Format("test %d", 17), "test 17");
-		EXPECT_EQ(TString::Format("test %d %d", 17572, 13), "test 17572 13");
-		EXPECT_EQ(TString::Format("test %d", -17), "test -17");
-		EXPECT_EQ(TString::Format("hello %s%d", "foobar", 3), "hello foobar3");
-		EXPECT_EQ(TString::Format("progress = %d%%", 17), "progress = 17%");
-		EXPECT_EQ(TString::Format("path = %q", "/opt/el1/src"), "path = '/opt/el1/src'");
-		EXPECT_EQ(TString::Format("text = %q", "'some quoted text'"), "text = \"'some quoted text'\"");
-		EXPECT_EQ(TString::Format("text = %q", L"'some quoted text'"), "text = \"'some quoted text'\"");
-		EXPECT_THROW(TString::Format("wrong %g", 17), TException);
-		EXPECT_THROW(TString::Format("wrong %%", 17), TException);
-		EXPECT_THROW(TString::Format("wrong %s", 17), TException);
+		EXPECT_EQ(TString::Format(U"hello %s", 'a'), "hello a");
+		EXPECT_EQ(TString::Format(U"hello %s", L'a'), "hello a");
+		EXPECT_EQ(TString::Format(U"hello %s", U'a'), "hello a");
+		EXPECT_EQ(TString::Format(U"hello %s", "foobar"), "hello foobar");
+		EXPECT_EQ(TString::Format(U"hello %s", ""), "hello ");
+		EXPECT_EQ(TString::Format(U"test %d", 17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d %d", 17572, 13), "test 17572 13");
+		EXPECT_EQ(TString::Format(U"test %d", -17), "test -17");
+		EXPECT_EQ(TString::Format(U"hello %s%d", "foobar", 3), "hello foobar3");
+		EXPECT_EQ(TString::Format(U"progress = %d%%", 17), "progress = 17%");
+		EXPECT_EQ(TString::Format(U"path = %q", "/opt/el1/src"), "path = '/opt/el1/src'");
+		EXPECT_EQ(TString::Format(U"text = %q", "'some quoted text'"), "text = \"'some quoted text'\"");
+		EXPECT_EQ(TString::Format(U"text = %q", L"'some quoted text'"), "text = \"'some quoted text'\"");
+		static_assert(!format::IsValidFormat<int>(U"wrong %g"));
+		static_assert(!format::IsValidFormat<int>(U"wrong %%"));
+		static_assert(!format::IsValidFormat<int>(U"wrong %s"));
+		static_assert(!format::IsValidFormat<int, int>(U"only %d"));
+		static_assert(!format::IsValidFormat<int>(U"too many %d %d"));
 
-		EXPECT_EQ(TString::Format("test %d", 0), "test 0");
+		EXPECT_EQ(TString::Format(U"test %d", 0), "test 0");
 
-		EXPECT_EQ(TString::Format("test %d", (s8_t)17), "test 17");
-		EXPECT_EQ(TString::Format("test %d", (u8_t)17), "test 17");
-		EXPECT_EQ(TString::Format("test %d", (s16_t)17), "test 17");
-		EXPECT_EQ(TString::Format("test %d", (u16_t)17), "test 17");
-		EXPECT_EQ(TString::Format("test %d", (s32_t)17), "test 17");
-		EXPECT_EQ(TString::Format("test %d", (u32_t)17), "test 17");
-		EXPECT_EQ(TString::Format("test %d", (s64_t)17), "test 17");
-		EXPECT_EQ(TString::Format("test %d", (u64_t)17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d", (s8_t)17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d", (u8_t)17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d", (s16_t)17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d", (u16_t)17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d", (s32_t)17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d", (u32_t)17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d", (s64_t)17), "test 17");
+		EXPECT_EQ(TString::Format(U"test %d", (u64_t)17), "test 17");
 
 		// this is not exception-/thread-safe
 		TNumberFormatter nf = TNumberFormatter::PLAIN_DECIMAL_US_EN;
 		nf.config.n_decimal_places = 3;
 		TNumberFormatter::DEFAULT_DECIMAL = &nf;
-		EXPECT_EQ(TString::Format("test %d", 17.5725), "test 17.573");
-		EXPECT_EQ(TString::Format("test %d",  17.9995), "test 18.000");
-		EXPECT_EQ(TString::Format("test %d", -17.9995), "test -18.000");
-		EXPECT_EQ(TString::Format("test %d", -17.9994), "test -17.999");
+		EXPECT_EQ(TString::Format(U"test %d", 17.5725), "test 17.573");
+		EXPECT_EQ(TString::Format(U"test %d",  17.9995), "test 18.000");
+		EXPECT_EQ(TString::Format(U"test %d", -17.9995), "test -18.000");
+		EXPECT_EQ(TString::Format(U"test %d", -17.9994), "test -17.999");
 		TNumberFormatter::DEFAULT_DECIMAL = &TNumberFormatter::PLAIN_DECIMAL_US_EN;
 
-		EXPECT_EQ(TString::Format("test %02x", 10), "test 0a");
-		EXPECT_EQ(TString::Format("test %_2.7x", 10), "test _a.0000000");
-		EXPECT_EQ(TString::Format("test %x", 17), "test 11");
-		EXPECT_EQ(TString::Format("test %x", 167), "test a7");
-		EXPECT_EQ(TString::Format("test %x", -167), "test -a7");
-		EXPECT_EQ(TString::Format("test %x", -167ULL), "test ffffffffffffff59");
-		EXPECT_EQ(TString::Format("test %x", (u8_t)-167U), "test 59");
-		EXPECT_EQ(TString::Format("test %x", 0x59U), "test 59");
-		EXPECT_EQ(TString::Format("test %x", 0x59), "test 59");
+		EXPECT_EQ(TString::Format(U"test %02x", 10), "test 0a");
+		EXPECT_EQ(TString::Format(U"test %_2.7x", 10), "test _a.0000000");
+		EXPECT_EQ(TString::Format(U"test %x", 17), "test 11");
+		EXPECT_EQ(TString::Format(U"test %x", 167), "test a7");
+		EXPECT_EQ(TString::Format(U"test %x", -167), "test -a7");
+		EXPECT_EQ(TString::Format(U"test %x", -167ULL), "test ffffffffffffff59");
+		EXPECT_EQ(TString::Format(U"test %x", (u8_t)-167U), "test 59");
+		EXPECT_EQ(TString::Format(U"test %x", 0x59U), "test 59");
+		EXPECT_EQ(TString::Format(U"test %x", 0x59), "test 59");
 
-		EXPECT_EQ(TString::Format("test %b", 157), "test 10011101");
-		EXPECT_EQ(TString::Format("test %b", -157), "test -10011101");
+		EXPECT_EQ(TString::Format(U"test %b", 157), "test 10011101");
+		EXPECT_EQ(TString::Format(U"test %b", -157), "test -10011101");
 
-		EXPECT_EQ(TString::Format("test %s", "foobar %d"), "test foobar %d");
-		EXPECT_EQ(TString::Format("test %%s %d", 10), "test %s 10");
+		EXPECT_EQ(TString::Format(U"test %s", "foobar %d"), "test foobar %d");
+		EXPECT_EQ(TString::Format(U"test %%s %d", 10), "test %s 10");
+	}
+
+	TEST(io_text_string, TString_FormatCompileTimeRegistry)
+	{
+		using namespace el1::io::text::format;
+		using el1::io::bcd::TBCD;
+
+		static_assert(IsValidFormat<int>(U"%d"));
+		static_assert(IsValidFormat<unsigned>(U"%u"));
+		static_assert(!IsValidFormat<unsigned long long>(U"%llu"));
+		static_assert(!IsValidFormat<unsigned long long>(U"%zu"));
+		static_assert(!IsValidFormat<long long>(U"%lld"));
+		static_assert(IsValidFormat<TCustomFormatValue>(U"%h"));
+		static_assert(IsValidFormat<TCustomFormatValue>(U"%hm"));
+		static_assert(IsValidFormat<TCustomFormatValue>(U"%{h}m"));
+		static_assert(IsValidFormat<TDefaultSpecFormatValue>(U"%17.3m"));
+		static_assert(IsValidFormat<int>(U"ä😀[%04d]漢"));
+		static_assert(IsValidFormat<TCustomFormatValue>(U"%{ä😀}m"));
+		static_assert(IsValidFormat<>(U"100%%"));
+		static_assert(!IsValidFormat<int*>(U"%d"));
+		static_assert(!IsValidFormat<int>(U"%p"));
+		static_assert(!IsValidFormat<TCustomFormatValue>(U"%05h"));
+		static_assert(!IsValidFormat<TCustomFormatValue>(U"%d"));
+		static_assert(!IsValidFormat<TCustomFormatValue>(U"%{word}m"));
+		static_assert(!IsValidFormat<TDefaultSpecFormatValue>(U"%{17.3}m"));
+		static_assert(!IsValidFormat<int>(U"%{10}d"));
+		static_assert(!CCanUseRuntimeFormatString<TString>);
+		static_assert(!CCanUseRuntimeFormatString<TStringView>);
+		static_assert(!CCanUseRuntimeFormatString<const char*>);
+		static_assert(!CCanUseRuntimeFormatString<const char32_t*>);
+		static_assert(!std::is_constructible_v<TFormatString<int>, const char32_t*>);
+		static_assert(!std::is_constructible_v<TFormatString<int>, const char (&)[3]>);
+		static_assert(!std::is_constructible_v<TFormatString<int>, const wchar_t (&)[3]>);
+		static_assert(std::is_constructible_v<TFormatString<int>, const char32_t (&)[3]>);
+
+		EXPECT_EQ(TString::Format(U"%10.9d", 12), "        12.000000000");
+		EXPECT_EQ(TString::Format(U"%010.9d", 12), "0000000012.000000000");
+		EXPECT_EQ(TString::Format(U"%10.9d", 12.25), "        12.250000000");
+		EXPECT_EQ(TString::Format(U"%5d", -12), "   -12");
+		EXPECT_EQ(TString::Format(U"%05d", -12), "-00012");
+		EXPECT_EQ(TString::Format(U"%_5d", -12), "___-12");
+		EXPECT_EQ(TString::Format(U"%d", std::numeric_limits<s64_t>::min()), "-9223372036854775808");
+		EXPECT_EQ(TString::Format(U"%u", 17U), "17");
+		EXPECT_EQ(TString::Format(U"%d", 1234567890123ULL), "1234567890123");
+		EXPECT_EQ(TString::Format(U"%o", 0755), "755");
+		EXPECT_EQ(TString::Format(U"%h", TCustomFormatValue{42}), "<42>");
+		EXPECT_EQ(TString::Format(U"%hm", TCustomFormatValue{42}), "<42>m");
+		EXPECT_EQ(TString::Format(U"%{h}m", TCustomFormatValue{42}), "<2a>");
+		EXPECT_EQ(TString::Format(U"%17.3m", TDefaultSpecFormatValue{42}), "<17:3:42>");
+		EXPECT_EQ(TString::Format(U"wide %04x", 42), "wide 002a");
+		EXPECT_EQ(TString::Format(U"unicode %s", "ok"), "unicode ok");
+		EXPECT_EQ(TString::Format(U"unicode %s", U"ä😀"), TStringView(U"unicode ä😀"));
+		static constexpr char32_t NAMED_FORMAT[] = U"named %04x";
+		EXPECT_EQ(TString::Format(NAMED_FORMAT, 42), "named 002a");
+
+		// Native U literals are char32_t arrays before the compile-time parser sees
+		// them. Formatter positions are therefore code-point indices, independent
+		// of the source file's UTF-8 byte length.
+		EXPECT_EQ(TString::Format(U"ä😀[%04d]漢字", 42), TStringView(U"ä😀[0042]漢字"));
+		EXPECT_EQ(TString::Format(U"前%%😀%d後", 7), TStringView(U"前%😀7後"));
+		EXPECT_EQ(TString::Format(U"α%dβ%sγ😀%xδ", 12, "ü", 255), TStringView(U"α12βüγ😀ffδ"));
+		EXPECT_EQ(TString::Format(U"ä%{ä😀}mß", TCustomFormatValue{42}), TStringView(U"ä<U:42>ß"));
+
+		TBCD decimal(0, 10, 2, 5);
+		decimal.Digit(1, 1);
+		decimal.Digit(0, 2);
+		decimal.Digit(-1, 3);
+		decimal.Digit(-2, 4);
+		decimal.Digit(-3, 5);
+		decimal.Digit(-4, 6);
+		decimal.Digit(-5, 7);
+		EXPECT_EQ(TString::Format(U"%2.3d", decimal), "12.346");
+		EXPECT_EQ(TString::Format(U"%5.7d", decimal), "   12.3456700");
+
+		int value = 0;
+		const TString pointer = TString::Format(U"%p", &value);
+		EXPECT_GT(pointer.Length(), 0U);
 	}
 
 	TEST(io_text_string, TString_Escape)
 	{
 		{
 			TString s = "she said 'hello\\world!'";
-			s.Escape(TList<TUTF32>({'\'', '\"'}), '\\');
+			s.Escape(TList<char32_t>({'\'', '\"'}), '\\');
 			EXPECT_EQ(s, "she said \\'hello\\\\world!\\'");
 		}
 	}
@@ -659,14 +813,14 @@ namespace
 	{
 		{
 			TString s = "hello\\ world";
-			TList<TUTF32> special_chars = { ' ' };
+			TList<char32_t> special_chars = { ' ' };
 			s.Unescape(special_chars, '\\');
 			EXPECT_EQ(s, "hello world");
 		}
 
 		{
 			TString s = "hello world";
-			TList<TUTF32> special_chars = { ' ' };
+			TList<char32_t> special_chars = { ' ' };
 			EXPECT_THROW(s.Unescape(special_chars, '\\'), TException);
 		}
 	}
@@ -762,7 +916,7 @@ namespace
 
 	TEST(io_text_string, TString_ReplaceChars)
 	{
-		TList<TUTF32> list = {' '};
+		TList<char32_t> list = {' '};
 		{
 			TString a = "hello world";
 			a.ReplaceChars(list, '_', false);

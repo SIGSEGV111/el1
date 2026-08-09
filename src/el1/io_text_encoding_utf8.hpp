@@ -28,7 +28,7 @@ namespace el1::io::text::encoding::utf8
 
 	ESequenceType IdentifyByteType(const byte_t b) EL_GETTER;
 	const char* SequenceTypeMnemonic(const ESequenceType type) EL_GETTER;
-	u8_t GetEncodedSequenceLength(const TUTF32 chr) EL_GETTER;
+	u8_t GetEncodedSequenceLength(const char32_t chr) EL_GETTER;
 
 	struct TInvalidUtf8SequenceException : error::IException
 	{
@@ -51,7 +51,7 @@ namespace el1::io::text::encoding::utf8
 	{
 		protected:
 			u32_t index;
-			TUTF32 buffer;
+			char32_t buffer;
 
 			template<typename TSourceStream>
 			byte_t NextByte(TSourceStream* const source)
@@ -64,10 +64,10 @@ namespace el1::io::text::encoding::utf8
 
 		public:
 			using TIn = byte_t;
-			using TOut = TUTF32;
+			using TOut = char32_t;
 
 			template<typename TSourceStream>
-			TUTF32* NextItem(TSourceStream* const source)
+			char32_t* NextItem(TSourceStream* const source)
 			{
 				const byte_t* const start_byte = source->NextItem();
 				if(start_byte == nullptr)
@@ -79,26 +79,26 @@ namespace el1::io::text::encoding::utf8
 				switch(type)
 				{
 					case ESequenceType::SINGLE_BYTE:
-						buffer.code = *start_byte;
+						buffer = *start_byte;
 						return &buffer;
 
 					case ESequenceType::START_BYTE_2:
-						buffer.code = *start_byte & 0b00111111;
+						buffer = *start_byte & 0b00111111;
 						n_need = 1;
 						break;
 
 					case ESequenceType::START_BYTE_3:
-						buffer.code = *start_byte & 0b00011111;
+						buffer = *start_byte & 0b00011111;
 						n_need = 2;
 						break;
 
 					case ESequenceType::START_BYTE_4:
-						buffer.code = *start_byte & 0b00001111;
+						buffer = *start_byte & 0b00001111;
 						n_need = 3;
 						break;
 
 					case ESequenceType::FOLLOW_BYTE:
-						EL_THROW(TInvalidUtf8SequenceException, index, EDirection::DECODING, 4, 0, type, (const byte_t*)&buffer.code);
+						EL_THROW(TInvalidUtf8SequenceException, index, EDirection::DECODING, 4, 0, type, (const byte_t*)&buffer);
 
 					// LCOV_EXCL_START
 					case ESequenceType::NONE:
@@ -109,9 +109,9 @@ namespace el1::io::text::encoding::utf8
 				for(unsigned i = 0; i < n_need; i++)
 				{
 					const byte_t next = NextByte(source);
-					EL_ERROR(IdentifyByteType(next) != ESequenceType::FOLLOW_BYTE, TInvalidUtf8SequenceException, index, EDirection::DECODING, 4, 1+i, type, (const byte_t*)&buffer.code);
-					buffer.code <<= 6;
-					buffer.code |= (next & 0b00111111);
+					EL_ERROR(IdentifyByteType(next) != ESequenceType::FOLLOW_BYTE, TInvalidUtf8SequenceException, index, EDirection::DECODING, 4, 1+i, type, (const byte_t*)&buffer);
+					buffer <<= 6;
+					buffer |= (next & 0b00111111);
 				}
 
 				return &buffer;
@@ -132,7 +132,7 @@ namespace el1::io::text::encoding::utf8
 			};
 
 		public:
-			using TIn = TUTF32;
+			using TIn = char32_t;
 			using TOut = byte_t;
 
 			template<typename TSourceStream>
@@ -142,33 +142,33 @@ namespace el1::io::text::encoding::utf8
 
 				if(buffer[0] == 0)
 				{
-					const TUTF32* const item = source->NextItem();
+					const char32_t* const item = source->NextItem();
 					if(item == nullptr)
 						return nullptr;
 
 					index++;
 
-					if(item->code <= 127)
+					if(*item <= 127)
 					{
-						buffer[0] = item->code;
+						buffer[0] = *item;
 					}
-					else if(item->code < 2048)
+					else if(*item < 2048)
 					{
-						buffer[0] = 0b11000000 | ((item->code >>  6) & 0b00011111);
-						buffer[1] = 0b10000000 | ((item->code >>  0) & 0b00111111);
+						buffer[0] = 0b11000000 | ((*item >>  6) & 0b00011111);
+						buffer[1] = 0b10000000 | ((*item >>  0) & 0b00111111);
 					}
-					else if(item->code < 65536)
+					else if(*item < 65536)
 					{
-						buffer[0] = 0b11100000 | ((item->code >> 12) & 0b00001111);
-						buffer[1] = 0b10000000 | ((item->code >>  6) & 0b00111111);
-						buffer[2] = 0b10000000 | ((item->code >>  0) & 0b00111111);
+						buffer[0] = 0b11100000 | ((*item >> 12) & 0b00001111);
+						buffer[1] = 0b10000000 | ((*item >>  6) & 0b00111111);
+						buffer[2] = 0b10000000 | ((*item >>  0) & 0b00111111);
 					}
-					else if(item->code < 4194304)
+					else if(*item < 4194304)
 					{
-						buffer[0] = 0b11110000 | ((item->code >> 18) & 0b00001111);
-						buffer[1] = 0b10000000 | ((item->code >> 12) & 0b00111111);
-						buffer[2] = 0b10000000 | ((item->code >>  6) & 0b00111111);
-						buffer[3] = 0b10000000 | ((item->code >>  0) & 0b00111111);
+						buffer[0] = 0b11110000 | ((*item >> 18) & 0b00001111);
+						buffer[1] = 0b10000000 | ((*item >> 12) & 0b00111111);
+						buffer[2] = 0b10000000 | ((*item >>  6) & 0b00111111);
+						buffer[3] = 0b10000000 | ((*item >>  0) & 0b00111111);
 					}
 					else
 						EL_THROW(TInvalidUtf8SequenceException, index, EDirection::ENCODING, 4, 0, ESequenceType::NONE, (const byte_t*)item);

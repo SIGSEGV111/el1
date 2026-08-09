@@ -47,9 +47,9 @@ namespace el1::system::task
 	TString TInvalidChildStateException::Message() const
 	{
 		if(this->inverted)
-			return TString::Format("child process was in unacceptable state %q", StateMnemonic(this->actual_state));
+			return TString::Format(U"child process was in unacceptable state %q", StateMnemonic(this->actual_state));
 		else
-			return TString::Format("child process was in state %q, but control logic expected state %q", StateMnemonic(this->actual_state), StateMnemonic(this->expected_state));
+			return TString::Format(U"child process was in state %q, but control logic expected state %q", StateMnemonic(this->actual_state), StateMnemonic(this->expected_state));
 	}
 
 	error::IException* TInvalidChildStateException::Clone() const
@@ -841,7 +841,7 @@ namespace el1::system::task
 				Shutdown();
 				Resume();
 				int status;
-				EL_WARN((status = Join()) != 0 && WARN_NONZERO_EXIT_IN_DESTRUCTOR, TException, TString::Format(L"subprocess PID=%d exited with code=%d", pid, status));
+				EL_WARN((status = Join()) != 0 && WARN_NONZERO_EXIT_IN_DESTRUCTOR, TException, TString::Format(U"subprocess PID=%d exited with code=%d", pid, status));
 			}
 			catch(const IException& e)
 			{
@@ -947,10 +947,10 @@ namespace el1::system::task
 
 	TString TProcess::TNonZeroExitException::Message() const
 	{
-		TString s = TString::Format("%q", exe.ToString());
+		TString s = TString::Format(U"%q", exe.ToString());
 		for(auto& a : args)
-			s += TString::Format(" %q", a);
-		return TString::Format("subprocess%s (%s) terminated with exit-code %d; stderr output:\n%s", pid == -1 ? TString() : TString::Format(" %d", pid), s, exit_code, stderr);
+			s += TString::Format(U" %q", a);
+		return TString::Format(U"subprocess%s (%s) terminated with exit-code %d; stderr output:\n%s", pid == -1 ? TString() : TString::Format(U" %d", pid), s, exit_code, stderr);
 	}
 
 	IException* TProcess::TNonZeroExitException::Clone() const
@@ -964,10 +964,10 @@ namespace el1::system::task
 
 	TString TProcess::TTimeoutException::Message() const
 	{
-		TString s = TString::Format("%q", exe.ToString());
+		TString s = TString::Format(U"%q", exe.ToString());
 		for(auto& a : args)
-			s += TString::Format(" %q", a);
-		return TString::Format("subprocess %d (%s) exeeded timeout of %d seconds; stderr output:\n%s", pid, s, timeout.ConvertToF(EUnit::SECONDS), stderr);
+			s += TString::Format(U" %q", a);
+		return TString::Format(U"subprocess %d (%s) exeeded timeout of %d seconds; stderr output:\n%s", pid, s, timeout.ConvertToF(EUnit::SECONDS), stderr);
 	}
 
 	IException* TProcess::TTimeoutException::Clone() const

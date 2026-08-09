@@ -38,13 +38,13 @@ namespace el1::io::format::json
 	{
 		const iosize_t pos;
 		const iosize_t line;
-		const TUTF32 chr;
+		const char32_t chr;
 		const EReason reason;
 
 		TString Message() const final override;
 		IException* Clone() const override;
 
-		TInvalidJsonException(const iosize_t pos, const iosize_t line, const TUTF32 chr, const EReason reason) : pos(pos), line(line), chr(chr), reason(reason) {}
+		TInvalidJsonException(const iosize_t pos, const iosize_t line, const char32_t chr, const EReason reason) : pos(pos), line(line), chr(chr), reason(reason) {}
 	};
 
 	enum class EType : usys_t // usys_t required for alignment of TJsonValue::__placeholder
@@ -167,8 +167,8 @@ namespace el1::io::format::json
 			~TJsonValue();
 
 			TString ToString() const;
-			void ToStream(stream::ISink<TUTF32>&) const;
-			stream::producer::TProducerPipe<TUTF32> Pipe() const;
+			void ToStream(stream::ISink<char32_t>&) const;
+			stream::producer::TProducerPipe<char32_t> Pipe() const;
 
 			static const TJsonValue NULLVALUE;
 			static const TJsonValue TRUE;
@@ -187,17 +187,17 @@ namespace el1::io::format::json
 		protected:
 			iosize_t pos;
 			iosize_t line;
-			const TUTF32* current_char;
+			const char32_t* current_char;
 			TJsonValue value;
 			const bool tolerant;
 
-			static bool IsWhitespace(const TUTF32& chr)
+			static bool IsWhitespace(const char32_t& chr)
 			{
-				return chr.code == ' ' || chr.code == '\t' || chr.code == '\n';
+				return chr == ' ' || chr == '\t' || chr == '\n';
 			}
 
 			template<typename TSourceStream>
-			const TUTF32* NextChar(TSourceStream* const source)
+			const char32_t* NextChar(TSourceStream* const source)
 			{
 				if(current_char != nullptr)
 					return current_char;
@@ -219,20 +219,20 @@ namespace el1::io::format::json
 			{
 				for(usys_t i = 0; literal[i] != 0; i++)
 				{
-					const TUTF32* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-					EL_ERROR(chr->code != (unsigned char)literal[i], TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
+					const char32_t* const chr = NextChar(source);
+					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
+					EL_ERROR(*chr != (unsigned char)literal[i], TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
 					ConsumeChar();
 				}
 			}
 
 			template<typename TSourceStream>
-			const TUTF32* EatWhitespace(TSourceStream* const source)
+			const char32_t* EatWhitespace(TSourceStream* const source)
 			{
-				const TUTF32* chr;
+				const char32_t* chr;
 				for(chr = NextChar(source); chr != nullptr && IsWhitespace(*chr); chr = NextChar(source))
 				{
-					if(chr->code == '\n')
+					if(*chr == '\n')
 						line++;
 					ConsumeChar();
 				}
@@ -245,18 +245,18 @@ namespace el1::io::format::json
 				TJsonArray list;
 
 				{
-					const TUTF32* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-					EL_ERROR(chr->code != '[', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
+					const char32_t* const chr = NextChar(source);
+					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
+					EL_ERROR(*chr != '[', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
 					ConsumeChar();
 				}
 
 				for(;;)
 				{
-					const TUTF32* chr = EatWhitespace(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
+					const char32_t* chr = EatWhitespace(source);
+					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
 
-					if(chr->code == ']')
+					if(*chr == ']')
 					{
 						ConsumeChar();
 						break;
@@ -265,19 +265,19 @@ namespace el1::io::format::json
 					{
 						list.Append(ParseAny(source));
 						chr = EatWhitespace(source);
-						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
+						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
 
-						if(chr->code == ']')
+						if(*chr == ']')
 						{
 							ConsumeChar();
 							break;
 						}
-						else if(chr->code == ',')
+						else if(*chr == ',')
 						{
 							ConsumeChar();
 							chr = EatWhitespace(source);
-							EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-							EL_ERROR(chr->code == ']', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
+							EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
+							EL_ERROR(*chr == ']', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
 						}
 						else
 							EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
@@ -293,18 +293,18 @@ namespace el1::io::format::json
 				TJsonMap map;
 
 				{
-					const TUTF32* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-					EL_ERROR(chr->code != '{', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
+					const char32_t* const chr = NextChar(source);
+					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
+					EL_ERROR(*chr != '{', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
 					ConsumeChar();
 				}
 
 				for(;;)
 				{
-					const TUTF32* chr = EatWhitespace(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
+					const char32_t* chr = EatWhitespace(source);
+					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
 
-					if(chr->code == '}')
+					if(*chr == '}')
 					{
 						ConsumeChar();
 						break;
@@ -313,26 +313,26 @@ namespace el1::io::format::json
 					{
 						TJsonValue key = ParseString(source);
 						chr = EatWhitespace(source);
-						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-						EL_ERROR(chr->code != ':', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
+						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
+						EL_ERROR(*chr != ':', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
 						ConsumeChar();
 						TJsonValue value = ParseAny(source);
 						map.Add(std::move(key.String()), std::move(value));
 
 						chr = EatWhitespace(source);
-						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
+						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
 
-						if(chr->code == '}')
+						if(*chr == '}')
 						{
 							ConsumeChar();
 							break;
 						}
-						else if(chr->code == ',')
+						else if(*chr == ',')
 						{
 							ConsumeChar();
 							chr = EatWhitespace(source);
-							EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-							EL_ERROR(chr->code == '}', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
+							EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
+							EL_ERROR(*chr == '}', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
 						}
 						else
 							EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
@@ -349,19 +349,19 @@ namespace el1::io::format::json
 				bool escape = false;
 
 				{
-					const TUTF32* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-					EL_ERROR(chr->code != '\"', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
+					const char32_t* const chr = NextChar(source);
+					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
+					EL_ERROR(*chr != '\"', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
 					ConsumeChar();
 				}
 
 				for(;;)
 				{
-					const TUTF32* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
-					EL_ERROR(!tolerant && chr->code < 32, TInvalidJsonException, pos, line, *chr, EReason::UNESCAPED_CTRL);
+					const char32_t* const chr = NextChar(source);
+					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
+					EL_ERROR(!tolerant && *chr < 32, TInvalidJsonException, pos, line, *chr, EReason::UNESCAPED_CTRL);
 
-					if(chr->code == '\\')
+					if(*chr == '\\')
 					{
 						if(escape)
 						{
@@ -373,7 +373,7 @@ namespace el1::io::format::json
 							escape = true;
 						}
 					}
-					else if(chr->code == '\"')
+					else if(*chr == '\"')
 					{
 						if(escape)
 						{
@@ -390,7 +390,7 @@ namespace el1::io::format::json
 					{
 						if(escape)
 						{
-							switch(chr->code)
+							switch(*chr)
 							{
 								case 'b':
 									str += '\b';
@@ -416,7 +416,7 @@ namespace el1::io::format::json
 								default:
 								{
 									EL_ERROR(!tolerant, TInvalidJsonException, pos, line, *chr, EReason::INVALID_ESCAPE);
-									str += chr;
+									str += *chr;
 								}
 							}
 							escape = false;
@@ -446,33 +446,33 @@ namespace el1::io::format::json
 
 				for(;;)
 				{
-					const TUTF32* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr && ii == 0 && parse_int, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
+					const char32_t* const chr = NextChar(source);
+					EL_ERROR(chr == nullptr && ii == 0 && parse_int, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
 
 					if(chr == nullptr)
 						break;
-					else if(chr->code == '-' && parse_int && ii == 0 && !negative)
+					else if(*chr == '-' && parse_int && ii == 0 && !negative)
 					{
 						negative = true;
 					}
-					else if(chr->code == '.' && parse_int)
+					else if(*chr == '.' && parse_int)
 					{
 						parse_int = false;
 					}
-					else if(chr->code >= '0' && chr->code <= '9')
+					else if(*chr >= '0' && *chr <= '9')
 					{
 						if(parse_int)
 						{
 							EL_ERROR(ii >= sizeof(integer_part), TInvalidJsonException, pos, line, *chr, EReason::NUMBER_TOO_BIG);
-							integer_part[ii++] = ((u8_t)(chr->code - '0'));
+							integer_part[ii++] = ((u8_t)(*chr - '0'));
 						}
 						else
 						{
-							number += (chr->code - '0') / divider;
+							number += (*chr - '0') / divider;
 							divider *= 10.0;
 						}
 					}
-					else if(IsWhitespace(*chr) || chr->code == ',' || chr->code == ']' || chr->code == '}')
+					else if(IsWhitespace(*chr) || *chr == ',' || *chr == ']' || *chr == '}')
 						break;
 					else
 						EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
@@ -504,15 +504,15 @@ namespace el1::io::format::json
 			template<typename TSourceStream>
 			TJsonValue ParseBoolean(TSourceStream* const source)
 			{
-				const TUTF32* const chr = NextChar(source);
-				EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
+				const char32_t* const chr = NextChar(source);
+				EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
 
-				if(chr->code == 't')
+				if(*chr == 't')
 				{
 					EatLiteral(source, "true");
 					return TJsonValue(true);
 				}
-				else if(chr->code == 'f')
+				else if(*chr == 'f')
 				{
 					EatLiteral(source, "false");
 					return TJsonValue(false);
@@ -524,33 +524,33 @@ namespace el1::io::format::json
 			template<typename TSourceStream>
 			TJsonValue ParseAny(TSourceStream* const source)
 			{
-				const TUTF32* const chr = EatWhitespace(source);
-				EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, TUTF32::TERMINATOR, EReason::UNEXPECTED_EOF);
+				const char32_t* const chr = EatWhitespace(source);
+				EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
 
-				if(chr->code == '[')
+				if(*chr == '[')
 					return ParseArray(source);
-				else if(chr->code == '{')
+				else if(*chr == '{')
 					return ParseMap(source);
-				else if(chr->code == '\"')
+				else if(*chr == '\"')
 					return ParseString(source);
-				else if( (chr->code >= '0' && chr->code <= '9') || chr->code == '-' || chr->code == '.' )
+				else if( (*chr >= '0' && *chr <= '9') || *chr == '-' || *chr == '.' )
 					return ParseNumber(source);
-				else if(chr->code == 'n')
+				else if(*chr == 'n')
 					return ParseNull(source);
-				else if(chr->code == 't' || chr->code == 'f')
+				else if(*chr == 't' || *chr == 'f')
 					return ParseBoolean(source);
 				else
 					EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
 			}
 
 		public:
-			using TIn = TUTF32;
+			using TIn = char32_t;
 			using TOut = TJsonValue;
 
 			template<typename TSourceStream>
 			TJsonValue* NextItem(TSourceStream* const source)
 			{
-				const TUTF32* const chr = EatWhitespace(source);
+				const char32_t* const chr = EatWhitespace(source);
 				if(chr == nullptr)
 					return nullptr;
 

@@ -283,7 +283,7 @@ namespace
 			EXPECT_TRUE(full_path->ToString() == "Top.Science.Astronomy");
 			EXPECT_TRUE(parent_path->ToString() == "Top.Science");
 			EXPECT_TRUE(empty_path->IsEmpty());
-			EXPECT_EQ(full_path->Separator(), el1::io::text::encoding::TUTF32('.'));
+			EXPECT_EQ(full_path->Separator(), U'.');
 		}
 	}
 
@@ -298,7 +298,7 @@ namespace
 		auto [backend_pid] = rs->Row<s32_t>();
 		ASSERT_NE(backend_pid, nullptr);
 
-		const TString channel_name = TString::Format("el1 notify \"channel\" %d", *backend_pid);
+		const TString channel_name = TString::Format(U"el1 notify \"channel\" %d", *backend_pid);
 		const TString first_payload = "first payload";
 		const TString second_payload = "second payload";
 

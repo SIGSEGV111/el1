@@ -27,7 +27,7 @@ namespace el1::io::path
 
 	TString TInvalidPathException::Message() const
 	{
-		return TString::Format("invalid path encountered: %q at %d", ReasonText(reason), idx_component);
+		return TString::Format(U"invalid path encountered: %q at %d", ReasonText(reason), idx_component);
 	}
 
 	IException* TInvalidPathException::Clone() const
@@ -190,11 +190,11 @@ namespace el1::io::path
 		return cached_cstr.get();
 	}
 
-	TPath::TPath(const TUTF32 separator, const bool allow_absolute) : separator(separator), allow_absolute(allow_absolute)
+	TPath::TPath(const char32_t separator, const bool allow_absolute) : separator(separator), allow_absolute(allow_absolute)
 	{
 	}
 
-	TPath::TPath(const TString& str, const TUTF32 separator, const bool allow_absolute) :
+	TPath::TPath(const TString& str, const char32_t separator, const bool allow_absolute) :
 		components(str.Length() == 0 ? TList<TString>() : str.Split(separator)),
 		separator(separator),
 		allow_absolute(allow_absolute)
@@ -204,28 +204,28 @@ namespace el1::io::path
 		Validate();
 	}
 
-	TPath::TPath(std::initializer_list<TString> list, const TUTF32 separator, const bool allow_absolute) : components(list), separator(separator), allow_absolute(allow_absolute)
+	TPath::TPath(std::initializer_list<TString> list, const char32_t separator, const bool allow_absolute) : components(list), separator(separator), allow_absolute(allow_absolute)
 	{
 		Validate();
 	}
 
-	TPath::TPath(const TUTF32 separator) : TPath(separator, false)
+	TPath::TPath(const char32_t separator) : TPath(separator, false)
 	{
 	}
 
-	TPath::TPath(const TString& str, const TUTF32 separator) : TPath(str, separator, false)
+	TPath::TPath(const TString& str, const char32_t separator) : TPath(str, separator, false)
 	{
 	}
 
-	TPath::TPath(const char* const str, const TUTF32 separator) : TPath(TString(str), separator)
+	TPath::TPath(const char* const str, const char32_t separator) : TPath(TString(str), separator)
 	{
 	}
 
-	TPath::TPath(const wchar_t* const str, const TUTF32 separator) : TPath(TString(str), separator)
+	TPath::TPath(const wchar_t* const str, const char32_t separator) : TPath(TString(str), separator)
 	{
 	}
 
-	TPath::TPath(std::initializer_list<TString> list, const TUTF32 separator) : TPath(list, separator, false)
+	TPath::TPath(std::initializer_list<TString> list, const char32_t separator) : TPath(list, separator, false)
 	{
 	}
 

@@ -14,53 +14,15 @@ namespace el1::io::text::encoding
 		DECODING
 	};
 
-	struct TUTF32
+	constexpr usys_t UTF32StringLength(const char32_t* const str, const usys_t maxlen = NEG1) noexcept
 	{
-		u32_t code;
-
-		~TUTF32() = default;
-		TUTF32() = default;
-		constexpr TUTF32(TUTF32&&) = default;
-		constexpr TUTF32(const TUTF32&) = default;
-		constexpr TUTF32(const u32_t code) : code(code) {}
-
-		#ifdef EL_CHAR_IS_UTF8
-			// an individual UTF8 char can only be 7bit ASCII which translates 1:1 to UTF32
-			constexpr TUTF32(const char chr) : code((u32_t)chr) {}
-		#else
-			TUTF32(const char chr);
-		#endif
-
-		#ifdef EL_WCHAR_IS_UTF32
-			constexpr TUTF32(const wchar_t chr) : code((u32_t)chr) {}
-		#else
-			TUTF32(const wchar_t chr);
-		#endif
-
-		inline bool operator!=(const TUTF32& rhs) const EL_GETTER { return code != rhs.code; }
-		inline bool operator==(const TUTF32& rhs) const EL_GETTER { return code == rhs.code; }
-		inline bool operator>=(const TUTF32& rhs) const EL_GETTER { return code >= rhs.code; }
-		inline bool operator<=(const TUTF32& rhs) const EL_GETTER { return code <= rhs.code; }
-		inline bool operator> (const TUTF32& rhs) const EL_GETTER { return code >  rhs.code; }
-		inline bool operator< (const TUTF32& rhs) const EL_GETTER { return code <  rhs.code; }
-
-		TUTF32& operator=(const TUTF32&) = default;
-		TUTF32& operator=(TUTF32&&) = default;
-
-		bool IsAscii() const EL_GETTER;
-		bool IsAsciiDecimal() const EL_GETTER;
-		bool IsAsciiAlpha() const EL_GETTER;
-		bool IsControl() const EL_GETTER;
-		bool IsWhitespace() const EL_GETTER;
-
-		static const TUTF32 TERMINATOR;
-		static usys_t StringLength(const TUTF32* const str, const usys_t maxlen = NEG1);
-	};
-
-	constexpr TUTF32 operator ""_U(const char chr) { return TUTF32(chr); }
+		usys_t i = 0;
+		for(; i < maxlen && str[i] != U'\0'; i++);
+		return i;
+	}
 
 	#ifdef EL_WCHAR_IS_UTF32
-		using TWideCharDecoder = io::stream::TReinterpretCastTransformer<TUTF32>;
+		using TWideCharDecoder = io::stream::TReinterpretCastTransformer<char32_t>;
 		using TWideCharEncoder = io::stream::TReinterpretCastTransformer<wchar_t>;
 	#endif
 }
