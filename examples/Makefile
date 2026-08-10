@@ -1,6 +1,6 @@
 EL1_ROOT := ..
 OUT_DIR ?= $(EL1_ROOT)/gen/examples
-CXX := $(shell command -v clang++ || command -v g++)
+CXX := clang++
 
 CPPFLAGS ?=
 CXXFLAGS ?=

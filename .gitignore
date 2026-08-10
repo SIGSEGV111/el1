@@ -11,3 +11,4 @@ examples/neopixel-spi-driver/neopixel-spi-driver
 src/**/*.Makefile
 *.rpm
 vgcore.*
+gen-lifetime

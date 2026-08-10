@@ -1,12 +1,12 @@
 .DEFAULT_GOAL := all
 
-.PHONY: all release debug clean install install-runtime install-devel package rpm deploy \
-	test test-release test-debug coverage-report examples examples-test \
-	check-valgrind check-coverage-tools lifetime-check entr
+# -----------------------------------------------------------------------------
+# Toolchain and user configuration
+# -----------------------------------------------------------------------------
 
+CXX := clang++
 ARCH ?= $(shell rpm --eval '%{_target_cpu}' 2>/dev/null || uname -m)
 VERSION ?= *DEVELOPMENT SNAPSHOT*
-CXX := $(shell command -v clang++)
 
 WITH_POSTGRES ?= 1
 WITH_POSTGRES_TESTS ?= $(WITH_POSTGRES)
@@ -20,76 +20,137 @@ CPPFLAGS ?=
 CXXFLAGS ?=
 LDFLAGS ?=
 EXEFLAGS ?=
+TEST_CXXFLAGS ?=
 TEST_GTEST_FLAGS ?=
+LIFETIME_EXTRA_CXXFLAGS ?=
 
 RELEASE_CXXFLAGS ?= -O3 -g -DNDEBUG -flto
 DEBUG_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
-TEST_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
+GTEST_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
 COVERAGE_CXXFLAGS ?= -fprofile-instr-generate -fcoverage-mapping
 
-LIFETIME_SAFETY_SUPPORTED := $(shell printf 'int main(){}\n' | $(CXX) -x c++ -std=c++20 -fsyntax-only -Werror=unknown-warning-option -Wlifetime-safety-permissive - >/dev/null 2>&1 && echo 1 || echo 0)
-LIFETIME_CXXFLAGS := -Wdangling -Werror=dangling -Werror=return-stack-address
-ifeq ($(LIFETIME_SAFETY_SUPPORTED),1)
-	LIFETIME_CXXFLAGS += -Wlifetime-safety-permissive
+ifeq ($(ARCH),x86_64)
+RELEASE_CXXFLAGS += -march=x86-64-v2
 endif
 
-ifeq ($(ARCH),x86_64)
-	RELEASE_CXXFLAGS += -march=x86-64-v2
-endif
+# -----------------------------------------------------------------------------
+# Clang lifetime diagnostics
+# -----------------------------------------------------------------------------
+
+# Emit the warning flag only when the selected Clang understands it. This keeps
+# the Makefile usable with older Clang releases while automatically enabling new
+# lifetime-safety analysis as the compiler gains support.
+define clang_warning_if_supported
+$(strip $(shell printf 'int main(){}\n' | $(CXX) -x c++ -std=c++20 -fsyntax-only \
+	-Werror=unknown-warning-option $(1) - >/dev/null 2>&1 && printf '%s' '$(1)'))
+endef
+
+LIFETIME_PERMISSIVE_FLAG := $(call clang_warning_if_supported,-Wlifetime-safety-permissive)
+LIFETIME_STRICT_FLAG := $(call clang_warning_if_supported,-Wlifetime-safety-strict)
+LIFETIME_VALIDATIONS_FLAG := $(call clang_warning_if_supported,-Wlifetime-safety-validations)
+LIFETIME_SUGGESTIONS_FLAG := $(call clang_warning_if_supported,-Wlifetime-safety-suggestions)
+
+# High-confidence diagnostics are part of every normal Debug compilation.
+BASE_LIFETIME_CXXFLAGS := -Wdangling -Werror=dangling -Werror=return-stack-address
+DEBUG_LIFETIME_CXXFLAGS := $(BASE_LIFETIME_CXXFLAGS) $(LIFETIME_PERMISSIVE_FLAG)
+
+# The dedicated lifetime-check additionally enables diagnostics that may be
+# noisier or intentionally advisory. -Wlifetime-safety-strict already includes
+# invalidation analysis when supported by the compiler.
+LIFETIME_CHECK_CXXFLAGS := \
+	$(LIFETIME_STRICT_FLAG) \
+	$(LIFETIME_VALIDATIONS_FLAG) \
+	$(LIFETIME_SUGGESTIONS_FLAG)
+
+# -----------------------------------------------------------------------------
+# Optional features, packages and test selection
+# -----------------------------------------------------------------------------
 
 PROJECT_CPPFLAGS :=
 PACKAGE_NAMES := krb5 zlib openssl
 
 ifeq ($(WITH_POSTGRES),1)
-	PROJECT_CPPFLAGS += -DEL1_WITH_POSTGRES
-	PACKAGE_NAMES += libpq
+PROJECT_CPPFLAGS += -DEL1_WITH_POSTGRES
+PACKAGE_NAMES += libpq
 endif
 
 ifeq ($(WITH_VALGRIND),1)
-	PROJECT_CPPFLAGS += -DEL1_WITH_VALGRIND
+PROJECT_CPPFLAGS += -DEL1_WITH_VALGRIND
 endif
 
 TEST_EXCLUDE_PATTERNS :=
 
 ifeq ($(WITH_POSTGRES_TESTS),0)
-	TEST_EXCLUDE_PATTERNS += db_postgres.*
+TEST_EXCLUDE_PATTERNS += db_postgres.*
 endif
 
 ifeq ($(WITH_PROCESS_TESTS),0)
-	TEST_EXCLUDE_PATTERNS += system_task.TProcess_* io_net_http.THttpServer_*
+TEST_EXCLUDE_PATTERNS += system_task.TProcess_* io_net_http.THttpServer_*
 endif
 
 ifeq ($(WITH_NETWORK_TESTS),0)
-	TEST_EXCLUDE_PATTERNS += io_net_ip.ResolveHostname
+TEST_EXCLUDE_PATTERNS += io_net_ip.ResolveHostname
 endif
 
 ifeq ($(WITH_TIMING_TESTS),0)
-	TEST_EXCLUDE_PATTERNS += system_time.TTime_Now
+TEST_EXCLUDE_PATTERNS += system_time.TTime_Now
 endif
 
 empty :=
 space := $(empty) $(empty)
 ifneq ($(strip $(TEST_EXCLUDE_PATTERNS)),)
-	TEST_GTEST_FLAGS += '--gtest_filter=-$(subst $(space),:,$(strip $(TEST_EXCLUDE_PATTERNS)))'
+TEST_GTEST_FLAGS += '--gtest_filter=-$(subst $(space),:,$(strip $(TEST_EXCLUDE_PATTERNS)))'
 endif
 
 ifeq ($(WITH_COVERAGE),1)
-	DEBUG_COVERAGE_CXXFLAGS := $(COVERAGE_CXXFLAGS)
+DEBUG_COVERAGE_CXXFLAGS := $(COVERAGE_CXXFLAGS)
 else
-	DEBUG_COVERAGE_CXXFLAGS :=
+DEBUG_COVERAGE_CXXFLAGS :=
 endif
 
-COMMON_CXXFLAGS := -Wall -Wextra -Wno-unused-command-line-argument \
-	-Wno-unused-parameter -Wno-unused-const-variable -Wno-vla-extension \
-	-Wno-deprecated-declarations -std=c++20 $(CXXFLAGS)
+# -----------------------------------------------------------------------------
+# Build flags
+# -----------------------------------------------------------------------------
+
+COMMON_CXXFLAGS := \
+	-Wall -Wextra \
+	-Wno-unused-command-line-argument \
+	-Wno-unused-parameter \
+	-Wno-unused-const-variable \
+	-Wno-vla-extension \
+	-Wno-deprecated-declarations \
+	-std=c++20 \
+	$(CXXFLAGS)
+
 COMMON_LDFLAGS := -fuse-ld=lld $(LDFLAGS)
-PACKAGE_CXXFLAGS = $(shell pkg-config --cflags $(PACKAGE_NAMES))
-LIB_CXXFLAGS = -fPIC $(PACKAGE_CXXFLAGS)
+PACKAGE_CXXFLAGS := $(shell pkg-config --cflags $(PACKAGE_NAMES))
+PACKAGE_LDLIBS := $(shell pkg-config --libs $(PACKAGE_NAMES))
+LIB_CXXFLAGS := -fPIC $(PACKAGE_CXXFLAGS)
 EXE_CXXFLAGS := -fPIE
-LIB_LDFLAGS = $(shell pkg-config --libs $(PACKAGE_NAMES)) -Wl,--no-undefined
-GTEST_CXXFLAGS := -Wno-unused-command-line-argument -fuse-ld=lld -fPIC $(CXXFLAGS) $(TEST_CXXFLAGS)
+LIB_LINK_FLAGS := -Wl,--no-undefined
+GTEST_BUILD_CXXFLAGS := \
+	-Wno-unused-command-line-argument \
+	-fuse-ld=lld \
+	-fPIC \
+	$(CXXFLAGS) \
+	$(GTEST_CXXFLAGS)
+
+RELEASE_BUILD_CXXFLAGS := $(RELEASE_CXXFLAGS)
+DEBUG_BUILD_CXXFLAGS := \
+	$(DEBUG_CXXFLAGS) \
+	$(DEBUG_LIFETIME_CXXFLAGS) \
+	$(LIFETIME_EXTRA_CXXFLAGS) \
+	$(DEBUG_COVERAGE_CXXFLAGS)
+
+RELEASE_TEST_CXXFLAGS := $(RELEASE_BUILD_CXXFLAGS) $(TEST_CXXFLAGS)
+DEBUG_TEST_CXXFLAGS := $(DEBUG_BUILD_CXXFLAGS) $(TEST_CXXFLAGS)
+
+# -----------------------------------------------------------------------------
+# Paths and generated files
+# -----------------------------------------------------------------------------
 
 OUT_DIR ?= gen
+LIFETIME_OUT_DIR ?= $(OUT_DIR)-lifetime
 RELEASE_DIR := $(OUT_DIR)/release
 DEBUG_DIR := $(OUT_DIR)/debug
 GTEST_DIR := $(OUT_DIR)/gtest
@@ -103,6 +164,7 @@ LIB_DIR ?= /usr/lib
 INCLUDE_DIR ?= /usr/include
 ABI_VERSION ?= 0
 KEYID ?= BE5096C665CA4595AF11DAB010CD9FF74E4565ED
+
 ARCH_RPM_NAME := el1.$(ARCH).rpm
 DEVEL_RPM_NAME := el1-devel.$(ARCH).rpm
 SRC_RPM_NAME := el1.src.rpm
@@ -137,6 +199,10 @@ DEP_FILES := \
 	$(RELEASE_TEST_OBJECTS:.o=.d) \
 	$(DEBUG_TEST_OBJECTS:.o=.d)
 
+# -----------------------------------------------------------------------------
+# Test and coverage tools
+# -----------------------------------------------------------------------------
+
 VALGRIND ?= valgrind
 VALGRIND_FLAGS ?= \
 	--quiet \
@@ -152,12 +218,23 @@ LLVM_PROFDATA ?= llvm-profdata
 LLVM_COV ?= llvm-cov
 
 ifeq ($(WITH_VALGRIND),1)
-	TEST_RUNNER := $(VALGRIND) $(VALGRIND_FLAGS)
+TEST_RUNNER := $(VALGRIND) $(VALGRIND_FLAGS)
 else
-	TEST_RUNNER :=
+TEST_RUNNER :=
 endif
 
 export CXX
+
+# -----------------------------------------------------------------------------
+# Primary targets
+# -----------------------------------------------------------------------------
+
+.PHONY: all release debug clean \
+	compile-debug build-tests-release build-tests-debug \
+	install install-runtime install-devel package rpm deploy \
+	test test-release test-debug coverage-report \
+	examples examples-test \
+	check-valgrind check-coverage-tools lifetime-check entr
 
 all: release debug
 
@@ -165,26 +242,55 @@ release: $(RELEASE_LIB_NAME) $(RELEASE_LIB_LINK_NAME) $(SUPER_HEADER)
 
 debug: $(DEBUG_LIB_NAME) $(DEBUG_LIB_LINK_NAME) $(SUPER_HEADER)
 
+# Compile every el1 Debug translation unit without linking googletest. This is
+# used by static-analysis targets that only need compiler diagnostics.
+compile-debug: $(DEBUG_LIB_OBJECTS) $(DEBUG_TEST_OBJECTS)
+
+build-tests-release: $(RELEASE_TEST_NAME)
+
+build-tests-debug: $(DEBUG_TEST_NAME)
+
 examples: release
-	$(MAKE) -C examples all
+	$(MAKE) --no-print-directory -C examples CXX="$(CXX)" all
 
 examples-test: release
-	$(MAKE) -C examples smoke-test
+	$(MAKE) --no-print-directory -C examples CXX="$(CXX)" smoke-test
 
+# High-confidence lifetime diagnostics are already enabled by every Debug build.
+# This target adds stricter/advisory analyses in an isolated output directory and
+# verifies that deliberately-invalid lifetime examples are still rejected.
 lifetime-check:
-	$(MAKE) OUT_DIR=$(OUT_DIR)-lifetime WITH_POSTGRES=0 WITH_POSTGRES_TESTS=0 WITH_VALGRIND=0 WITH_COVERAGE=0 \
+	$(MAKE) --no-print-directory \
+		OUT_DIR="$(LIFETIME_OUT_DIR)" \
+		WITH_POSTGRES=0 WITH_POSTGRES_TESTS=0 \
+		WITH_VALGRIND=0 WITH_COVERAGE=0 \
 		WITH_PROCESS_TESTS=0 WITH_NETWORK_TESTS=0 WITH_TIMING_TESTS=0 \
-		CXXFLAGS="$(CXXFLAGS) $(LIFETIME_CXXFLAGS)" debug
+		LIFETIME_EXTRA_CXXFLAGS="$(LIFETIME_CHECK_CXXFLAGS)" \
+		compile-debug
 	@log="$$(mktemp)"; \
-	if $(CXX) -std=c++20 -I src $(LIFETIME_CXXFLAGS) -fdiagnostics-show-option -fsyntax-only support/lifetime-negative.cpp >"$$log" 2>&1; then \
-		cat "$$log"; rm -f "$$log"; echo "lifetime-check: negative test unexpectedly compiled" >&2; exit 1; \
+	if $(CXX) -std=c++20 -I src $(BASE_LIFETIME_CXXFLAGS) -fdiagnostics-show-option \
+		-fsyntax-only support/lifetime-negative.cpp >"$$log" 2>&1; then \
+		cat "$$log"; \
+		rm -f "$$log"; \
+		echo "lifetime-check: negative test unexpectedly compiled" >&2; \
+		exit 1; \
 	fi; \
-	grep -q -- '-Wreturn-stack-address' "$$log" && grep -q -- '-Wdangling' "$$log" || { cat "$$log"; rm -f "$$log"; echo "lifetime-check: expected lifetime diagnostics missing" >&2; exit 1; }; \
+	grep -Eq -- '-W(dangling[^]]*|return-stack-address|lifetime-safety[^]]*)' "$$log" || { \
+		cat "$$log"; \
+		rm -f "$$log"; \
+		echo "lifetime-check: expected lifetime diagnostics missing" >&2; \
+		exit 1; \
+	}; \
 	rm -f "$$log"
-	@echo "lifetime-check: Clang lifetime-safety=$(LIFETIME_SAFETY_SUPPORTED)"
+	@echo "Debug lifetime flags: $(strip $(DEBUG_LIFETIME_CXXFLAGS))"
+	@echo "Additional lifetime-check flags: $(strip $(LIFETIME_CHECK_CXXFLAGS))"
 
 clean:
-	rm -rf -- "$(OUT_DIR)" *.rpm
+	rm -rf -- "$(OUT_DIR)" "$(LIFETIME_OUT_DIR)" *.rpm
+
+# -----------------------------------------------------------------------------
+# Library and test build rules
+# -----------------------------------------------------------------------------
 
 $(SUPER_HEADER): $(LIB_HEADERS)
 	@mkdir -p "$(@D)"
@@ -194,40 +300,46 @@ $(SUPER_HEADER): $(LIB_HEADERS)
 
 $(RELEASE_DIR)/obj/%.o: src/el1/%.cpp Makefile
 	@mkdir -p "$(@D)"
-	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(RELEASE_CXXFLAGS) $(LIB_CXXFLAGS) -MMD -MP -c -o "$@" "$<"
+	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(RELEASE_BUILD_CXXFLAGS) $(LIB_CXXFLAGS) \
+		-MMD -MP -c -o "$@" "$<"
 
 $(DEBUG_DIR)/obj/%.o: src/el1/%.cpp Makefile
 	@mkdir -p "$(@D)"
-	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(DEBUG_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) $(LIB_CXXFLAGS) -MMD -MP -c -o "$@" "$<"
+	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(DEBUG_BUILD_CXXFLAGS) $(LIB_CXXFLAGS) \
+		-MMD -MP -c -o "$@" "$<"
 
 $(RELEASE_LIB_NAME): $(RELEASE_LIB_OBJECTS) $(LIB_HEADERS)
 	@mkdir -p "$(@D)"
-	$(CXX) $(COMMON_LDFLAGS) $(RELEASE_CXXFLAGS) -shared -Wl,-soname,$(LIB_SONAME) -o "$@" $(RELEASE_LIB_OBJECTS) $(LIB_LDFLAGS)
+	$(CXX) $(COMMON_LDFLAGS) $(RELEASE_CXXFLAGS) $(LIB_LINK_FLAGS) \
+		-shared -Wl,-soname,$(LIB_SONAME) -o "$@" $(RELEASE_LIB_OBJECTS) $(PACKAGE_LDLIBS)
 
 $(RELEASE_LIB_LINK_NAME): $(RELEASE_LIB_NAME)
 	ln -sfn "$(notdir $(RELEASE_LIB_NAME))" "$@"
 
 $(DEBUG_LIB_NAME): $(DEBUG_LIB_OBJECTS) $(LIB_HEADERS)
 	@mkdir -p "$(@D)"
-	$(CXX) $(COMMON_LDFLAGS) $(DEBUG_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) -shared -Wl,-soname,$(LIB_SONAME) -o "$@" $(DEBUG_LIB_OBJECTS) $(LIB_LDFLAGS)
+	$(CXX) $(COMMON_LDFLAGS) $(DEBUG_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) $(LIB_LINK_FLAGS) \
+		-shared -Wl,-soname,$(LIB_SONAME) -o "$@" $(DEBUG_LIB_OBJECTS) $(PACKAGE_LDLIBS)
 
 $(DEBUG_LIB_LINK_NAME): $(DEBUG_LIB_NAME)
 	ln -sfn "$(notdir $(DEBUG_LIB_NAME))" "$@"
 
 $(RELEASE_DIR)/test/%.o: src/el1/test/%.cpp Makefile
 	@mkdir -p "$(@D)"
-	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(TEST_CXXFLAGS) $(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) \
-		"-DVERSION=\"$(VERSION)\"" -I submodules/googletest/googletest/include -I src -MMD -MP -c -o "$@" "$<"
+	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(RELEASE_TEST_CXXFLAGS) \
+		$(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" \
+		-I submodules/googletest/googletest/include -I src -MMD -MP -c -o "$@" "$<"
 
 $(DEBUG_DIR)/test/%.o: src/el1/test/%.cpp Makefile
 	@mkdir -p "$(@D)"
-	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(TEST_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) $(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) \
-		"-DVERSION=\"$(VERSION)\"" -I submodules/googletest/googletest/include -I src -MMD -MP -c -o "$@" "$<"
+	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(DEBUG_TEST_CXXFLAGS) \
+		$(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" \
+		-I submodules/googletest/googletest/include -I src -MMD -MP -c -o "$@" "$<"
 
 $(GTEST_LIB): Makefile
 	@mkdir -p "$(GTEST_DIR)"
 	(P="$$PWD"; cd "$(GTEST_DIR)" && \
-		cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$(GTEST_CXXFLAGS)" "$$P/submodules/googletest" && \
+		cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$(GTEST_BUILD_CXXFLAGS)" "$$P/submodules/googletest" && \
 		$(MAKE))
 
 $(GTEST_MAIN_LIB): $(GTEST_LIB)
@@ -235,13 +347,19 @@ $(GTEST_MAIN_LIB): $(GTEST_LIB)
 
 $(RELEASE_TEST_NAME): $(RELEASE_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(RELEASE_LIB_LINK_NAME) $(SUPER_HEADER)
 	@mkdir -p "$(@D)"
-	$(CXX) $(COMMON_LDFLAGS) $(TEST_CXXFLAGS) $(EXE_CXXFLAGS) -o "$@" \
-		$(RELEASE_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) -L"$(RELEASE_DIR)" -lel1 $(LIB_LDFLAGS) $(EXEFLAGS)
+	$(CXX) $(COMMON_LDFLAGS) $(RELEASE_CXXFLAGS) $(EXE_CXXFLAGS) -o "$@" \
+		$(RELEASE_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) \
+		-L"$(RELEASE_DIR)" -lel1 $(PACKAGE_LDLIBS) $(EXEFLAGS)
 
 $(DEBUG_TEST_NAME): $(DEBUG_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(DEBUG_LIB_LINK_NAME) $(SUPER_HEADER)
 	@mkdir -p "$(@D)"
-	$(CXX) $(COMMON_LDFLAGS) $(TEST_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) $(EXE_CXXFLAGS) -o "$@" \
-		$(DEBUG_LIB_OBJECTS) $(DEBUG_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(LIB_LDFLAGS) $(EXEFLAGS)
+	$(CXX) $(COMMON_LDFLAGS) $(DEBUG_CXXFLAGS) $(DEBUG_COVERAGE_CXXFLAGS) $(EXE_CXXFLAGS) -o "$@" \
+		$(DEBUG_LIB_OBJECTS) $(DEBUG_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) \
+		$(PACKAGE_LDLIBS) $(EXEFLAGS)
+
+# -----------------------------------------------------------------------------
+# Tests and coverage
+# -----------------------------------------------------------------------------
 
 ifeq ($(WITH_VALGRIND),1)
 check-valgrind:
@@ -260,6 +378,7 @@ check-coverage-tools:
 	@:
 endif
 
+# Keep Release and Debug runs sequential: both use TEST_WORK_DIRS.
 test:
 	$(MAKE) --no-print-directory test-release
 	$(MAKE) --no-print-directory coverage-report
@@ -294,10 +413,14 @@ coverage-report: test-debug
 	@echo "Coverage disabled (WITH_COVERAGE=0)"
 endif
 
-$(ARCH_RPM_NAME) $(SRC_RPM_NAME): $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile LICENSE.txt
+# -----------------------------------------------------------------------------
+# Packaging and installation
+# -----------------------------------------------------------------------------
+
+$(ARCH_RPM_NAME) $(SRC_RPM_NAME) &: $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile LICENSE.txt
 	easy-rpm.sh --debug --name el1 --spec "$(SPEC_NAME)" --outdir . --plain --arch "$(ARCH)" -- $^
 
-$(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME): $(LIB_HEADERS) $(DEVEL_SPEC_NAME) Makefile LICENSE.txt
+$(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME) &: $(LIB_HEADERS) $(DEVEL_SPEC_NAME) Makefile LICENSE.txt
 	easy-rpm.sh --debug --name el1-devel --spec "$(DEVEL_SPEC_NAME)" --outdir . --plain --arch "$(ARCH)" -- $^
 
 install: install-runtime install-devel
@@ -314,14 +437,18 @@ install-devel: $(SUPER_HEADER)
 
 package: rpm
 
-rpm: $(ARCH_RPM_NAME) $(DEVEL_RPM_NAME)
+rpm: $(ARCH_RPM_NAME) $(SRC_RPM_NAME) $(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME)
 
-deploy: $(ARCH_RPM_NAME) $(DEVEL_RPM_NAME)
+deploy: $(ARCH_RPM_NAME) $(SRC_RPM_NAME) $(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME)
 	ensure-git-clean.sh
 	deploy-rpm.sh --infile="$(SRC_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
 	deploy-rpm.sh --infile="$(ARCH_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
 	deploy-rpm.sh --infile="$(DEVEL_SRC_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
 	deploy-rpm.sh --infile="$(DEVEL_RPM_NAME)" --outdir="$(RPMDIR)" --keyid="$(KEYID)"
+
+# -----------------------------------------------------------------------------
+# Developer convenience
+# -----------------------------------------------------------------------------
 
 entr: $(LIB_HEADERS) $(LIB_SOURCES) $(TEST_SOURCES) $(TEST_HEADERS)
 	printf '%s\n' $^ | entr bash -c 'clear; reset; make test'
