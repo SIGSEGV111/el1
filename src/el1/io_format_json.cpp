@@ -523,8 +523,7 @@ namespace el1::io::format::json
 		return output;
 	}
 
-	// TODO: this function is ugly - implement ITextWriter and use this instead
-	// also this function should produce a stream NOT write to one
+	// TODO: this function should produce a stream instead of writing to one
 	void TJsonValue::ToStream(stream::ISink<char32_t>& sink) const
 	{
 		TString str;

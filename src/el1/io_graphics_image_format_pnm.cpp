@@ -1,6 +1,5 @@
 #include "io_graphics_image_format_pnm.hpp"
-#include "io_text_string.hpp"
-#include "io_text_encoding_utf8.hpp"
+#include "io_text.hpp"
 #include <endian.h>
 
 namespace el1::io::graphics::image::format::pnm
@@ -9,9 +8,9 @@ namespace el1::io::graphics::image::format::pnm
 
 	void SaveP6(const TRasterImage& img, stream::IBinarySink& stream, const u16_t max_value)
 	{
-		using namespace io::text::encoding::utf8;
 		EL_ERROR(max_value == 0, TInvalidArgumentException, "max_value", "max_value must be greater than 0");
-		TString::Format(U"P6 %d %d %d\n", img.Width(), img.Height(), max_value).chars.Pipe().Transform(TUTF8Encoder()).ToStream(stream);
+		io::text::TStreamTextWriter writer(&stream);
+		writer.Print(U"P6 %d %d %d\n", img.Width(), img.Height(), max_value);
 
 		const float f_max_value = max_value;
 

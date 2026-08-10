@@ -21,6 +21,22 @@ namespace el1::io::text::format
 	using namespace io::types;
 	using namespace io::text::encoding;
 
+	/** Lightweight target used by the compile-time formatting registry. */
+	struct IFormatSink
+	{
+		virtual void Append(const char32_t* data, usys_t length) = 0;
+		virtual ~IFormatSink() = default;
+
+		void Append(const char32_t chr) { Append(&chr, 1); }
+
+		template<std::size_t N>
+		void Append(const char32_t (&literal)[N]) { Append(literal, N - 1); }
+
+		template<typename TView>
+		requires requires(const TView& view) { view.Data(); view.Length(); }
+		void Append(const TView& view) { Append(view.Data(), view.Length()); }
+	};
+
 	struct TDefaultFormatSpec
 	{
 		char32_t pad_sign = U'\0';
@@ -131,7 +147,7 @@ namespace el1::io::text::format
 		}
 
 		template<typename T>
-		concept CFormatter = requires(const T& value, const char32_t code, const formatter_spec_t<T>& spec, string::TString& out)
+		concept CFormatter = requires(const T& value, const char32_t code, const formatter_spec_t<T>& spec, IFormatSink& out)
 		{
 			{ TFormatter<T>::Supports(code) } -> std::convertible_to<bool>;
 			TFormatter<T>::Format(out, value, code, spec);
@@ -159,20 +175,20 @@ namespace el1::io::text::format
 			}
 		};
 
-		void AppendLiteral(string::TString& out, const char32_t* data, usys_t begin, usys_t end);
+		void AppendLiteral(IFormatSink& out, const char32_t* data, usys_t begin, usys_t end);
 
-		void FormatSigned(string::TString& out, s64_t value, const TDefaultFormatSpec& spec, unsigned radix, bool upper_case = false);
-		void FormatUnsigned(string::TString& out, u64_t value, const TDefaultFormatSpec& spec, unsigned radix, bool upper_case = false);
-		void FormatFloat(string::TString& out, double value, const TDefaultFormatSpec& spec, unsigned radix);
-		void FormatBCD(string::TString& out, const bcd::TBCD& value, const TDefaultFormatSpec& spec, unsigned radix);
-		void FormatString(string::TString& out, const string::TString& value, char32_t code, const TDefaultFormatSpec& spec);
-		void FormatStringView(string::TString& out, const string::TStringView& value, char32_t code, const TDefaultFormatSpec& spec);
-		void FormatCString(string::TString& out, const char* value, char32_t code, const TDefaultFormatSpec& spec);
-		void FormatWideString(string::TString& out, const wchar_t* value, char32_t code, const TDefaultFormatSpec& spec);
-		void FormatUTF32String(string::TString& out, const char32_t* value, char32_t code, const TDefaultFormatSpec& spec);
-		void FormatCharacter(string::TString& out, char value, char32_t code, const TDefaultFormatSpec& spec);
-		void FormatCharacter(string::TString& out, wchar_t value, char32_t code, const TDefaultFormatSpec& spec);
-		void FormatCharacter(string::TString& out, char32_t value, char32_t code, const TDefaultFormatSpec& spec);
+		void FormatSigned(IFormatSink& out, s64_t value, const TDefaultFormatSpec& spec, unsigned radix, bool upper_case = false);
+		void FormatUnsigned(IFormatSink& out, u64_t value, const TDefaultFormatSpec& spec, unsigned radix, bool upper_case = false);
+		void FormatFloat(IFormatSink& out, double value, const TDefaultFormatSpec& spec, unsigned radix);
+		void FormatBCD(IFormatSink& out, const bcd::TBCD& value, const TDefaultFormatSpec& spec, unsigned radix);
+		void FormatString(IFormatSink& out, const string::TString& value, char32_t code, const TDefaultFormatSpec& spec);
+		void FormatStringView(IFormatSink& out, const string::TStringView& value, char32_t code, const TDefaultFormatSpec& spec);
+		void FormatCString(IFormatSink& out, const char* value, char32_t code, const TDefaultFormatSpec& spec);
+		void FormatWideString(IFormatSink& out, const wchar_t* value, char32_t code, const TDefaultFormatSpec& spec);
+		void FormatUTF32String(IFormatSink& out, const char32_t* value, char32_t code, const TDefaultFormatSpec& spec);
+		void FormatCharacter(IFormatSink& out, char value, char32_t code, const TDefaultFormatSpec& spec);
+		void FormatCharacter(IFormatSink& out, wchar_t value, char32_t code, const TDefaultFormatSpec& spec);
+		void FormatCharacter(IFormatSink& out, char32_t value, char32_t code, const TDefaultFormatSpec& spec);
 	}
 
 	constexpr bool ParseDefaultFormatSpec(TDefaultFormatSpec& out, const TFormatSpecView& text) noexcept
@@ -211,7 +227,7 @@ namespace el1::io::text::format
 	requires ((std::is_integral_v<T> && !detail::IsCharacterType<T>) || std::is_enum_v<T>)
 	struct TFormatter<T> : detail::TNumericFormatterBase
 	{
-		static void Format(string::TString& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			const unsigned radix = Radix(code);
 			if constexpr(std::is_enum_v<T>)
@@ -233,7 +249,7 @@ namespace el1::io::text::format
 	requires std::is_floating_point_v<T>
 	struct TFormatter<T> : detail::TNumericFormatterBase
 	{
-		static void Format(string::TString& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			detail::FormatFloat(out, (double)value, spec, Radix(code));
 		}
@@ -242,7 +258,7 @@ namespace el1::io::text::format
 	template<>
 	struct TFormatter<bcd::TBCD> : detail::TNumericFormatterBase
 	{
-		static void Format(string::TString& out, const bcd::TBCD& value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const bcd::TBCD& value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			detail::FormatBCD(out, value, spec, Radix(code));
 		}
@@ -252,7 +268,7 @@ namespace el1::io::text::format
 	requires (std::derived_from<T, bcd::TBCD> && !std::same_as<T, bcd::TBCD>)
 	struct TFormatter<T> : detail::TNumericFormatterBase
 	{
-		static void Format(string::TString& out, const T& value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const T& value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			detail::FormatBCD(out, static_cast<const bcd::TBCD&>(value), spec, Radix(code));
 		}
@@ -262,7 +278,7 @@ namespace el1::io::text::format
 	requires (!std::derived_from<T, bcd::TBCD> && requires(const T& value) { { value.ToBCD() } -> std::convertible_to<bcd::TBCD>; })
 	struct TFormatter<T> : detail::TNumericFormatterBase
 	{
-		static void Format(string::TString& out, const T& value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const T& value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			detail::FormatBCD(out, value.ToBCD(), spec, Radix(code));
 		}
@@ -287,7 +303,7 @@ namespace el1::io::text::format
 			return !spec.has_precision || code != 'c';
 		}
 
-		static void Format(string::TString& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			if(detail::IsNumericCode(code))
 			{
@@ -305,7 +321,7 @@ namespace el1::io::text::format
 	struct TFormatter<string::TString>
 	{
 		static constexpr bool Supports(const char32_t code) noexcept { return code == 's' || code == 'q'; }
-		static void Format(string::TString& out, const string::TString& value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const string::TString& value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			detail::FormatString(out, value, code, spec);
 		}
@@ -315,7 +331,7 @@ namespace el1::io::text::format
 	struct TFormatter<string::TStringView>
 	{
 		static constexpr bool Supports(const char32_t code) noexcept { return code == 's' || code == 'q'; }
-		static void Format(string::TString& out, const string::TStringView& value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const string::TStringView& value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			detail::FormatStringView(out, value, code, spec);
 		}
@@ -328,7 +344,7 @@ namespace el1::io::text::format
 	{
 		static constexpr bool Supports(const char32_t code) noexcept { return code == 's' || code == 'q'; }
 
-		static void Format(string::TString& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			if constexpr(std::is_same_v<T, const char*> || std::is_same_v<T, char*>)
 				detail::FormatCString(out, value, code, spec);
@@ -345,7 +361,7 @@ namespace el1::io::text::format
 		static constexpr bool Supports(const char32_t code) noexcept { return code == 'p'; }
 		static constexpr unsigned Radix(const char32_t code) noexcept { return code == 'p' ? 16U : 0U; }
 		static constexpr bool Validate(const char32_t, const TDefaultFormatSpec& spec) noexcept { return !spec.has_precision; }
-		static void Format(string::TString& out, const std::nullptr_t, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const std::nullptr_t, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			detail::FormatUnsigned(out, 0, spec, Radix(code), true);
 		}
@@ -358,7 +374,7 @@ namespace el1::io::text::format
 		static constexpr bool Supports(const char32_t code) noexcept { return code == 'p'; }
 		static constexpr unsigned Radix(const char32_t code) noexcept { return code == 'p' ? 16U : 0U; }
 		static constexpr bool Validate(const char32_t, const TDefaultFormatSpec& spec) noexcept { return !spec.has_precision; }
-		static void Format(string::TString& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const T value, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			detail::FormatUnsigned(out, (u64_t)(usys_t)value, spec, Radix(code), true);
 		}
@@ -520,12 +536,12 @@ namespace el1::io::text::format
 				}
 			}
 
-			void AppendRaw(string::TString& out, const usys_t begin, const usys_t end) const
+			void AppendRaw(IFormatSink& out, const usys_t begin, const usys_t end) const
 			{
 				detail::AppendLiteral(out, literal, begin, end);
 			}
 
-			void AppendLiteral(string::TString& out, const usys_t begin, const usys_t end) const
+			void AppendLiteral(IFormatSink& out, const usys_t begin, const usys_t end) const
 			{
 				usys_t chunk = begin;
 				for(usys_t i = begin; i + 1 < end; i++)
@@ -542,7 +558,7 @@ namespace el1::io::text::format
 			}
 
 			template<usys_t I, typename T, typename... TRest>
-			void RenderFrom(string::TString& out, usys_t& pos, const T& value, const TRest&... rest) const
+			void RenderFrom(IFormatSink& out, usys_t& pos, const T& value, const TRest&... rest) const
 			{
 				using TArg = std::decay_t<const T>;
 				const auto& variable = std::get<I>(variables);
@@ -575,7 +591,7 @@ namespace el1::io::text::format
 			}
 
 			template<typename... A>
-			void RenderInto(string::TString& out, const A&... args) const
+			void RenderInto(IFormatSink& out, const A&... args) const
 			{
 				static_assert(sizeof...(A) == sizeof...(TArgs));
 				usys_t pos = 0;

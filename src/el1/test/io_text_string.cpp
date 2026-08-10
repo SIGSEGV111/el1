@@ -51,12 +51,11 @@ namespace el1::io::text::format
 			return false;
 		}
 
-		static void Format(string::TString& out, const ::TCustomFormatValue& value, const char32_t, const TSpec& spec)
+		static void Format(IFormatSink& out, const ::TCustomFormatValue& value, const char32_t, const TSpec& spec)
 		{
-			if(spec.unicode)
-				out += string::TString::Format(U"<U:%d>", value.value);
-			else
-				out += spec.hexadecimal ? string::TString::Format(U"<%x>", value.value) : string::TString::Format(U"<%d>", value.value);
+			const string::TString text = spec.unicode ? string::TString::Format(U"<U:%d>", value.value) :
+				(spec.hexadecimal ? string::TString::Format(U"<%x>", value.value) : string::TString::Format(U"<%d>", value.value));
+			out.Append(text.View());
 		}
 	};
 
@@ -68,9 +67,10 @@ namespace el1::io::text::format
 			return code == 'm';
 		}
 
-		static void Format(string::TString& out, const ::TDefaultSpecFormatValue& value, const char32_t, const TDefaultFormatSpec& spec)
+		static void Format(IFormatSink& out, const ::TDefaultSpecFormatValue& value, const char32_t, const TDefaultFormatSpec& spec)
 		{
-			out += string::TString::Format(U"<%d:%d:%d>", spec.has_width ? spec.width : 0, spec.has_precision ? spec.precision : 0, value.value);
+			const string::TString text = string::TString::Format(U"<%d:%d:%d>", spec.has_width ? spec.width : 0, spec.has_precision ? spec.precision : 0, value.value);
+			out.Append(text.View());
 		}
 	};
 }
@@ -541,15 +541,10 @@ namespace
 		EXPECT_EQ(TString::Format(U"test %d", (s64_t)17), "test 17");
 		EXPECT_EQ(TString::Format(U"test %d", (u64_t)17), "test 17");
 
-		// this is not exception-/thread-safe
-		TNumberFormatter nf = TNumberFormatter::PLAIN_DECIMAL_US_EN;
-		nf.config.n_decimal_places = 3;
-		TNumberFormatter::DEFAULT_DECIMAL = &nf;
-		EXPECT_EQ(TString::Format(U"test %d", 17.5725), "test 17.573");
-		EXPECT_EQ(TString::Format(U"test %d",  17.9995), "test 18.000");
-		EXPECT_EQ(TString::Format(U"test %d", -17.9995), "test -18.000");
-		EXPECT_EQ(TString::Format(U"test %d", -17.9994), "test -17.999");
-		TNumberFormatter::DEFAULT_DECIMAL = &TNumberFormatter::PLAIN_DECIMAL_US_EN;
+		EXPECT_EQ(TString::Format(U"test %.3d", 17.5725), "test 17.573");
+		EXPECT_EQ(TString::Format(U"test %.3d",  17.9995), "test 18.000");
+		EXPECT_EQ(TString::Format(U"test %.3d", -17.9995), "test -18.000");
+		EXPECT_EQ(TString::Format(U"test %.3d", -17.9994), "test -17.999");
 
 		EXPECT_EQ(TString::Format(U"test %02x", 10), "test 0a");
 		EXPECT_EQ(TString::Format(U"test %_2.7x", 10), "test _a.0000000");

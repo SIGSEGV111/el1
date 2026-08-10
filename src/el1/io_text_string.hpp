@@ -279,173 +279,6 @@ namespace el1::io::text::string
 		}
 	};
 
-	struct TUndefineFormatException : error::IException
-	{
-		const char* const argument_type;
-		const char* const format_name;
-
-		TString Message() const final override;
-		error::IException* Clone() const override;
-
-		TUndefineFormatException(const char* const argument_type, const char* const format_name);
-	};
-
-	struct TMissingFormatVariableException : error::IException
-	{
-		const TString format;
-
-		TString Message() const final override;
-		error::IException* Clone() const override;
-
-		TMissingFormatVariableException(const TString format) : format(format) {}
-	};
-
-	struct TTooManyFormatVariablesException : error::IException
-	{
-		const TString format;
-
-		TString Message() const final override;
-		error::IException* Clone() const override;
-
-		TTooManyFormatVariablesException(const TString format) : format(format) {}
-	};
-
-	struct IFormatter
-	{
-		virtual const char* FormatName() const = 0;
-
-		virtual TString Format(const char* const value) const;
-		virtual TString Format(const wchar_t* const value) const;
-		virtual TString Format(const TString& value) const;
-		virtual TString Format(const TStringView value) const;
-		virtual TString Format(const char value) const;
-		virtual TString Format(const wchar_t value) const;
-		virtual TString Format(const char32_t value) const;
-		virtual TString Format(const s8_t value) const;
-		virtual TString Format(const u8_t value) const;
-		virtual TString Format(const s16_t value) const;
-		virtual TString Format(const u16_t value) const;
-		virtual TString Format(const s32_t value) const;
-		virtual TString Format(const u32_t value) const;
-		virtual TString Format(const s64_t value) const;
-		virtual TString Format(const u64_t value) const;
-		virtual TString Format(const double value) const;
-		virtual TString Format(const bcd::TBCD& value) const;
-
-		template<usys_t N_DIGITS, u16_t N_INTEGER, u16_t N_DECIMAL, u8_t BASE>
-		TString Format(const bcd::TFixedBCD<N_DIGITS, N_INTEGER, N_DECIMAL, BASE>& value) const
-		{
-			return Format(value.ToBCD());
-		}
-		virtual TString Format(const void* const p_data, const usys_t n_bits) const;
-
-		virtual ~IFormatter();
-	};
-
-	struct TStringFormatter : IFormatter
-	{
-		struct config_t
-		{
-			TString prefix;
-			TString suffix;
-			unsigned n_min_length;
-			unsigned n_max_length;
-			char32_t pad_sign;
-			EPlacement align;
-			const array_t<const char32_t>* quote_symbols;
-			char32_t escape_symbol;
-		};
-
-		config_t config;
-		TStringFormatter(config_t config) : config(std::move(config)) {}
-
-		const char* FormatName() const final override;
-		TString Format(const char* const value) const final override;
-		TString Format(const wchar_t* const value) const final override;
-		TString Format(const TString& value) const final override;
-		TString Format(const TStringView value) const final override;
-		TString Format(const char value) const final override;
-		TString Format(const wchar_t value) const final override;
-		TString Format(const char32_t value) const final override;
-
-		char32_t DetectBestQuoteSymbol(const TString& str) const;
-
-		static const TStringFormatter PLAIN;
-		static const TStringFormatter ASCII_QUOTED;
-	};
-
-	struct TNumberFormatter : IFormatter
-	{
-		struct config_t
-		{
-			const array_t<const char32_t>* symbols;
-			TString prefix;
-			TString suffix;
-			char32_t decimal_point_sign;
-			char32_t grouping_sign;
-			char32_t integer_pad_sign;
-			char32_t decimal_pad_sign;
-			char32_t negative_sign;
-			char32_t positive_sign;
-			unsigned n_digits_per_group;
-			unsigned n_decimal_places;		// -1U => all significant decimal digits
-			unsigned n_min_integer_places;
-			math::ERoundingMode rounding;
-		};
-
-		config_t config;
-		TNumberFormatter(config_t config) : config(std::move(config)) {}
-
-		const char* FormatName() const final override;
-		TString Format(const s8_t value) const final override;
-		TString Format(const u8_t value) const final override;
-		TString Format(const s16_t value) const final override;
-		TString Format(const u16_t value) const final override;
-		TString Format(const s32_t value) const final override;
-		TString Format(const u32_t value) const final override;
-		TString Format(const s64_t value) const final override;
-		TString Format(const u64_t value) const final override;
-		TString Format(const bcd::TBCD& value) const final override;
-		TString Format(const double value) const final override;
-
-		TString MakeIntegerPart(u64_t value, const bool is_negative) const;
-		TString MakeDecimalPart(double& value) const;
-
-		static const TNumberFormatter* DEFAULT_OCTAL;
-		static const TNumberFormatter* DEFAULT_DECIMAL;
-		static const TNumberFormatter* DEFAULT_HEXADECIMAL;
-		static const TNumberFormatter* DEFAULT_BINARY;
-		static const TNumberFormatter* DEFAULT_ADDRESS;
-
-		static const TNumberFormatter PLAIN_OCTAL;
-		static const TNumberFormatter PLAIN_DECIMAL_US_EN;
-		static const TNumberFormatter PLAIN_HEXADECIMAL_UPPER_US_EN;
-		static const TNumberFormatter PLAIN_HEXADECIMAL_LOWER_US_EN;
- 		static const TNumberFormatter PLAIN_BINARY_US_EN;
-	};
-
-	struct TRawDataFormatter : IFormatter
-	{
-		const array_t<const char32_t>* symbols;
-
-		const char* FormatName() const final override;
-		TString Format(const char* const value) const final override;
-		TString Format(const wchar_t* const value) const final override;
-		TString Format(const TString& value) const final override;
-		TString Format(const char value) const final override;
-		TString Format(const wchar_t value) const final override;
-		TString Format(const char32_t value) const final override;
-		TString Format(const s8_t value) const final override;
-		TString Format(const u8_t value) const final override;
-		TString Format(const s16_t value) const final override;
-		TString Format(const u16_t value) const final override;
-		TString Format(const s32_t value) const final override;
-		TString Format(const u32_t value) const final override;
-		TString Format(const s64_t value) const final override;
-		TString Format(const u64_t value) const final override;
-		TString Format(const double value) const final override;
-		TString Format(const void* const p_data, const usys_t n_bits) const final override;
-	};
 
 
 	/********************************************/
@@ -467,12 +300,28 @@ namespace el1::io::text::string
 
 namespace el1::io::text::string
 {
+	namespace detail
+	{
+		class TStringFormatSink final : public format::IFormatSink
+		{
+			TString& out;
+		public:
+			explicit TStringFormatSink(TString& out) : out(out) {}
+			void Append(const char32_t* const data, const usys_t length) final
+			{
+				if(length != 0)
+					out.chars.Append(array_t<const char32_t>::FromUnsafePointer(data, length));
+			}
+		};
+	}
+
 	class TString;
 	template<typename ... A>
 	TString TString::Format(const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...>& format, A const& ...args)
 	{
 		TString out;
-		format.RenderInto(out, args...);
+		detail::TStringFormatSink sink(out);
+		format.RenderInto(sink, args...);
 		return out;
 	}
 }

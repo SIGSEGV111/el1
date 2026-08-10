@@ -116,29 +116,22 @@ namespace el1::dev::gcode::excellion
 
 	void TExcellionFile::ConvertToGrbl(ITextWriter& tw, const float z_toolchange, const float z_hole2hole, const float z_drill, const float fr_travel, const float fr_drill, const float fr_retract) const
 	{
-		string::TNumberFormatter nf = string::TNumberFormatter::PLAIN_DECIMAL_US_EN;
-		nf.config.n_decimal_places = 6;
-		nf.config.n_min_integer_places = 1;
-		tw<<&nf;
-
 		for(auto& kv : toolset.Items())
 			if(holes.Pipe().Filter([&kv](auto& hole){ return hole.tool_index == kv.key; }).Count() > 0)
 			{
-				tw<<"G1 Z"<<z_toolchange<<" F"<<fr_retract<<"\n";
-				tw<<"S0\n";
-				tw<<"G1 X0 Y0 F"<<fr_travel<<"\n";
-				tw<<"M0 change tool to drill bit with diameter "<<kv.value.diameter<<"mm\n";;
+				tw.Print(U"G1 Z%.6d F%.6d\n", z_toolchange, fr_retract);
+				tw.Print(U"S0\n");
+				tw.Print(U"G1 X0 Y0 F%.6d\n", fr_travel);
+				tw.Print(U"M0 change tool to drill bit with diameter %.6dmm\n", kv.value.diameter);
 
 				for(auto& hole : holes)
 					if(hole.tool_index == kv.key)
 					{
-						tw<<"G1 X"<<hole.pos[0]<<" Y"<<hole.pos[1]<<" F"<<fr_travel<<"\n";
-						tw<<"G1 Z0.25 F"<<fr_retract<<"\n";
-						tw<<"G1 Z"<<z_drill<<" F"<<fr_drill<<"\n";
-						tw<<"G1 Z"<<z_hole2hole<<" F"<<fr_retract<<"\n";
+						tw.Print(U"G1 X%.6d Y%.6d F%.6d\n", hole.pos[0], hole.pos[1], fr_travel);
+						tw.Print(U"G1 Z0.25 F%.6d\n", fr_retract);
+						tw.Print(U"G1 Z%.6d F%.6d\n", z_drill, fr_drill);
+						tw.Print(U"G1 Z%.6d F%.6d\n", z_hole2hole, fr_retract);
 					}
 			}
-
-		tw<<&string::TNumberFormatter::PLAIN_DECIMAL_US_EN;
 	}
 }

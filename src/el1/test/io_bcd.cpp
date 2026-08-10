@@ -963,9 +963,9 @@ namespace
 		EXPECT_GT(positive_infinity, one);
 		EXPECT_LT(negative_infinity, positive_infinity);
 
-		EXPECT_EQ(TNumberFormatter::PLAIN_DECIMAL_US_EN.Format(positive_infinity), "INF");
-		EXPECT_EQ(TNumberFormatter::PLAIN_DECIMAL_US_EN.Format(negative_infinity), "-INF");
-		EXPECT_EQ(TNumberFormatter::PLAIN_DECIMAL_US_EN.Format(nan), "NAN");
+		EXPECT_EQ(TString::Format(U"%d", positive_infinity), "INF");
+		EXPECT_EQ(TString::Format(U"%d", negative_infinity), "-INF");
+		EXPECT_EQ(TString::Format(U"%d", nan), "NAN");
 	}
 
 	TEST(io_bcd, DivisionMarksOnlyNonTerminatingExpansionsPeriodic)
