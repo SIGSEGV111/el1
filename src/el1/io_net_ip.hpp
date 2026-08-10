@@ -129,7 +129,9 @@ namespace el1::io::net::ip
 			ipport_t RemoteAddress() const final override EL_GETTER;
 
 			TTcpClient(const io::text::string::TString remote_host, const port_t remote_port);
+			TTcpClient(const io::text::string::TString remote_host, const port_t remote_port, const system::time::TTime connect_timeout);
 			TTcpClient(const ipaddr_t remote_ip, const port_t remote_port);
+			TTcpClient(const ipaddr_t remote_ip, const port_t remote_port, const system::time::TTime connect_timeout);
 			TTcpClient(system::handle::THandle handle, const ipport_t remote_address);
 
 			TTcpClient(TTcpClient&&) = default;

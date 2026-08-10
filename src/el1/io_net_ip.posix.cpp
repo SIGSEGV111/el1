@@ -19,6 +19,7 @@ namespace el1::io::net::ip
 {
 	using namespace system::handle;
 	using namespace system::waitable;
+	using namespace system::time;
 	using namespace collection::list;
 	using namespace text::string;
 
@@ -297,29 +298,51 @@ namespace el1::io::net::ip
 	}
 
 	TTcpClient::TTcpClient(const io::text::string::TString remote_host, const port_t remote_port) :
-		TTcpClient(ResolveHostname(remote_host)[0], remote_port)
+		TTcpClient(remote_host, remote_port, -1)
+	{
+	}
+
+	TTcpClient::TTcpClient(const io::text::string::TString remote_host, const port_t remote_port, const TTime connect_timeout) :
+		TTcpClient(ResolveHostname(remote_host)[0], remote_port, connect_timeout)
 	{
 	}
 
 	TTcpClient::TTcpClient(const ipaddr_t remote_ip, const port_t remote_port) :
+		TTcpClient(remote_ip, remote_port, -1)
+	{
+	}
+
+	TTcpClient::TTcpClient(const ipaddr_t remote_ip, const port_t remote_port, const TTime connect_timeout) :
 		handle(CreateSocket(SOCK_STREAM, 0, remote_ip.Version())),
 		remote_address{remote_ip, remote_port},
 		on_rx_ready({ .read = true, .write = false, .other = false }, handle),
 		on_tx_ready({ .read = false, .write = true, .other = false }, handle)
 	{
+		handle.BlockingIO(false);
+
+		int result;
 		if(remote_ip.IsV4())
 		{
 			auto addr = ConvertToPosixV4(remote_ip, remote_port);
-			EL_SYSERR(connect(this->handle, (const sockaddr*)&addr, sizeof(addr)));
+			result = ::connect(this->handle, (const sockaddr*)&addr, sizeof(addr));
 		}
 		else
 		{
 			auto addr = ConvertToPosixV6(remote_ip, remote_port);
-			EL_SYSERR(connect(this->handle, (const sockaddr*)&addr, sizeof(addr)));
+			result = ::connect(this->handle, (const sockaddr*)&addr, sizeof(addr));
 		}
 
-		const int flags = EL_SYSERR(fcntl(this->handle, F_GETFL));
-		EL_SYSERR(fcntl(this->handle, F_SETFL, flags | O_NONBLOCK));
+		if(result < 0)
+		{
+			EL_ERROR(errno != EINPROGRESS, TSyscallException, errno);
+			EL_ERROR(!on_tx_ready.WaitFor(connect_timeout), TException, "TCP connection attempt timed out");
+			on_tx_ready.Reset();
+
+			int socket_error = 0;
+			socklen_t error_size = sizeof(socket_error);
+			EL_SYSERR(::getsockopt(this->handle, SOL_SOCKET, SO_ERROR, &socket_error, &error_size));
+			EL_ERROR(socket_error != 0, TSyscallException, socket_error);
+		}
 	}
 
 	TTcpClient::TTcpClient(THandle handle, const ipport_t remote_address) :

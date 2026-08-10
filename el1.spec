@@ -7,6 +7,7 @@ Distribution:   openSUSE
 License:        GPLv3
 URL:            https://www.brennecke-it.net
 
+BuildRequires:  bluez-devel
 BuildRequires:  clang
 BuildRequires:  lld
 BuildRequires:  make
