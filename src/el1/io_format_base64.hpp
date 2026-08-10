@@ -109,7 +109,7 @@ namespace el1::io::format::base64
 	};
 
 	// has actually 65 symbols - index 64 is translated to '='
-	extern const array_t<const char32_t> BASE64_SYMBOLS;
+	inline constexpr TStringView BASE64_SYMBOLS = U"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
 	class TBase64Encoder
 	{

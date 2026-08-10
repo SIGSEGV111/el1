@@ -168,8 +168,8 @@ namespace
 		if(split_idat && compressed.Count() > 1)
 		{
 			const usys_t split = compressed.Count() / 2;
-			appendChunk(png, "IDAT", array_t<const byte_t>(compressed, split));
-			appendChunk(png, "IDAT", array_t<const byte_t>(compressed.ItemPtr(split), compressed.Count() - split));
+			appendChunk(png, "IDAT", compressed.View().Head(split));
+			appendChunk(png, "IDAT", array_t<const byte_t>::FromUnsafePointer(compressed.ItemPtr(split), compressed.Count() - split));
 		}
 		else
 		{
@@ -182,7 +182,7 @@ namespace
 
 	TRasterImage loadPng(const TByteBuffer& data)
 	{
-		TArraySource<byte_t> source(array_t<const byte_t>(data.ItemPtr(0), data.Count()));
+		TArraySource<byte_t> source(array_t<const byte_t>::FromUnsafePointer(data.ItemPtr(0), data.Count()));
 		return LoadPNG(source);
 	}
 
@@ -196,7 +196,7 @@ namespace
 	{
 		const auto detect = [](const TByteBuffer& bytes)
 		{
-			return DetectImageFormat(array_t<const byte_t>(bytes.ItemPtr(0), bytes.Count()));
+			return DetectImageFormat(array_t<const byte_t>::FromUnsafePointer(bytes.ItemPtr(0), bytes.Count()));
 		};
 
 		EXPECT_EQ(detect({ 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a }), EImageFormat::PNG);
@@ -257,12 +257,12 @@ namespace
 			input[i] = (byte_t)((i * 37 + i / 251) & 0xff);
 
 		const TByteBuffer compressed = compressBytes(input);
-		const TList<byte_t> output = Inflate(array_t<const byte_t>(compressed.ItemPtr(0), compressed.Count()));
+		const TList<byte_t> output = Inflate(array_t<const byte_t>::FromUnsafePointer(compressed.ItemPtr(0), compressed.Count()));
 		ASSERT_EQ(output.Count(), input.Count());
 		EXPECT_EQ(::memcmp(output.ItemPtr(0), input.ItemPtr(0), input.Count()), 0);
 
 		const byte_t invalid[] = { 1, 2, 3, 4 };
-		EXPECT_THROW(Inflate(array_t<const byte_t>(invalid, sizeof(invalid))), TException);
+		EXPECT_THROW(Inflate(array_t<const byte_t>::FromUnsafePointer(invalid, sizeof(invalid))), TException);
 	}
 
 	TEST(io_graphics_pnm, SaveAndLoad8Bit)
@@ -303,7 +303,7 @@ namespace
 			'2', ' ', '1', '\n', '2', '5', '5', '\n',
 			0, 127, 255, 255, 127, 0
 		};
-		TArraySource<byte_t> commented_source(array_t<const byte_t>(commented.ItemPtr(0), commented.Count()));
+		TArraySource<byte_t> commented_source(array_t<const byte_t>::FromUnsafePointer(commented.ItemPtr(0), commented.Count()));
 		const TRasterImage commented_image = LoadP6(commented_source);
 		EXPECT_EQ(commented_image.Size(), size2i_t(2, 1));
 		expectPixel(commented_image[{ 1, 0 }], pixel_t(1.0f, 127.0f / 255.0f, 0.0f, 0.0f));
@@ -312,23 +312,23 @@ namespace
 	TEST(io_graphics_pnm, ValidationAndGenericLoad)
 	{
 		const TByteBuffer valid = { 'P', '6', ' ', '1', ' ', '1', ' ', '2', '5', '5', '\n', 1, 2, 3 };
-		const std::unique_ptr<IImage> loaded = IImage::Load(array_t<const byte_t>(valid.ItemPtr(0), valid.Count()));
+		const std::unique_ptr<IImage> loaded = IImage::Load(array_t<const byte_t>::FromUnsafePointer(valid.ItemPtr(0), valid.Count()));
 		ASSERT_NE(dynamic_cast<TRasterImage*>(loaded.get()), nullptr);
 
 		const TByteBuffer invalid_magic = { 'P', '5', ' ', '1', ' ', '1', ' ', '2', '5', '5', '\n', 1 };
-		TArraySource<byte_t> invalid_magic_source(array_t<const byte_t>(invalid_magic.ItemPtr(0), invalid_magic.Count()));
+		TArraySource<byte_t> invalid_magic_source(array_t<const byte_t>::FromUnsafePointer(invalid_magic.ItemPtr(0), invalid_magic.Count()));
 		EXPECT_THROW(LoadP6(invalid_magic_source), TInvalidArgumentException);
 
 		const TByteBuffer invalid_max = { 'P', '6', ' ', '1', ' ', '1', ' ', '6', '5', '5', '3', '6', '\n', 0, 0, 0, 0, 0, 0 };
-		TArraySource<byte_t> invalid_max_source(array_t<const byte_t>(invalid_max.ItemPtr(0), invalid_max.Count()));
+		TArraySource<byte_t> invalid_max_source(array_t<const byte_t>::FromUnsafePointer(invalid_max.ItemPtr(0), invalid_max.Count()));
 		EXPECT_THROW(LoadP6(invalid_max_source), TInvalidArgumentException);
 
 		const TByteBuffer zero_max = { 'P', '6', ' ', '1', ' ', '1', ' ', '0', '\n', 0, 0, 0 };
-		TArraySource<byte_t> zero_max_source(array_t<const byte_t>(zero_max.ItemPtr(0), zero_max.Count()));
+		TArraySource<byte_t> zero_max_source(array_t<const byte_t>::FromUnsafePointer(zero_max.ItemPtr(0), zero_max.Count()));
 		EXPECT_THROW(LoadP6(zero_max_source), TInvalidArgumentException);
 
 		const TByteBuffer excessive_pixel = { 'P', '6', ' ', '1', ' ', '1', ' ', '1', '0', '\n', 11, 0, 0 };
-		TArraySource<byte_t> excessive_pixel_source(array_t<const byte_t>(excessive_pixel.ItemPtr(0), excessive_pixel.Count()));
+		TArraySource<byte_t> excessive_pixel_source(array_t<const byte_t>::FromUnsafePointer(excessive_pixel.ItemPtr(0), excessive_pixel.Count()));
 		EXPECT_THROW(LoadP6(excessive_pixel_source), TException);
 
 		TRasterImage image({ 1, 1 });

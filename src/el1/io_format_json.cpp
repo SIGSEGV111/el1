@@ -227,13 +227,13 @@ namespace el1::io::format::json
 
 	////////////////////////////////////////////////////////////////////
 
-	TJsonArray& TJsonValue::Array()
+	TJsonArray& TJsonValue::Array() EL_LIFETIME_BOUND
 	{
 		EL_ERROR(Type() != EType::ARRAY, TException, TString::Format(U"requested array value, but contains %s", JsonTypeToString(Type())));
 		return *reinterpret_cast<TJsonArray*>(__placeholder);
 	}
 
-	array_t<const TJsonValue> TJsonValue::Array() const
+	array_t<const TJsonValue> TJsonValue::Array() const EL_LIFETIME_BOUND
 	{
 		return const_cast<TJsonValue*>(this)->Array();
 	}

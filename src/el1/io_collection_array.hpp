@@ -63,8 +63,9 @@ namespace el1::io::collection::array
 		usys_t count;
 	};
 
+
 	template<typename T>
-	class TIterator
+	class EL_LIFETIME_POINTER TIterator
 	{
 		template<typename U>
 		friend class TIterator;
@@ -112,7 +113,7 @@ namespace el1::io::collection::array
 	 *  - array_t<const T> never exposes mutable T, even when the view itself is mutable.
 	 */
 	template<typename T>
-	class array_t
+	class EL_LIFETIME_POINTER array_t
 	{
 		template<typename U>
 		friend class array_t;
@@ -121,6 +122,11 @@ namespace el1::io::collection::array
 			T* arr_items;
 			usys_t n_items;
 
+		private:
+			struct TRawPointerTag {};
+			constexpr array_t(T* const arr_items, const usys_t n_items, TRawPointerTag) noexcept : arr_items(arr_items), n_items(n_items) {}
+
+		protected:
 			template<typename C>
 			usys_t BinarySearch(C comparator, const bool closest_match, usys_t idx_start, usys_t n_items_search) const EL_GETTER;
 
@@ -135,16 +141,30 @@ namespace el1::io::collection::array
 			using const_iterator_t = TIterator<const value_t>;
 
 			constexpr array_t() noexcept : arr_items(nullptr), n_items(0) {}
-			constexpr array_t(T* const arr_items, const usys_t n_items) noexcept : arr_items(arr_items), n_items(n_items) {}
+
+			// Explicit escape hatch for storage whose lifetime cannot be expressed through
+			// an owner, C array or another view. The caller owns the lifetime contract.
+			static constexpr array_t FromUnsafePointer(T* const arr_items EL_LIFETIME_BOUND, const usys_t n_items) noexcept
+			{
+				return array_t(arr_items, n_items, TRawPointerTag{});
+			}
 
 			template<usys_t N>
-			constexpr array_t(T (&arr_items)[N]) noexcept : arr_items(arr_items), n_items(N) {}
+			constexpr array_t(T (&arr_items EL_LIFETIME_BOUND)[N]) noexcept : arr_items(arr_items), n_items(N) {}
 
 			template<typename U>
 			requires std::is_convertible_v<U(*)[], T(*)[]>
-			constexpr array_t(const array_t<U>& other) noexcept : arr_items(other.arr_items), n_items(other.n_items) {}
+			constexpr array_t(const array_t<U>& other EL_LIFETIME_BOUND) noexcept : arr_items(other.arr_items), n_items(other.n_items) {}
 
-			constexpr array_t(const array_t& arr_items, const usys_t n_items_max) noexcept : arr_items(arr_items.arr_items), n_items(util::Min(n_items_max, arr_items.n_items)) {}
+			template<typename U>
+			requires std::is_convertible_v<U*, T*>
+			array_t(TList<U>& owner EL_LIFETIME_BOUND) noexcept;
+
+			template<typename U>
+			requires std::is_convertible_v<const U*, T*>
+			array_t(const TList<U>& owner EL_LIFETIME_BOUND) noexcept;
+
+			constexpr array_t(const array_t& arr_items EL_LIFETIME_BOUND, const usys_t n_items_max) noexcept : arr_items(arr_items.arr_items), n_items(util::Min(n_items_max, arr_items.n_items)) {}
 			constexpr array_t(const array_t&) noexcept = default;
 			constexpr array_t(array_t&&) noexcept = default;
 			constexpr array_t& operator=(const array_t&) noexcept = default;
@@ -154,39 +174,39 @@ namespace el1::io::collection::array
 			constexpr bool IsEmpty() const noexcept EL_GETTER { return n_items == 0; }
 			constexpr usys_t Count() const noexcept EL_GETTER { return n_items; }
 
-			constexpr T* Data() noexcept { return arr_items; }
-			constexpr const value_t* Data() const noexcept { return arr_items; }
+			constexpr T* Data() noexcept EL_LIFETIME_BOUND { return arr_items; }
+			constexpr const value_t* Data() const noexcept EL_LIFETIME_BOUND { return arr_items; }
 
-			T* ItemPtr(const usys_t index) noexcept EL_GETTER;
-			const value_t* ItemPtr(const usys_t index) const noexcept EL_GETTER;
+			T* ItemPtr(const usys_t index) noexcept EL_LIFETIME_BOUND EL_GETTER;
+			const value_t* ItemPtr(const usys_t index) const noexcept EL_LIFETIME_BOUND EL_GETTER;
 
-			T& operator[](const ssys_t index) EL_GETTER { return arr_items[AbsoluteIndex(index, false)]; }
-			const value_t& operator[](const ssys_t index) const EL_GETTER { return arr_items[AbsoluteIndex(index, false)]; }
+			T& operator[](const ssys_t index) EL_LIFETIME_BOUND EL_GETTER { return arr_items[AbsoluteIndex(index, false)]; }
+			const value_t& operator[](const ssys_t index) const EL_LIFETIME_BOUND EL_GETTER { return arr_items[AbsoluteIndex(index, false)]; }
 
-			T& First() EL_GETTER { return (*this)[0]; }
-			const value_t& First() const EL_GETTER { return (*this)[0]; }
-			T& Last() EL_GETTER { return (*this)[-1]; }
-			const value_t& Last() const EL_GETTER { return (*this)[-1]; }
+			T& First() EL_LIFETIME_BOUND EL_GETTER { return (*this)[0]; }
+			const value_t& First() const EL_LIFETIME_BOUND EL_GETTER { return (*this)[0]; }
+			T& Last() EL_LIFETIME_BOUND EL_GETTER { return (*this)[-1]; }
+			const value_t& Last() const EL_LIFETIME_BOUND EL_GETTER { return (*this)[-1]; }
 
-			constexpr iterator_t begin() noexcept { return iterator_t(arr_items); }
-			constexpr iterator_t end() noexcept { return iterator_t(n_items == 0 ? arr_items : arr_items + n_items); }
-			constexpr const_iterator_t begin() const noexcept { return const_iterator_t(arr_items); }
-			constexpr const_iterator_t end() const noexcept { return const_iterator_t(n_items == 0 ? arr_items : arr_items + n_items); }
-			constexpr const_iterator_t cbegin() const noexcept { return begin(); }
-			constexpr const_iterator_t cend() const noexcept { return end(); }
+			constexpr iterator_t begin() noexcept EL_LIFETIME_BOUND { return iterator_t(arr_items); }
+			constexpr iterator_t end() noexcept EL_LIFETIME_BOUND { return iterator_t(n_items == 0 ? arr_items : arr_items + n_items); }
+			constexpr const_iterator_t begin() const noexcept EL_LIFETIME_BOUND { return const_iterator_t(arr_items); }
+			constexpr const_iterator_t end() const noexcept EL_LIFETIME_BOUND { return const_iterator_t(n_items == 0 ? arr_items : arr_items + n_items); }
+			constexpr const_iterator_t cbegin() const noexcept EL_LIFETIME_BOUND { return begin(); }
+			constexpr const_iterator_t cend() const noexcept EL_LIFETIME_BOUND { return end(); }
 
-			constexpr array_t<const value_t> AsConst() const noexcept { return array_t<const value_t>(arr_items, n_items); }
+			constexpr array_t<const value_t> AsConst() const noexcept EL_LIFETIME_BOUND { return array_t<const value_t>::FromUnsafePointer(arr_items, n_items); }
 
 			usys_t AbsoluteIndex(const ssys_t rel_index, const bool allow_tail) const;
 
-			array_t Slice(const ssys_t index, const usys_t count = NEG1);
-			array_t<const value_t> Slice(const ssys_t index, const usys_t count = NEG1) const;
-			array_t Head(const usys_t count);
-			array_t<const value_t> Head(const usys_t count) const;
-			array_t Tail(const usys_t count);
-			array_t<const value_t> Tail(const usys_t count) const;
-			std::pair<array_t, array_t> SplitAt(const ssys_t index);
-			std::pair<array_t<const value_t>, array_t<const value_t>> SplitAt(const ssys_t index) const;
+			array_t Slice(const ssys_t index, const usys_t count = NEG1) EL_LIFETIME_BOUND;
+			array_t<const value_t> Slice(const ssys_t index, const usys_t count = NEG1) const EL_LIFETIME_BOUND;
+			array_t Head(const usys_t count) EL_LIFETIME_BOUND;
+			array_t<const value_t> Head(const usys_t count) const EL_LIFETIME_BOUND;
+			array_t Tail(const usys_t count) EL_LIFETIME_BOUND;
+			array_t<const value_t> Tail(const usys_t count) const EL_LIFETIME_BOUND;
+			std::pair<array_t, array_t> SplitAt(const ssys_t index) EL_LIFETIME_BOUND;
+			std::pair<array_t<const value_t>, array_t<const value_t>> SplitAt(const ssys_t index) const EL_LIFETIME_BOUND;
 
 			// Rebinds this view to skip the first n items. It never moves array contents.
 			void Shift(const usys_t n_items);
@@ -215,25 +235,19 @@ namespace el1::io::collection::array
 			template<typename S = decltype(StdSorter<value_t>)>
 			void Sort(const ESortOrder order = ESortOrder::ASCENDING, S sorter = StdSorter<value_t>) requires (!std::is_const_v<T>);
 
-			TArrayPipe<T> Pipe() noexcept;
-			TArrayPipe<const value_t> Pipe() const noexcept;
-			TArraySource<value_t> Source() const noexcept;
+			TArrayPipe<T> Pipe() noexcept EL_LIFETIME_BOUND;
+			TArrayPipe<const value_t> Pipe() const noexcept EL_LIFETIME_BOUND;
+			TArraySource<value_t> Source() const noexcept EL_LIFETIME_BOUND;
 
 			system::waitable::TMemoryWaitable<usys_t> MakeItemCountWaitable(const usys_t* const n_expected_count) const;
 
-			template<typename ... A>
-			static array_t<const value_t> Build(A&& ... a)
-			{
-				static const value_t arr[] = { value_t(std::forward<A>(a)) ... };
-				return array_t<const value_t>(arr);
-			}
 	};
 
 	template<typename T, usys_t N>
 	array_t(T (&)[N]) -> array_t<T>;
 
 	template<typename T>
-	class TArrayPipe : public stream::IPipe<TArrayPipe<T>, T>
+	class EL_LIFETIME_POINTER TArrayPipe : public stream::IPipe<TArrayPipe<T>, T>
 	{
 		protected:
 			T* const arr_items;
@@ -251,11 +265,11 @@ namespace el1::io::collection::array
 				return nullptr;
 			}
 
-			constexpr TArrayPipe(T* const arr_items, const usys_t n_items) noexcept : arr_items(arr_items), n_items(n_items), index(0) {}
+			constexpr TArrayPipe(T* const arr_items EL_LIFETIME_BOUND, const usys_t n_items) noexcept : arr_items(arr_items), n_items(n_items), index(0) {}
 		};
 
 	template<typename T>
-	struct TArraySource : stream::ISource<T>
+	struct EL_LIFETIME_POINTER TArraySource : stream::ISource<T>
 	{
 		const array_t<const T> array;
 		usys_t pos;
@@ -291,7 +305,7 @@ namespace el1::io::collection::array
 		}
 
 		TArraySource(const TArraySource&) = delete;
-		constexpr TArraySource(const array_t<const T> array) noexcept : array(array), pos(0) {}
+		constexpr TArraySource(const array_t<const T> array EL_LIFETIME_BOUND) noexcept : array(array), pos(0) {}
 	};
 
 	template<typename T>
@@ -343,67 +357,67 @@ namespace el1::io::collection::array
 	}
 
 	template<typename T>
-	array_t<T> array_t<T>::Slice(const ssys_t index, const usys_t count)
+	array_t<T> array_t<T>::Slice(const ssys_t index, const usys_t count) EL_LIFETIME_BOUND
 	{
 		const usys_t idx = AbsoluteIndex(index, true);
 		const usys_t n_available = n_items - idx;
 		const usys_t n_slice = count == NEG1 ? n_available : count;
 		EL_ERROR(n_slice > n_available, TIndexOutOfBoundsException, 0, n_available, n_slice);
-		return array_t(idx == 0 ? arr_items : arr_items + idx, n_slice);
+		return array_t<T>::FromUnsafePointer(idx == 0 ? arr_items : arr_items + idx, n_slice);
 	}
 
 	template<typename T>
-	array_t<const typename array_t<T>::value_t> array_t<T>::Slice(const ssys_t index, const usys_t count) const
+	array_t<const typename array_t<T>::value_t> array_t<T>::Slice(const ssys_t index, const usys_t count) const EL_LIFETIME_BOUND
 	{
 		const usys_t idx = AbsoluteIndex(index, true);
 		const usys_t n_available = n_items - idx;
 		const usys_t n_slice = count == NEG1 ? n_available : count;
 		EL_ERROR(n_slice > n_available, TIndexOutOfBoundsException, 0, n_available, n_slice);
-		return array_t<const value_t>(idx == 0 ? arr_items : arr_items + idx, n_slice);
+		return array_t<const value_t>::FromUnsafePointer(idx == 0 ? arr_items : arr_items + idx, n_slice);
 	}
 
 	template<typename T>
-	array_t<T> array_t<T>::Head(const usys_t count)
+	array_t<T> array_t<T>::Head(const usys_t count) EL_LIFETIME_BOUND
 	{
 		EL_ERROR(count > n_items, TIndexOutOfBoundsException, 0, n_items, count);
-		return array_t(arr_items, count);
+		return array_t<T>::FromUnsafePointer(arr_items, count);
 	}
 
 	template<typename T>
-	array_t<const typename array_t<T>::value_t> array_t<T>::Head(const usys_t count) const
+	array_t<const typename array_t<T>::value_t> array_t<T>::Head(const usys_t count) const EL_LIFETIME_BOUND
 	{
 		EL_ERROR(count > n_items, TIndexOutOfBoundsException, 0, n_items, count);
-		return array_t<const value_t>(arr_items, count);
+		return array_t<const value_t>::FromUnsafePointer(arr_items, count);
 	}
 
 	template<typename T>
-	array_t<T> array_t<T>::Tail(const usys_t count)
-	{
-		EL_ERROR(count > n_items, TIndexOutOfBoundsException, 0, n_items, count);
-		const usys_t idx = n_items - count;
-		return array_t(idx == 0 ? arr_items : arr_items + idx, count);
-	}
-
-	template<typename T>
-	array_t<const typename array_t<T>::value_t> array_t<T>::Tail(const usys_t count) const
+	array_t<T> array_t<T>::Tail(const usys_t count) EL_LIFETIME_BOUND
 	{
 		EL_ERROR(count > n_items, TIndexOutOfBoundsException, 0, n_items, count);
 		const usys_t idx = n_items - count;
-		return array_t<const value_t>(idx == 0 ? arr_items : arr_items + idx, count);
+		return array_t<T>::FromUnsafePointer(idx == 0 ? arr_items : arr_items + idx, count);
 	}
 
 	template<typename T>
-	std::pair<array_t<T>, array_t<T>> array_t<T>::SplitAt(const ssys_t index)
+	array_t<const typename array_t<T>::value_t> array_t<T>::Tail(const usys_t count) const EL_LIFETIME_BOUND
 	{
-		const usys_t idx = AbsoluteIndex(index, true);
-		return { array_t(arr_items, idx), array_t(idx == 0 ? arr_items : arr_items + idx, n_items - idx) };
+		EL_ERROR(count > n_items, TIndexOutOfBoundsException, 0, n_items, count);
+		const usys_t idx = n_items - count;
+		return array_t<const value_t>::FromUnsafePointer(idx == 0 ? arr_items : arr_items + idx, count);
 	}
 
 	template<typename T>
-	std::pair<array_t<const typename array_t<T>::value_t>, array_t<const typename array_t<T>::value_t>> array_t<T>::SplitAt(const ssys_t index) const
+	std::pair<array_t<T>, array_t<T>> array_t<T>::SplitAt(const ssys_t index) EL_LIFETIME_BOUND
 	{
 		const usys_t idx = AbsoluteIndex(index, true);
-		return { array_t<const value_t>(arr_items, idx), array_t<const value_t>(idx == 0 ? arr_items : arr_items + idx, n_items - idx) };
+		return { array_t<T>::FromUnsafePointer(arr_items, idx), array_t<T>::FromUnsafePointer(idx == 0 ? arr_items : arr_items + idx, n_items - idx) };
+	}
+
+	template<typename T>
+	std::pair<array_t<const typename array_t<T>::value_t>, array_t<const typename array_t<T>::value_t>> array_t<T>::SplitAt(const ssys_t index) const EL_LIFETIME_BOUND
+	{
+		const usys_t idx = AbsoluteIndex(index, true);
+		return { array_t<const value_t>::FromUnsafePointer(arr_items, idx), array_t<const value_t>::FromUnsafePointer(idx == 0 ? arr_items : arr_items + idx, n_items - idx) };
 	}
 
 	template<typename T>

@@ -57,7 +57,7 @@ namespace el1::io::file
 	};
 
 	// from the man-page STATFS(2)
-	static const magic_to_name_t __MAP_MAGIC_TO_NAME[] = {
+	static const magic_to_name_t MAP_MAGIC_TO_NAME[] = {
 		{ 0x0000002f, "QNX4"        },
 		{ 0x00000187, "AUTOFS"      },
 		{ 0x00001373, "DEVFS"       },
@@ -142,11 +142,10 @@ namespace el1::io::file
 		{ 0xff534d42, "CIFS"        },
 	};
 
-	static const array_t<const magic_to_name_t> MAP_MAGIC_TO_NAME(__MAP_MAGIC_TO_NAME, sizeof(__MAP_MAGIC_TO_NAME) / sizeof(__MAP_MAGIC_TO_NAME[0]));
-
 	static TString MagicToName(const u32_t magic)
 	{
-		const usys_t index = MAP_MAGIC_TO_NAME.BinarySearch([magic](const magic_to_name_t& item) {
+		const array_t<const magic_to_name_t> map(MAP_MAGIC_TO_NAME);
+		const usys_t index = map.BinarySearch([magic](const magic_to_name_t& item) {
 			if(item.magic > magic) return  1;
 															if(item.magic < magic) return -1;
 															return 0;
@@ -155,7 +154,7 @@ namespace el1::io::file
 		if(index == NEG1)
 			return TString();
 		else
-			return MAP_MAGIC_TO_NAME[index].name;
+			return map[index].name;
 	}
 
 	static fs_info_t GetFileSystemInfo(const THandle& handle)

@@ -54,7 +54,7 @@ namespace el1::io::collection::list
 	/*****************************************************************************/
 
 	template<typename T>
-	class TList : public TList_Insert_Impl<T, std::is_copy_constructible<T>::value>, public array_t<T>
+	class EL_LIFETIME_OWNER TList : public TList_Insert_Impl<T, std::is_copy_constructible<T>::value>, public array_t<T>
 	{
 		static_assert(!std::is_const_v<T>, "TList owns mutable objects; use array_t<const T> for a read-only view");
 		friend struct TList_Insert_Impl<T, std::is_copy_constructible<T>::value>;
@@ -68,8 +68,10 @@ namespace el1::io::collection::list
 			void DestructItems(const usys_t index, const usys_t n_items_destruct);
 
 		public:
-			array_t<T> View() noexcept { return array_t<T>(this->arr_items, this->n_items); }
-			array_t<const T> View() const noexcept { return array_t<const T>(this->arr_items, this->n_items); }
+			array_t<T> View() & noexcept EL_LIFETIME_BOUND { return array_t<T>::FromUnsafePointer(this->arr_items, this->n_items); }
+			array_t<const T> View() const & noexcept EL_LIFETIME_BOUND { return array_t<const T>::FromUnsafePointer(this->arr_items, this->n_items); }
+			array_t<T> View() && = delete;
+			array_t<const T> View() const && = delete;
 
 			void Prealloc(const usys_t n_items_need);
 			void Truncate() noexcept;
@@ -144,7 +146,6 @@ namespace el1::io::collection::list
 			TList(std::initializer_list<T> list);
 			~TList();
 	};
-
 
 	template<typename T>
 	struct TListSink : stream::ISink<T>
@@ -761,6 +762,19 @@ namespace el1::io::collection::list
 		this->n_items = 0;
 		return tmp;
 	}
+}
+
+namespace el1::io::collection::array
+{
+	template<typename T>
+	template<typename U>
+	requires std::is_convertible_v<U*, T*>
+	array_t<T>::array_t(list::TList<U>& owner EL_LIFETIME_BOUND) noexcept : arr_items(owner.Data()), n_items(owner.Count()) {}
+
+	template<typename T>
+	template<typename U>
+	requires std::is_convertible_v<const U*, T*>
+	array_t<T>::array_t(const list::TList<U>& owner EL_LIFETIME_BOUND) noexcept : arr_items(owner.Data()), n_items(owner.Count()) {}
 }
 
 namespace el1::io::stream

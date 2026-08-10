@@ -51,7 +51,7 @@ namespace el1::io::stream::producer
 			TProducerPipe(TProducerFunction producer) :
 				producer(producer),
 				fifo(&fiber, system::task::TFiber::Self()),
-				peek_buffer(nullptr, 0),
+				peek_buffer(),
 				idx_peek(0)
 			{
 				fiber.Start(util::function::TFunction<void>(this, &TProducerPipe::FiberMain));

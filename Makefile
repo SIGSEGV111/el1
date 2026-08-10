@@ -2,7 +2,7 @@
 
 .PHONY: all release debug clean install install-runtime install-devel package rpm deploy \
 	test test-release test-debug coverage-report examples examples-test \
-	check-valgrind check-coverage-tools entr
+	check-valgrind check-coverage-tools lifetime-check entr
 
 ARCH ?= $(shell rpm --eval '%{_target_cpu}' 2>/dev/null || uname -m)
 VERSION ?= *DEVELOPMENT SNAPSHOT*
@@ -26,6 +26,12 @@ RELEASE_CXXFLAGS ?= -O3 -g -DNDEBUG -flto
 DEBUG_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
 TEST_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
 COVERAGE_CXXFLAGS ?= -fprofile-instr-generate -fcoverage-mapping
+
+LIFETIME_SAFETY_SUPPORTED := $(shell printf 'int main(){}\n' | $(CXX) -x c++ -std=c++20 -fsyntax-only -Werror=unknown-warning-option -Wlifetime-safety-permissive - >/dev/null 2>&1 && echo 1 || echo 0)
+LIFETIME_CXXFLAGS := -Wdangling -Werror=dangling -Werror=return-stack-address
+ifeq ($(LIFETIME_SAFETY_SUPPORTED),1)
+	LIFETIME_CXXFLAGS += -Wlifetime-safety-permissive
+endif
 
 ifeq ($(ARCH),x86_64)
 	RELEASE_CXXFLAGS += -march=x86-64-v2
@@ -164,6 +170,18 @@ examples: release
 
 examples-test: release
 	$(MAKE) -C examples smoke-test
+
+lifetime-check:
+	$(MAKE) OUT_DIR=$(OUT_DIR)-lifetime WITH_POSTGRES=0 WITH_POSTGRES_TESTS=0 WITH_VALGRIND=0 WITH_COVERAGE=0 \
+		WITH_PROCESS_TESTS=0 WITH_NETWORK_TESTS=0 WITH_TIMING_TESTS=0 \
+		CXXFLAGS="$(CXXFLAGS) $(LIFETIME_CXXFLAGS)" debug
+	@log="$$(mktemp)"; \
+	if $(CXX) -std=c++20 -I src $(LIFETIME_CXXFLAGS) -fdiagnostics-show-option -fsyntax-only support/lifetime-negative.cpp >"$$log" 2>&1; then \
+		cat "$$log"; rm -f "$$log"; echo "lifetime-check: negative test unexpectedly compiled" >&2; exit 1; \
+	fi; \
+	grep -q -- '-Wreturn-stack-address' "$$log" && grep -q -- '-Wdangling' "$$log" || { cat "$$log"; rm -f "$$log"; echo "lifetime-check: expected lifetime diagnostics missing" >&2; exit 1; }; \
+	rm -f "$$log"
+	@echo "lifetime-check: Clang lifetime-safety=$(LIFETIME_SAFETY_SUPPORTED)"
 
 clean:
 	rm -rf -- "$(OUT_DIR)" *.rpm

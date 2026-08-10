@@ -124,7 +124,7 @@ namespace el1::dev::spi::si446x
 			EL_ERROR(n_command_bytes > N_COMMAND_BYTES_MAX, TException, TString::Format(U"invalid Si446x configuration command length: %u", (unsigned)n_command_bytes));
 			byte_t command[N_COMMAND_BYTES_MAX];
 			source.ReadAll(command, n_command_bytes);
-			SendCommand(array_t<const byte_t>(command, n_command_bytes));
+			SendCommand(array_t<const byte_t>::FromUnsafePointer(command, n_command_bytes));
 		}
 
 		WaitCommandReady();
@@ -153,7 +153,7 @@ namespace el1::dev::spi::si446x
 			(byte_t)(xo_frequency_hz >> 8),
 			(byte_t)xo_frequency_hz
 		};
-		SendCommand(array_t<const byte_t>(command, sizeof(command)));
+		SendCommand(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)));
 		WaitCommandReady();
 	}
 
@@ -161,7 +161,7 @@ namespace el1::dev::spi::si446x
 	{
 		const byte_t command[] = { (byte_t)ECommand::PART_INFO };
 		byte_t response[8];
-		SendCommandGetResponse(array_t<const byte_t>(command, sizeof(command)), response, sizeof(response));
+		SendCommandGetResponse(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)), response, sizeof(response));
 		return {
 			.chip_revision = response[0],
 			.part = (u16_t)(((u16_t)response[1] << 8) | response[2]),
@@ -176,14 +176,14 @@ namespace el1::dev::spi::si446x
 	{
 		const byte_t command[] = { (byte_t)ECommand::REQUEST_DEVICE_STATE };
 		byte_t response[2];
-		SendCommandGetResponse(array_t<const byte_t>(command, sizeof(command)), response, sizeof(response));
+		SendCommandGetResponse(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)), response, sizeof(response));
 		return { .state = response[0], .channel = response[1] };
 	}
 
 	void TRadio::ChangeState(const byte_t state)
 	{
 		const byte_t command[] = { (byte_t)ECommand::CHANGE_STATE, state };
-		SendCommand(array_t<const byte_t>(command, sizeof(command)));
+		SendCommand(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)));
 	}
 
 	void TRadio::SetProperties(const byte_t group, const byte_t start_property, const array_t<const byte_t> values)
@@ -201,7 +201,7 @@ namespace el1::dev::spi::si446x
 				(byte_t)(start_property + offset)
 			};
 			memcpy(command + 4, values.ItemPtr(offset), n);
-			SendCommand(array_t<const byte_t>(command, n + 4));
+			SendCommand(array_t<const byte_t>::FromUnsafePointer(command, n + 4));
 			offset += n;
 		}
 		WaitCommandReady();
@@ -221,7 +221,7 @@ namespace el1::dev::spi::si446x
 				(byte_t)n,
 				(byte_t)(start_property + offset)
 			};
-			SendCommandGetResponse(array_t<const byte_t>(command, sizeof(command)), values.ItemPtr(offset), n);
+			SendCommandGetResponse(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)), values.ItemPtr(offset), n);
 			offset += n;
 		}
 	}
@@ -230,7 +230,7 @@ namespace el1::dev::spi::si446x
 	{
 		const byte_t command[] = { (byte_t)ECommand::FIFO_INFO, reset_flags };
 		byte_t response[2];
-		SendCommandGetResponse(array_t<const byte_t>(command, sizeof(command)), response, sizeof(response));
+		SendCommandGetResponse(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)), response, sizeof(response));
 		return { .rx_count = response[0], .tx_space = response[1] };
 	}
 
@@ -268,7 +268,7 @@ namespace el1::dev::spi::si446x
 			(byte_t)(length >> 8),
 			(byte_t)length
 		};
-		SendCommand(array_t<const byte_t>(command, sizeof(command)));
+		SendCommand(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)));
 	}
 
 	void TRadio::StartRx(const byte_t channel, const u16_t length, const byte_t condition, const byte_t next_state_on_timeout, const byte_t next_state_on_valid_packet, const byte_t next_state_on_invalid_packet)
@@ -283,7 +283,7 @@ namespace el1::dev::spi::si446x
 			next_state_on_valid_packet,
 			next_state_on_invalid_packet
 		};
-		SendCommand(array_t<const byte_t>(command, sizeof(command)));
+		SendCommand(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)));
 	}
 
 	TInterruptStatus TRadio::InterruptStatus(const byte_t packet_handler_clear_mask, const byte_t modem_clear_mask, const byte_t chip_clear_mask)
@@ -295,7 +295,7 @@ namespace el1::dev::spi::si446x
 			chip_clear_mask
 		};
 		byte_t response[8];
-		SendCommandGetResponse(array_t<const byte_t>(command, sizeof(command)), response, sizeof(response));
+		SendCommandGetResponse(array_t<const byte_t>::FromUnsafePointer(command, sizeof(command)), response, sizeof(response));
 		return {
 			.interrupt_pending = response[0],
 			.interrupt_status = response[1],

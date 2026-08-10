@@ -90,8 +90,14 @@ namespace
 
 	TEST(io_text_string, TStringView_UnicodeLiteral)
 	{
+		static_assert(!std::is_constructible_v<TStringView, const char32_t*, usys_t>);
+		static_assert(std::is_constructible_v<TStringView, const TString&>);
 		constexpr TStringView ascii = U"hello";
 		static_assert(ascii.Length() == 5);
+		static constexpr char32_t raw_chars[] = U"unsafe";
+		constexpr TStringView raw_view = TStringView::FromUnsafePointer(raw_chars + 1, 3);
+		static_assert(raw_view.Length() == 3);
+		EXPECT_EQ(raw_view[0], U'n');
 
 		constexpr TStringView unicode = U"Hällö 😀";
 		static_assert(unicode.Length() == 7);
@@ -116,6 +122,25 @@ namespace
 		EXPECT_EQ(TStringView(U"-123").ToInteger(), -123);
 		EXPECT_DOUBLE_EQ(TStringView(U"12.5").ToDouble(), 12.5);
 		EXPECT_EQ(TString::Format(U"%s/%s", TStringView(U"ä"), TStringView(U"😀")), TStringView(U"ä/😀"));
+	}
+
+	TEST(io_text_string, StaticSymbolViews)
+	{
+		static_assert(OCTAL_SYMBOLS.Length() == 8);
+		static_assert(DECIMAL_SYMBOLS.Length() == 10);
+		static_assert(HEXADECIMAL_SYMBOLS_UC.Length() == 16);
+		static_assert(HEXADECIMAL_SYMBOLS_LC.Length() == 16);
+		static_assert(BINARY_SYMBOLS.Length() == 2);
+		static_assert(ASCII_QUOTE_SYMBOLS.Length() == 2);
+		static_assert(CONTROL_CHARS.Length() == 32);
+		static_assert(WHITESPACE_CHARS.Length() == 25);
+
+		EXPECT_EQ(CONTROL_CHARS[0], U'\0');
+		EXPECT_EQ(CONTROL_CHARS[31], (char32_t)0x1f);
+		EXPECT_EQ(WHITESPACE_CHARS[0], U'\t');
+		EXPECT_EQ(WHITESPACE_CHARS[-1], (char32_t)0x3000);
+		EXPECT_EQ(OCTAL_SYMBOLS, TStringView(U"01234567"));
+		EXPECT_EQ(HEXADECIMAL_SYMBOLS_LC, TStringView(U"0123456789abcdef"));
 	}
 
 	TEST(io_text_string, TString_Construct)

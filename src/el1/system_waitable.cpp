@@ -24,14 +24,14 @@ namespace el1::system::waitable
 			TTimeWaitable time_waitable(EClock::MONOTONIC, (absolute_time ? 0 : TTime::Now(EClock::MONOTONIC)) + timeout);
 
 			const IWaitable* array[2] = { this, &time_waitable };
-			TFiber::WaitForMany(array_t<const IWaitable*>(array, 2));
+			TFiber::WaitForMany(array_t<const IWaitable*>::FromUnsafePointer(array, 2));
 
 			return this->IsReady();
 		}
 		else
 		{
 			const IWaitable* array[1] = { this };
-			TFiber::WaitForMany(array_t<const IWaitable*>(array, 1));
+			TFiber::WaitForMany(array_t<const IWaitable*>::FromUnsafePointer(array, 1));
 			return true;
 		}
 	}

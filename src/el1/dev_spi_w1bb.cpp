@@ -15,7 +15,7 @@ namespace el1::dev::spi::w1bb
 	{
 		const unsigned sz_buffer = util::Max(this->w1bus->min_transfer_bytes, 11U + (9U + 1U + n_data) * 8U);
 		byte_t buffer[sz_buffer];
-		TTransaction tr(this->w1bus, array_t<byte_t>(buffer, sz_buffer));
+		TTransaction tr(this->w1bus, array_t<byte_t>::FromUnsafePointer(buffer, sz_buffer));
 		tr.Clear();
 		tr.AddReset();
 		tr.AddMatchRom(this->uuid);
@@ -29,7 +29,7 @@ namespace el1::dev::spi::w1bb
 	{
 		const unsigned sz_buffer = util::Max(this->w1bus->min_transfer_bytes, 11U + (9U + 1U + n_data) * 8U);
 		byte_t buffer[sz_buffer];
-		TTransaction tr(this->w1bus, array_t<byte_t>(buffer, sz_buffer));
+		TTransaction tr(this->w1bus, array_t<byte_t>::FromUnsafePointer(buffer, sz_buffer));
 		tr.Clear();
 		tr.AddReset();
 		tr.AddMatchRom(this->uuid);
@@ -228,7 +228,7 @@ namespace el1::dev::spi::w1bb
 		this->idx_buffer_next = 0;
 	}
 
-	TTransaction::TTransaction(TW1BbBus* const w1bus, io::collection::list::array_t<byte_t> buffer) : w1bus(w1bus), buffer(buffer), idx_buffer_next(0)
+	TTransaction::TTransaction(TW1BbBus* const w1bus, io::collection::list::array_t<byte_t> buffer EL_LIFETIME_BOUND) : w1bus(w1bus), buffer(buffer), idx_buffer_next(0)
 	{
 		EL_ERROR(buffer.Count() < this->w1bus->min_transfer_bytes, TException, "buffer smaller than min_transfer_bytes");
 	}
@@ -391,7 +391,7 @@ namespace el1::dev::spi::w1bb
 	{
 		TList<uuid_t> list;
 		byte_t buffer[192];
-		TTransaction tr(this, array_t<byte_t>(buffer, sizeof(buffer)));
+		TTransaction tr(this, array_t<byte_t>::FromUnsafePointer(buffer, sizeof(buffer)));
 		Scan(tr, list, 0U, uuid_t::NULL_VALUE);
 		return list;
 	}

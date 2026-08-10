@@ -95,7 +95,7 @@ namespace el1::dev::spi::w1bb
 			~TW1BbDevice();
 	};
 
-	class TTransaction
+	class EL_LIFETIME_POINTER TTransaction
 	{
 		protected:
 			TW1BbBus* const w1bus;
@@ -135,7 +135,7 @@ namespace el1::dev::spi::w1bb
 			// clears the buffer of transaction so it can be reused
 			void Clear();
 
-			TTransaction(TW1BbBus* const w1bus, io::collection::list::array_t<byte_t> buffer);
+			TTransaction(TW1BbBus* const w1bus, io::collection::list::array_t<byte_t> buffer EL_LIFETIME_BOUND);
 	};
 
 	class TW1BbBus : public IW1Bus

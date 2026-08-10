@@ -154,7 +154,8 @@ namespace el1::system::task
 	{
 		using namespace io::text::encoding::utf8;
 		key += ':';
-		return EL_ANNOTATE_ERROR(TFile(TString::Format(U"/proc/%d/status", thread_pid)), TException, "unable to read status file from procfs").Pipe()
+		TFile file = EL_ANNOTATE_ERROR(TFile(TString::Format(U"/proc/%d/status", thread_pid)), TException, "unable to read status file from procfs");
+		return file.Pipe()
 			.Transform(TUTF8Decoder())
 			.Transform(TLineReader())
 			.Filter([&](const TString& line){ return line.BeginsWith(key); })
@@ -168,7 +169,8 @@ namespace el1::system::task
 	{
 		using namespace io::text::encoding::utf8;
 		key += ':';
-		return EL_ANNOTATE_ERROR(TFile("/proc/self/status"), TException, "unable to read own status file from procfs").Pipe()
+		TFile file = EL_ANNOTATE_ERROR(TFile("/proc/self/status"), TException, "unable to read own status file from procfs");
+		return file.Pipe()
 			.Transform(TUTF8Decoder())
 			.Transform(TLineReader())
 			.Filter([&](const TString& line){ return line.BeginsWith(key); })

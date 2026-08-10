@@ -246,16 +246,16 @@ namespace el1::io::graphics::image::format::png
 	// 	}
 	// }
 
-	struct scanline_t
+	struct EL_LIFETIME_POINTER scanline_t
 	{
 		array_t<byte_t> pixel_data;
 		const scanline_t* previous;
 		EFilterType filter_type;
 
-		constexpr scanline_t() : pixel_data(nullptr, 0), previous(nullptr), filter_type(EFilterType::NONE) {}
+		constexpr scanline_t() : pixel_data(), previous(nullptr), filter_type(EFilterType::NONE) {}
 	};
 
-	struct TScanlineReader : IPipe<TScanlineReader, scanline_t>
+	struct EL_LIFETIME_POINTER TScanlineReader : IPipe<TScanlineReader, scanline_t>
 	{
 		using TOut = scanline_t;
 
@@ -274,7 +274,7 @@ namespace el1::io::graphics::image::format::png
 
 			previous = current;
 			previous.previous = nullptr;
-			current.pixel_data = array_t<byte_t>(&data[pos + 1], sz_scanline - 1);
+			current.pixel_data = array_t<byte_t>::FromUnsafePointer(&data[pos + 1], sz_scanline - 1);
 			current.previous = &previous;
 			current.filter_type = (EFilterType)data[pos];
 			pos += sz_scanline;
@@ -282,7 +282,7 @@ namespace el1::io::graphics::image::format::png
 			return &current;
 		}
 
-		TScanlineReader(array_t<byte_t> data, const usys_t sz_scanline) : data(data), sz_scanline(sz_scanline), pos(0)
+		TScanlineReader(array_t<byte_t> data EL_LIFETIME_BOUND, const usys_t sz_scanline) : data(data), sz_scanline(sz_scanline), pos(0)
 		{
 			zero_pixel_data.SetCount(sz_scanline - 1);
 			::memset(&zero_pixel_data[0], 0, sz_scanline - 1);

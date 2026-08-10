@@ -43,6 +43,21 @@
 	#error "unsupported compiler"
 #endif
 
+// Lifetime contracts are compile-time analysis hints only; they do not change
+// layout or generated code. Clang 17 already understands the attributes, while
+// newer Clang versions can additionally enforce them with -Wlifetime-safety*.
+#ifdef EL_CC_CLANG
+	#define EL_LIFETIME_OWNER [[gsl::Owner]]
+	#define EL_LIFETIME_POINTER [[gsl::Pointer]]
+	#define EL_LIFETIME_BOUND [[clang::lifetimebound]]
+	#define EL_NO_ESCAPE [[clang::noescape]]
+#else
+	#define EL_LIFETIME_OWNER
+	#define EL_LIFETIME_POINTER
+	#define EL_LIFETIME_BOUND
+	#define EL_NO_ESCAPE
+#endif
+
 #define EL_GETTER EL_NO_SIDE_EFFECTS EL_WARN_UNUSED_RESULT
 #define EL_SETTER
 

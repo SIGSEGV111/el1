@@ -70,7 +70,8 @@ namespace
 	TEST(dev_gcode_grbl, TGrblParser_FreeCAD_v1_0_0)
 	{
 		auto state = InitState();
-		auto cmds = TFile("testdata/freecad_v1_0_0.gcode").Pipe().Transform(TUTF8Decoder()).Transform(TLineReader()).Transform(TGrblParser(&state)).Collect();
+		TFile input("testdata/freecad_v1_0_0.gcode");
+		auto cmds = input.Pipe().Transform(TUTF8Decoder()).Transform(TLineReader()).Transform(TGrblParser(&state)).Collect();
 
 		TString expected_x_string("114.121");
 		TString expected_y_string("278.121");

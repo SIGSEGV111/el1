@@ -332,7 +332,7 @@ namespace el1::db::postgres
 				if(is_jsonb)
 					pg_out[0] = 1;
 
-				array_t<byte_t> payload(pg_out.ItemPtr(0) + header_size, pg_out.Count() - header_size);
+				array_t<byte_t> payload = pg_out.Slice((ssys_t)header_size);
 				const usys_t payload_size = text.chars.Pipe().Transform(io::text::encoding::utf8::TUTF8Encoder()).Read(payload.ItemPtr(0), payload.Count());
 				return header_size + payload_size;
 			}
@@ -371,7 +371,7 @@ namespace el1::db::postgres
 
 				ValidateOutputSize(pg_out, estimated_size);
 				pg_out[0] = 1;
-				array_t<byte_t> payload(pg_out.ItemPtr(1), pg_out.Count() - 1U);
+				array_t<byte_t> payload = pg_out.Slice(1);
 				const usys_t payload_size = text.chars.Pipe().Transform(io::text::encoding::utf8::TUTF8Encoder()).Read(payload.ItemPtr(0), payload.Count());
 				return 1U + payload_size;
 			}
@@ -778,7 +778,7 @@ namespace el1::db::postgres
 				const byte_t* const value = reinterpret_cast<const byte_t*>(PQgetvalue(current_result.get(), 0, i));
 				EL_ERROR(value == nullptr, TLogicException);
 				const usys_t value_size = (usys_t)PQgetlength(current_result.get(), 0, i);
-				d.codec->Deserialize(array_t<const byte_t>(value, value_size), d.buffer);
+				d.codec->Deserialize(array_t<const byte_t>::FromUnsafePointer(value, value_size), d.buffer);
 				d.is_null = false;
 			}
 		}

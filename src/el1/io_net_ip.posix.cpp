@@ -584,7 +584,7 @@ namespace el1::io::net::ip
 
 	bool TUdpNode::Send(const ipaddr_t remote_ip, const port_t remote_port, const void* const buffer, const usys_t sz_buffer)
 	{
-		return Send(remote_ip, remote_port, array_t<const byte_t>((const byte_t*)buffer, sz_buffer));
+		return Send(remote_ip, remote_port, array_t<const byte_t>::FromUnsafePointer((const byte_t*)buffer, sz_buffer));
 	}
 
 	TUdpNode::TUdpNode(const port_t local_port, const EIP version) : on_rx_msg({ .read = true, .write = false, .other = false }), on_tx_ready({ .read = false, .write = true, .other = false })

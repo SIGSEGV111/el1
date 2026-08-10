@@ -5,7 +5,7 @@ namespace el1::io::text::string
 {
 	// source: https://www.ibm.com/docs/en/i/7.3?topic=tables-unicode-lowercase-uppercase-conversion-mapping-table
 
-	static const symbol_map_t __MAP_LETTER_CASE[] = {
+	static const symbol_map_t MAP_LETTER_CASE[] = {
 		{ 0x0061U, 0x0041U },
 		{ 0x0062U, 0x0042U },
 		{ 0x0063U, 0x0043U },
@@ -674,86 +674,8 @@ namespace el1::io::text::string
 		{ 0xFF5AU, 0xFF3AU },
 	};
 
-	const io::collection::list::array_t<const symbol_map_t> MAP_LETTER_CASE(__MAP_LETTER_CASE, sizeof(__MAP_LETTER_CASE) / sizeof(__MAP_LETTER_CASE[0]));
-
-	static const char32_t __WHITESPACE_CHARS[] = {
-		0x0009U,
-		0x000AU,
-		0x000BU,
-		0x000CU,
-		0x000DU,
-		0x0020U,
-		0x0085U,
-		0x00A0U,
-		0x1680U,
-		0x2000U,
-		0x2001U,
-		0x2002U,
-		0x2003U,
-		0x2004U,
-		0x2005U,
-		0x2006U,
-		0x2007U,
-		0x2008U,
-		0x2009U,
-		0x200AU,
-		0x2028U,
-		0x2029U,
-		0x202FU,
-		0x205FU,
-		0x3000U
-	};
-
-	const array_t<const char32_t> WHITESPACE_CHARS(__WHITESPACE_CHARS, sizeof(__WHITESPACE_CHARS) / sizeof(__WHITESPACE_CHARS[0]));
-
-	static const char32_t __CONTROL_CHARs[] = {
-		0U,
-		1U,
-		2U,
-		3U,
-		4U,
-		5U,
-		6U,
-		7U,
-		8U,
-		9U,
-		10U,
-		11U,
-		12U,
-		13U,
-		14U,
-		15U,
-		16U,
-		17U,
-		18U,
-		19U,
-		20U,
-		21U,
-		22U,
-		23U,
-		24U,
-		25U,
-		26U,
-		27U,
-		28U,
-		29U,
-		30U,
-		31U
-	};
-
-	const array_t<const char32_t> CONTROL_CHARS(__CONTROL_CHARs, sizeof(__CONTROL_CHARs) / sizeof(__CONTROL_CHARs[0]));
-
-	static const char32_t __OCTAL_SYMBOLS[] = { '0', '1', '2', '3', '4', '5', '6', '7' };
-	static const char32_t __DECIMAL_SYMBOLS[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' };
-	static const char32_t __HEXADECIMAL_SYMBOLS_UC[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F' };
-	static const char32_t __HEXADECIMAL_SYMBOLS_LC[] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
-	static const char32_t __BINARY_SYMBOLS[] = { '0', '1' };
-	static const char32_t __ASCII_QUOTE_SYMBOLS[] = { '\'', '\"' };
-
-	const array_t<const char32_t> OCTAL_SYMBOLS(__OCTAL_SYMBOLS, sizeof(__OCTAL_SYMBOLS) / sizeof(__OCTAL_SYMBOLS[0]));
-	const array_t<const char32_t> DECIMAL_SYMBOLS(__DECIMAL_SYMBOLS, sizeof(__DECIMAL_SYMBOLS) / sizeof(__DECIMAL_SYMBOLS[0]));
-	const array_t<const char32_t> HEXADECIMAL_SYMBOLS_UC(__HEXADECIMAL_SYMBOLS_UC, sizeof(__HEXADECIMAL_SYMBOLS_UC) / sizeof(__HEXADECIMAL_SYMBOLS_UC[0]));
-	const array_t<const char32_t> HEXADECIMAL_SYMBOLS_LC(__HEXADECIMAL_SYMBOLS_LC, sizeof(__HEXADECIMAL_SYMBOLS_LC) / sizeof(__HEXADECIMAL_SYMBOLS_LC[0]));
-	const array_t<const char32_t> BINARY_SYMBOLS(__BINARY_SYMBOLS, sizeof(__BINARY_SYMBOLS) / sizeof(__BINARY_SYMBOLS[0]));
-	const array_t<const char32_t> ASCII_QUOTE_SYMBOLS(__ASCII_QUOTE_SYMBOLS, sizeof(__ASCII_QUOTE_SYMBOLS) / sizeof(__ASCII_QUOTE_SYMBOLS[0]));
+	array_t<const symbol_map_t> LetterCaseMap()
+	{
+		return MAP_LETTER_CASE;
+	}
 }

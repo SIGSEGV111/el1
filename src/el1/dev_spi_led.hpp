@@ -48,7 +48,7 @@ namespace el1::dev::spi::led
 	};
 
 	template<typename TSpiLed>
-	class TLedMatrix : public IVirtualLed
+	class EL_LIFETIME_POINTER TLedMatrix : public IVirtualLed
 	{
 		public:
 			using color_t = io::graphics::color::rgbf_t;
@@ -61,11 +61,11 @@ namespace el1::dev::spi::led
 			color_t EffectiveColor() const final override EL_GETTER;
 			void EffectiveColor(const color_t) final override EL_SETTER;
 			TSpiLed& operator[](const index_t) EL_GETTER;
-			TLedMatrix(io::collection::list::array_t<TSpiLed> leds);
+			TLedMatrix(io::collection::list::array_t<TSpiLed> leds EL_LIFETIME_BOUND);
 	};
 
 	template<typename TSpiLed>
-	class TLedCylinder : public IVirtualLed
+	class EL_LIFETIME_POINTER TLedCylinder : public IVirtualLed
 	{
 		public:
 			using color_t = io::graphics::color::rgbf_t;
@@ -76,7 +76,7 @@ namespace el1::dev::spi::led
 		public:
 			color_t EffectiveColor() const final override EL_GETTER;
 			void EffectiveColor(const color_t) final override EL_SETTER;
-			TLedCylinder(io::collection::list::array_t<TSpiLed> leds, const float num_leds_per_revolution);
+			TLedCylinder(io::collection::list::array_t<TSpiLed> leds EL_LIFETIME_BOUND, const float num_leds_per_revolution);
 	};
 
 	/********************************************************************/

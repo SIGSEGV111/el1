@@ -96,12 +96,12 @@ namespace el1::io::graphics::image
 		return pos[1] * size[0] + pos[0];
 	}
 
-	array_t<pixel_t> TRasterImage::Pixels()
+	array_t<pixel_t> TRasterImage::Pixels() EL_LIFETIME_BOUND
 	{
 		return pixels;
 	}
 
-	array_t<const pixel_t> TRasterImage::Pixels() const
+	array_t<const pixel_t> TRasterImage::Pixels() const EL_LIFETIME_BOUND
 	{
 		return pixels;
 	}

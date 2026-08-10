@@ -575,6 +575,32 @@ namespace
 		EXPECT_EQ(2U, Concat(list.Pipe(), list.Pipe()).Filter([](int x) { return x == 5; }).Count());
 	}
 
+	TEST(io_collection_list, PipeOwnsTemporaryAdaptersAcrossStatements)
+	{
+		TList<int> list = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+
+		// Every adaptor is invoked on an rvalue here. The resulting object must
+		// own the complete intermediate pipe chain, not pointers to temporaries.
+		auto pipe = list.Pipe()
+			.Filter([](int x) { return (x % 2) == 0; })
+			.Map([](int x) { return x * 10; })
+			.Limit(3);
+
+		EXPECT_EQ(pipe.First(), 0);
+		EXPECT_EQ(pipe.First(), 20);
+		EXPECT_EQ(pipe.First(), 40);
+		EXPECT_EQ(pipe.Count(), 0U);
+
+		auto concatenated = Concat(list.Pipe().Limit(2), list.Pipe().Limit(2));
+		EXPECT_EQ(concatenated.Count(), 4U);
+
+		// First() on a temporary pipe returns by value; on an lvalue pipe it is
+		// still a lifetime-bound reference to the pipe's current item.
+		static_assert(!std::is_reference_v<decltype(list.Pipe().First())>);
+		auto root = list.Pipe();
+		static_assert(std::is_reference_v<decltype(root.First())>);
+	}
+
 	TEST(io_collection_list, RemoveItems)
 	{
 		{
@@ -622,10 +648,16 @@ namespace
 
 	TEST(io_collection_list, ArrayView)
 	{
+		static_assert(!std::is_constructible_v<array_t<const int>, const int*, usys_t>);
+		static_assert(std::is_constructible_v<array_t<const int>, const TList<int>&>);
 		static_assert(sizeof(array_t<int>) == sizeof(int*) + sizeof(usys_t));
 
 		int data[] = { 0, 1, 2, 3, 4, 5 };
 		array_t<int> array(data);
+		const auto raw_view = array_t<const int>::FromUnsafePointer(data + 1, 3);
+		EXPECT_EQ(raw_view.Count(), 3U);
+		EXPECT_EQ(raw_view[0], 1);
+		EXPECT_EQ(raw_view[2], 3);
 
 		EXPECT_EQ(array.Count(), 6U);
 		EXPECT_EQ(array.Data(), data);

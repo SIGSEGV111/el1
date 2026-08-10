@@ -99,7 +99,7 @@ namespace el1::io::text::parser
 					pos++;
 				}
 				// term<<TString::Format(U"TLiteralNode(%q) returning success (pos@%d)\n", literal, pos);
-				return array_t<const char32_t>(&chars[s], pos - s);
+				return array_t<const char32_t>::FromUnsafePointer(&chars[s], pos - s);
 			}
 		};
 

@@ -283,8 +283,8 @@ namespace el1::io::graphics::image
 			size2i_t AbsPos(const pos2i_t) const EL_GETTER;
 			usys_t Pos2Index(const pos2i_t) const EL_GETTER;
 
-			array_t<pixel_t> Pixels() EL_GETTER;
-			array_t<const pixel_t> Pixels() const EL_GETTER;
+			array_t<pixel_t> Pixels() EL_LIFETIME_BOUND EL_GETTER;
+			array_t<const pixel_t> Pixels() const EL_LIFETIME_BOUND EL_GETTER;
 
 			pixel_t& operator[](const pos2i_t pos) EL_GETTER;
 			const pixel_t& operator[](const pos2i_t pos) const EL_GETTER;

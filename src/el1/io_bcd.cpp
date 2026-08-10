@@ -275,7 +275,7 @@ namespace el1::io::bcd
 		if(!IsFinite())
 			return {};
 		const digit_t* const digits = DigitsPointer();
-		return array_t<const digit_t>(digits, digits == nullptr ? 0 : n_decimal + n_integer);
+		return array_t<const digit_t>::FromUnsafePointer(digits, digits == nullptr ? 0 : n_decimal + n_integer);
 	}
 
 	array_t<const digit_t> TBCD::IntegerDigits() const noexcept
@@ -283,7 +283,7 @@ namespace el1::io::bcd
 		if(!IsFinite())
 			return {};
 		const digit_t* const digits = DigitsPointer();
-		return array_t<const digit_t>(digits == nullptr ? nullptr : digits + n_decimal, digits == nullptr ? 0 : n_integer);
+		return array_t<const digit_t>::FromUnsafePointer(digits == nullptr ? nullptr : digits + n_decimal, digits == nullptr ? 0 : n_integer);
 	}
 
 	array_t<const digit_t> TBCD::DecimalDigits() const noexcept
@@ -291,7 +291,7 @@ namespace el1::io::bcd
 		if(!IsFinite())
 			return {};
 		const digit_t* const digits = DigitsPointer();
-		return array_t<const digit_t>(digits, digits == nullptr ? 0 : n_decimal);
+		return array_t<const digit_t>::FromUnsafePointer(digits, digits == nullptr ? 0 : n_decimal);
 	}
 
 	/*****************************************************************/

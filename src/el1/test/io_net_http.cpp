@@ -138,7 +138,8 @@ namespace
 		const TString url = TString::Format(U"http://localhost:%d/", tcp_server.LocalAddress().port);
 		TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", url, url, url });
 		str_curl.Cut(0, str_curl.Length() / 3 * 2);
-		const TString str_ref = TFile(L"gen/testdata/test1.json").Pipe().Transform(TUTF8Decoder()).Collect();
+		TFile reference_file(L"gen/testdata/test1.json");
+		const TString str_ref = reference_file.Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
 	}
 
@@ -156,7 +157,8 @@ namespace
 
 		const TString url = TString::Format(U"https://localhost:%d/secure", tls_server.LocalAddress().port);
 		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--cacert", L"support/tls-test-cert.pem", L"--tlsv1.2", url });
-		const TString str_ref = TFile(L"gen/testdata/freecad_v1_0_0.gcode").Pipe().Transform(TUTF8Decoder()).Collect();
+		TFile reference_file(L"gen/testdata/freecad_v1_0_0.gcode");
+		const TString str_ref = reference_file.Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
 	}
 
@@ -380,7 +382,7 @@ namespace
 		THttpClient client(L"localhost", tcp_server.LocalAddress().port);
 		THttpHeaderFields request_headers;
 		request_headers.Set(L"X-Test", L"yes");
-		auto post_response = client.Post(L"/post", array_t<const byte_t>(upload, sizeof(upload)), std::move(request_headers));
+		auto post_response = client.Post(L"/post", array_t<const byte_t>::FromUnsafePointer(upload, sizeof(upload)), std::move(request_headers));
 		ASSERT_NE(post_response.FindHeader(L"x-reply"), nullptr);
 		EXPECT_EQ(*post_response.FindHeader(L"x-reply"), L"post");
 		ASSERT_EQ(post_response.body.Count(), sizeof(download));
@@ -468,8 +470,10 @@ namespace
 
 	TEST(io_net_http, THttpClient_https_credentials_from_memory)
 	{
-		TList<byte_t> certificate = TFile(L"support/tls-test-cert.pem").Pipe().Collect();
-		TList<byte_t> private_key = TFile(L"support/tls-test-key.pem").Pipe().Collect();
+		TFile certificate_file(L"support/tls-test-cert.pem");
+		TFile private_key_file(L"support/tls-test-key.pem");
+		TList<byte_t> certificate = certificate_file.Pipe().Collect();
+		TList<byte_t> private_key = private_key_file.Pipe().Collect();
 
 		TTcpServer tcp_server;
 		tls::server_config_t server_config;

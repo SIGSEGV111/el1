@@ -7,7 +7,9 @@
 #include "system_waitable.hpp"
 #include "system_handle.hpp"
 #include "system_time.hpp"
+#include <tuple>
 #include <type_traits>
+#include <utility>
 
 namespace el1::system::task
 {
@@ -200,7 +202,8 @@ namespace el1::io::stream
 			}
 		}
 
-		TSourcePipe<T> Pipe();
+		TSourcePipe<T> Pipe() & EL_LIFETIME_BOUND;
+		TSourcePipe<T> Pipe() && = delete;
 	};
 
 	template<typename T>
@@ -282,7 +285,7 @@ namespace el1::io::stream
 		// use Discard() or Read() to remove the items from the source when you no longer need them
 		// this invalidates the previously returned buffer
 		// and allows the source to retrieve or produce the next batch of items
-		virtual collection::array::array_t<T> Peek() = 0;
+		virtual collection::array::array_t<T> Peek() EL_LIFETIME_BOUND = 0;
 	};
 
 	using IBinarySink = ISink<byte_t>;
@@ -305,6 +308,9 @@ namespace el1::io::stream
 	{
 	};
 
+	template<typename T>
+	using borrow_or_own_t = std::conditional_t<std::is_lvalue_reference_v<T>, T, std::decay_t<T>>;
+
 	template<typename TPipe, typename _TOut>
 	struct IPipe : public TPipeSource<TPipe, _TOut, std::is_copy_constructible_v<_TOut> >
 	{
@@ -313,24 +319,28 @@ namespace el1::io::stream
 		// this function is called repeatedly to fetch the next item from the stream
 		// once the pipe has run out of items it must return nullptr and continue to do so
 		// the returned item pointer needs only to be valid until the next call
-		virtual TOut* NextItem() = 0;
+		virtual TOut* NextItem() EL_LIFETIME_BOUND = 0;
 
 		template<typename L>
-		TFilterPipe<TPipe, L> Filter(L callable);
+		auto Filter(L&& callable) & EL_LIFETIME_BOUND -> TFilterPipe<TPipe&, std::decay_t<L>>;
 
 		template<typename L>
-		TMapPipe<TPipe, L> Map(L callable);
+		auto Filter(L&& callable) && -> TFilterPipe<TPipe, std::decay_t<L>>;
 
-		template<typename TOtherStream>
-		TConcatPipe<TPipe, TOtherStream> Concat(TOtherStream* const other);
+		template<typename L>
+		auto Map(L&& callable) & EL_LIFETIME_BOUND -> TMapPipe<TPipe&, std::decay_t<L>>;
+
+		template<typename L>
+		auto Map(L&& callable) && -> TMapPipe<TPipe, std::decay_t<L>>;
 
 		template<typename TTransformator>
-		TTransformPipe<TPipe, TTransformator> Transform(TTransformator&& transformator);
+		auto Transform(TTransformator&& transformator) & EL_LIFETIME_BOUND -> TTransformPipe<TPipe&, borrow_or_own_t<TTransformator&&>>;
 
 		template<typename TTransformator>
-		TTransformPipe<TPipe, TTransformator&> Transform(TTransformator& transformator);
+		auto Transform(TTransformator&& transformator) && -> TTransformPipe<TPipe, borrow_or_own_t<TTransformator&&>>;
 
-		TLimitPipe<TPipe> Limit(const iosize_t n_items_max);
+		auto Limit(const iosize_t n_items_max) & EL_LIFETIME_BOUND -> TLimitPipe<TPipe&>;
+		auto Limit(const iosize_t n_items_max) && -> TLimitPipe<TPipe>;
 
 		template<typename L>
 		void ForEach(L callable);
@@ -341,7 +351,8 @@ namespace el1::io::stream
 		iosize_t ToStream(ISink<std::remove_const_t<TOut>>& sink);
 		usys_t AppendTo(collection::list::TList<std::remove_const_t<TOut>>& list);
 		iosize_t Count();
-		const TOut& First();
+		const TOut& First() & EL_LIFETIME_BOUND;
+		std::remove_const_t<TOut> First() && requires std::is_copy_constructible_v<std::remove_const_t<TOut>>;
 		io::collection::list::TList<std::remove_const_t<TOut>> Collect(const usys_t n_prealloc = 0);
 	};
 
@@ -408,7 +419,7 @@ namespace el1::io::stream
 	/**********************************************/
 
 	template<typename T>
-	class TSourcePipe : public IPipe<TSourcePipe<T>, T>
+	class EL_LIFETIME_POINTER TSourcePipe : public IPipe<TSourcePipe<T>, T>
 	{
 		protected:
 			ISource<T>* const source;
@@ -422,7 +433,7 @@ namespace el1::io::stream
 			using TOut = T;
 			using TIn = void;
 
-			TOut* NextItem() final override
+			TOut* NextItem() EL_LIFETIME_BOUND final override
 			{
 				for(;;)
 				{
@@ -445,7 +456,7 @@ namespace el1::io::stream
 				}
 			}
 
-			TSourcePipe(ISource<T>* const source) : source(source), buffer(std::unique_ptr<T[]>(new T[N_ITEMS_BUFFER])), index(0), n_items(0) {}
+			TSourcePipe(ISource<T>* const source EL_LIFETIME_BOUND) : source(source), buffer(std::unique_ptr<T[]>(new T[N_ITEMS_BUFFER])), index(0), n_items(0) {}
 			TSourcePipe(const TSourcePipe&) = delete;
 			TSourcePipe(TSourcePipe&&) = default;
 	};
@@ -457,55 +468,56 @@ namespace el1::io::stream
 	// 	virtual void Source(TPipe* const source) = 0;
 	// };
 
-	template<typename TPipe, typename L>
-	class TFilterPipe : public IPipe<TFilterPipe<TPipe, L>, typename TPipe::TOut>
+	template<typename TSource, typename L>
+	class TFilterPipe : public IPipe<TFilterPipe<TSource, L>, typename std::remove_reference_t<TSource>::TOut>
 	{
 		protected:
-			TPipe* source;
+			TSource source;
 			L callable;
 
 		public:
-			using TIn = typename TPipe::TOut;
+			using TSourcePipe = std::remove_reference_t<TSource>;
+			using TIn = typename TSourcePipe::TOut;
 			using TOut = TIn;
 
-			TOut* NextItem() final override
+			TOut* NextItem() EL_LIFETIME_BOUND final override
 			{
 				for(;;)
 				{
-					auto item = source->NextItem();
-
+					auto item = source.NextItem();
 					if(item == nullptr)
 						return nullptr;
-
 					if(callable(*item))
 						return item;
 				}
 			}
 
-			TFilterPipe(TPipe* source, L callable) : source(source), callable(callable) {}
+			TFilterPipe(TSource source EL_LIFETIME_BOUND, L callable) requires std::is_reference_v<TSource> : source(source), callable(std::move(callable)) {}
+			TFilterPipe(TSource source, L callable) requires (!std::is_reference_v<TSource>) : source(std::move(source)), callable(std::move(callable)) {}
 	};
 
-	template<typename TPipe>
-	class TLimitPipe : public IPipe<TLimitPipe<TPipe>, typename TPipe::TOut>
+	template<typename TSource>
+	class TLimitPipe : public IPipe<TLimitPipe<TSource>, typename std::remove_reference_t<TSource>::TOut>
 	{
 		protected:
-			TPipe* source;
+			TSource source;
 			iosize_t n_remaining;
 
 		public:
-			using TIn = typename TPipe::TOut;
+			using TSourcePipe = std::remove_reference_t<TSource>;
+			using TIn = typename TSourcePipe::TOut;
 			using TOut = TIn;
 
-			TOut* NextItem() final override
+			TOut* NextItem() EL_LIFETIME_BOUND final override
 			{
 				if(EL_UNLIKELY(n_remaining == 0))
 					return nullptr;
-
 				n_remaining--;
-				return source->NextItem();
+				return source.NextItem();
 			}
 
-			TLimitPipe(TPipe* source, const iosize_t n_items_limit) : source(source), n_remaining(n_items_limit) {}
+			TLimitPipe(TSource source EL_LIFETIME_BOUND, const iosize_t n_items_limit) requires std::is_reference_v<TSource> : source(source), n_remaining(n_items_limit) {}
+			TLimitPipe(TSource source, const iosize_t n_items_limit) requires (!std::is_reference_v<TSource>) : source(std::move(source)), n_remaining(n_items_limit) {}
 	};
 
 	template<typename T>
@@ -565,31 +577,31 @@ namespace el1::io::stream
 	};
 
 
-	template<typename TPipe, typename L>
-	class TMapPipe : public IPipe<TMapPipe<TPipe, L>, std::remove_cv_t<std::remove_reference_t<std::result_of_t<L(typename TPipe::TOut&)>>>>
+	template<typename TSource, typename L>
+	class TMapPipe : public IPipe<TMapPipe<TSource, L>, std::remove_cv_t<std::remove_reference_t<std::result_of_t<L(typename std::remove_reference_t<TSource>::TOut&)>>>>
 	{
 		public:
-			using TIn = typename TPipe::TOut;
+			using TSourcePipe = std::remove_reference_t<TSource>;
+			using TIn = typename TSourcePipe::TOut;
 			using TOut = std::remove_cv_t<std::remove_reference_t<std::result_of_t<L(TIn&)>>>;
 
 		protected:
-			TPipe* source;
+			TSource source;
 			L callable;
 			TOut out;
 
 		public:
-			TOut* NextItem() final override
+			TOut* NextItem() EL_LIFETIME_BOUND final override
 			{
-				auto item = source->NextItem();
-
+				auto item = source.NextItem();
 				if(item == nullptr)
 					return nullptr;
-
 				out = callable(*item);
 				return &out;
 			}
 
-			TMapPipe(TPipe* source, L callable) : source(source), callable(callable), out() {}
+			TMapPipe(TSource source EL_LIFETIME_BOUND, L callable) requires std::is_reference_v<TSource> : source(source), callable(std::move(callable)), out() {}
+			TMapPipe(TSource source, L callable) requires (!std::is_reference_v<TSource>) : source(std::move(source)), callable(std::move(callable)), out() {}
 	};
 
 	template<typename ... TPipes>
@@ -600,7 +612,7 @@ namespace el1::io::stream
 			using TOut = TIn;
 
 		protected:
-			std::tuple<TPipes* ...> streams;
+			std::tuple<TPipes ...> streams;
 
 			template<std::size_t... Is>
 			TOut* NextItem(std::index_sequence<Is...>)
@@ -610,7 +622,7 @@ namespace el1::io::stream
 					#pragma clang diagnostic push
 					#pragma clang diagnostic ignored "-Wunused-value"
 				#endif
-				( ((item = std::get<Is>(streams)->NextItem()) != nullptr) || ... );
+				( ((item = std::get<Is>(streams).NextItem()) != nullptr) || ... );
 				#ifdef EL_CC_CLANG
 					#pragma clang diagnostic pop
 				#endif
@@ -618,34 +630,48 @@ namespace el1::io::stream
 			}
 
 		public:
-			TOut* NextItem() final override
+			TOut* NextItem() EL_LIFETIME_BOUND final override
 			{
 				return NextItem(std::make_index_sequence<std::tuple_size<decltype(streams)>::value>{});
 			}
 
-			TConcatPipe(TPipes& ... streams) : streams(&streams ...) {}
+			TConcatPipe(TPipes ... streams) : streams(std::move(streams) ...) {}
 	};
 
-	template<typename TPipe, typename TTransformator>
-	class TTransformPipe : public IPipe<TTransformPipe<TPipe, TTransformator>, typename std::remove_reference_t<TTransformator>::TOut>
+	template<typename TSource, typename TTransformator>
+	class TTransformPipe : public IPipe<TTransformPipe<TSource, TTransformator>, typename std::remove_reference_t<TTransformator>::TOut>
 	{
 		public:
-			using TIn = typename TPipe::TOut;
-			using TOut = typename std::remove_reference_t<TTransformator>::TOut;
+			using TSourcePipe = std::remove_reference_t<TSource>;
+			using TTransformatorType = std::remove_reference_t<TTransformator>;
+			using TIn = typename TSourcePipe::TOut;
+			using TOut = typename TTransformatorType::TOut;
 
 		protected:
-			TPipe* const source;
-			std::remove_reference_t<TTransformator> transformator;
+			TSource source;
+			TTransformator transformator;
 
 		public:
-			TOut* NextItem() final override
+			TOut* NextItem() EL_LIFETIME_BOUND final override
 			{
-				return transformator.NextItem(source);
+				return transformator.NextItem(&source);
 			}
 
-			TTransformPipe(TPipe* const source, TTransformator&& transformator) : source(source), transformator(std::move(transformator))
-			{
-			}
+			TTransformPipe(TSource source EL_LIFETIME_BOUND, TTransformator transformator EL_LIFETIME_BOUND)
+				requires std::is_reference_v<TSource> && std::is_reference_v<TTransformator>
+				: source(source), transformator(transformator) {}
+
+			TTransformPipe(TSource source EL_LIFETIME_BOUND, TTransformator transformator)
+				requires std::is_reference_v<TSource> && (!std::is_reference_v<TTransformator>)
+				: source(source), transformator(std::move(transformator)) {}
+
+			TTransformPipe(TSource source, TTransformator transformator EL_LIFETIME_BOUND)
+				requires (!std::is_reference_v<TSource>) && std::is_reference_v<TTransformator>
+				: source(std::move(source)), transformator(transformator) {}
+
+			TTransformPipe(TSource source, TTransformator transformator)
+				requires (!std::is_reference_v<TSource>) && (!std::is_reference_v<TTransformator>)
+				: source(std::move(source)), transformator(std::move(transformator)) {}
 	};
 
 	/**********************************************/
@@ -695,10 +721,11 @@ namespace el1::io::stream
 	}
 
 	template<typename T>
-	TSourcePipe<T> ISource<T>::Pipe()
+	TSourcePipe<T> ISource<T>::Pipe() & EL_LIFETIME_BOUND
 	{
 		return TSourcePipe<T>(this);
 	}
+
 
 	template<typename T>
 	void ISink<T>::WriteAll(const T* const arr_items, const usys_t n_items)
@@ -863,7 +890,7 @@ namespace el1::io::stream
 	}
 
 	template<typename TPipe, typename TOut>
-	const TOut& IPipe<TPipe, TOut>::First()
+	const TOut& IPipe<TPipe, TOut>::First() & EL_LIFETIME_BOUND
 	{
 		TPipe* source = static_cast<TPipe*>(this);
 		auto item = source->NextItem();
@@ -872,44 +899,74 @@ namespace el1::io::stream
 	}
 
 	template<typename TPipe, typename TOut>
-	TLimitPipe<TPipe> IPipe<TPipe, TOut>::Limit(const iosize_t n_items_max)
+	std::remove_const_t<TOut> IPipe<TPipe, TOut>::First() && requires std::is_copy_constructible_v<std::remove_const_t<TOut>>
 	{
 		TPipe* source = static_cast<TPipe*>(this);
-		return TLimitPipe<TPipe>(source, n_items_max);
+		auto item = source->NextItem();
+		EL_ERROR(item == nullptr, TStreamDryException);
+		return *item;
+	}
+
+	template<typename TPipe, typename TOut>
+	auto IPipe<TPipe, TOut>::Limit(const iosize_t n_items_max) & EL_LIFETIME_BOUND -> TLimitPipe<TPipe&>
+	{
+		return TLimitPipe<TPipe&>(static_cast<TPipe&>(*this), n_items_max);
+	}
+
+	template<typename TPipe, typename TOut>
+	auto IPipe<TPipe, TOut>::Limit(const iosize_t n_items_max) && -> TLimitPipe<TPipe>
+	{
+		return TLimitPipe<TPipe>(std::move(static_cast<TPipe&>(*this)), n_items_max);
 	}
 
 	template<typename TPipe, typename TOut>
 	template<typename L>
-	TFilterPipe<TPipe, L> IPipe<TPipe, TOut>::Filter(L callable)
+	auto IPipe<TPipe, TOut>::Filter(L&& callable) & EL_LIFETIME_BOUND -> TFilterPipe<TPipe&, std::decay_t<L>>
 	{
-		return TFilterPipe<TPipe, L>(static_cast<TPipe*>(this), callable);
+		return TFilterPipe<TPipe&, std::decay_t<L>>(static_cast<TPipe&>(*this), std::forward<L>(callable));
 	}
 
 	template<typename TPipe, typename TOut>
 	template<typename L>
-	TMapPipe<TPipe, L> IPipe<TPipe, TOut>::Map(L callable)
+	auto IPipe<TPipe, TOut>::Filter(L&& callable) && -> TFilterPipe<TPipe, std::decay_t<L>>
 	{
-		return TMapPipe<TPipe, L>(static_cast<TPipe*>(this), callable);
+		return TFilterPipe<TPipe, std::decay_t<L>>(std::move(static_cast<TPipe&>(*this)), std::forward<L>(callable));
+	}
+
+	template<typename TPipe, typename TOut>
+	template<typename L>
+	auto IPipe<TPipe, TOut>::Map(L&& callable) & EL_LIFETIME_BOUND -> TMapPipe<TPipe&, std::decay_t<L>>
+	{
+		return TMapPipe<TPipe&, std::decay_t<L>>(static_cast<TPipe&>(*this), std::forward<L>(callable));
+	}
+
+	template<typename TPipe, typename TOut>
+	template<typename L>
+	auto IPipe<TPipe, TOut>::Map(L&& callable) && -> TMapPipe<TPipe, std::decay_t<L>>
+	{
+		return TMapPipe<TPipe, std::decay_t<L>>(std::move(static_cast<TPipe&>(*this)), std::forward<L>(callable));
 	}
 
 	template<typename TPipe, typename TOut>
 	template<typename TTransformator>
-	TTransformPipe<TPipe, TTransformator> IPipe<TPipe, TOut>::Transform(TTransformator&& transformator)
+	auto IPipe<TPipe, TOut>::Transform(TTransformator&& transformator) & EL_LIFETIME_BOUND -> TTransformPipe<TPipe&, borrow_or_own_t<TTransformator&&>>
 	{
-		return TTransformPipe<TPipe, TTransformator>(static_cast<TPipe*>(this), std::move(transformator));
+		using TStoredTransformator = borrow_or_own_t<TTransformator&&>;
+		return TTransformPipe<TPipe&, TStoredTransformator>(static_cast<TPipe&>(*this), std::forward<TTransformator>(transformator));
 	}
 
 	template<typename TPipe, typename TOut>
 	template<typename TTransformator>
-	TTransformPipe<TPipe, TTransformator&> IPipe<TPipe, TOut>::Transform(TTransformator& transformator)
+	auto IPipe<TPipe, TOut>::Transform(TTransformator&& transformator) && -> TTransformPipe<TPipe, borrow_or_own_t<TTransformator&&>>
 	{
-		return TTransformPipe<TPipe, TTransformator&>(static_cast<TPipe*>(this), transformator);
+		using TStoredTransformator = borrow_or_own_t<TTransformator&&>;
+		return TTransformPipe<TPipe, TStoredTransformator>(std::move(static_cast<TPipe&>(*this)), std::forward<TTransformator>(transformator));
 	}
 
 	template<typename ... TPipes>
 	TConcatPipe<TPipes ...> Concat(TPipes ... pipes)
 	{
-		return TConcatPipe<TPipes ...>(pipes ...);
+		return TConcatPipe<TPipes ...>(std::move(pipes) ...);
 	}
 
 	/**********************************************/

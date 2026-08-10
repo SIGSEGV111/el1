@@ -335,7 +335,7 @@ namespace el1::io::file
 			static TString ReadText(const TPath& path, const bool trim = true, const usys_t n_chars_max = 1024U);
 	};
 
-	class TMapping : public array_t<byte_t>
+	class EL_LIFETIME_OWNER TMapping : public array_t<byte_t>
 	{
 		protected:
 			TFile* const file;
@@ -357,8 +357,8 @@ namespace el1::io::file
 			// modifications made to the content of the mapping are carried through to the underlying file (with potentially some delay)
 			// changes made by other processes through a mapping to the same region of the file immediately become visible in this mapping
 			// the interactions with the low-level IO-routines (read/write) used by TFile are left unspecified
-			TMapping(TFile* const file, const iosize_t offset = 0, const usys_t size = NEG1);
-			TMapping(TFile* const file, const TAccess access, const iosize_t offset = 0, const usys_t size = NEG1);
+			TMapping(TFile* const file EL_LIFETIME_BOUND, const iosize_t offset = 0, const usys_t size = NEG1);
+			TMapping(TFile* const file EL_LIFETIME_BOUND, const TAccess access, const iosize_t offset = 0, const usys_t size = NEG1);
 			~TMapping();
 	};
 }

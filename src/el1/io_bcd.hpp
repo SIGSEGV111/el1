@@ -1208,17 +1208,17 @@ namespace el1::io::bcd
 
 			io::collection::array::array_t<const digit_t> Digits() const noexcept
 			{
-				return !IsFinite() ? io::collection::array::array_t<const digit_t>() : io::collection::array::array_t<const digit_t>(digits, n_integer + n_decimal);
+				return !IsFinite() ? io::collection::array::array_t<const digit_t>() : io::collection::array::array_t<const digit_t>::FromUnsafePointer(digits, n_integer + n_decimal);
 			}
 
 			io::collection::array::array_t<const digit_t> IntegerDigits() const noexcept
 			{
-				return !IsFinite() ? io::collection::array::array_t<const digit_t>() : io::collection::array::array_t<const digit_t>(digits + n_decimal, n_integer);
+				return !IsFinite() ? io::collection::array::array_t<const digit_t>() : io::collection::array::array_t<const digit_t>::FromUnsafePointer(digits + n_decimal, n_integer);
 			}
 
 			io::collection::array::array_t<const digit_t> DecimalDigits() const noexcept
 			{
-				return !IsFinite() ? io::collection::array::array_t<const digit_t>() : io::collection::array::array_t<const digit_t>(digits, n_decimal);
+				return !IsFinite() ? io::collection::array::array_t<const digit_t>() : io::collection::array::array_t<const digit_t>::FromUnsafePointer(digits, n_decimal);
 			}
 
 			digit_t Digit(const ssys_t index) const noexcept

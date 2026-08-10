@@ -232,7 +232,7 @@ namespace el1::dev::gpio::hd44780
 
 	THD44780::THD44780(std::unique_ptr<IPin> rs, std::unique_ptr<IPin> rw, std::unique_ptr<IPin> e, std::initializer_list<std::unique_ptr<IPin>> _data, std::unique_ptr<IPin> bl) : rs(std::move(rs)), rw(std::move(rw)), e(std::move(e)), bl(std::move(bl))
 	{
-		array_t<std::unique_ptr<IPin>> data((std::unique_ptr<IPin>*)_data.begin(), _data.end() - _data.begin());
+		auto data = array_t<std::unique_ptr<IPin>>::FromUnsafePointer((std::unique_ptr<IPin>*)_data.begin(), _data.end() - _data.begin());
 		for(unsigned i = 0; i < 8; i++)
 		{
 			this->data[i] = std::move(data[i]);

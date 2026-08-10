@@ -7,8 +7,6 @@
 
 namespace el1::io::text::string
 {
-	extern const array_t<const char32_t> WHITESPACE_CHARS;
-
 	bool TStringView::Contains(const TStringView needle) const
 	{
 		if(needle.Length() == 0)
@@ -121,22 +119,22 @@ namespace el1::io::text::string
 		return true;
 	}
 
-	TStringView TStringView::SliceSL(const ssys_t start, usys_t length) const
+	TStringView TStringView::SliceSL(const ssys_t start, usys_t length) const EL_LIFETIME_BOUND
 	{
 		const usys_t idx_start = AbsoluteIndex(start, true);
 		if(length == NEG1)
 			length = Count() - idx_start;
 
 		EL_ERROR(length > Count() - idx_start, TInvalidArgumentException, "length", "start + length is after the end of the string");
-		return TStringView(idx_start == 0 ? Data() : Data() + idx_start, length);
+		return TStringView::FromUnsafePointer(idx_start == 0 ? Data() : Data() + idx_start, length);
 	}
 
-	TStringView TStringView::SliceBE(const ssys_t begin, const ssys_t end) const
+	TStringView TStringView::SliceBE(const ssys_t begin, const ssys_t end) const EL_LIFETIME_BOUND
 	{
 		const usys_t idx_begin = AbsoluteIndex(begin, true);
 		const usys_t idx_end = AbsoluteIndex(end, true);
 		EL_ERROR(idx_end < idx_begin, TInvalidArgumentException, "end", "end is before start");
-		return TStringView(idx_begin == 0 ? Data() : Data() + idx_begin, idx_end - idx_begin);
+		return TStringView::FromUnsafePointer(idx_begin == 0 ? Data() : Data() + idx_begin, idx_end - idx_begin);
 	}
 
 	double TStringView::ToDouble() const
@@ -807,7 +805,7 @@ namespace el1::io::text::string
 	TString::TString(const char* const str, const usys_t maxlen)
 	{
 		const size_t len = str != nullptr ? (maxlen == NEG1 ? strlen(str) : strnlen(str, maxlen)) : 0;
-		array_t<const byte_t> array((const byte_t*)str, len);
+		const array_t<const byte_t> array = array_t<const byte_t>::FromUnsafePointer((const byte_t*)str, len);
 		chars = array.Pipe().Transform(TCharDecoder()).Collect();
 	}
 
@@ -1179,7 +1177,7 @@ namespace el1::io::text::string
 
 	void TString::Quote(const char32_t quote_sign, const char32_t escape_sign)
 	{
-		Escape(array_t<const char32_t>(&quote_sign, 1), escape_sign);
+		Escape(array_t<const char32_t>::FromUnsafePointer(&quote_sign, 1), escape_sign);
 		chars.Insert(0, quote_sign);
 		chars.Append(quote_sign);
 	}
@@ -1188,7 +1186,7 @@ namespace el1::io::text::string
 	{
 		EL_ERROR(chars[0] != quote_sign || chars[-1] != quote_sign, TInvalidArgumentException, "this", "the input string does not start and end with a quoute character");
 		chars.Cut(1, 1);
-		Unescape(array_t<const char32_t>(&quote_sign, 1), escape_sign);
+		Unescape(array_t<const char32_t>::FromUnsafePointer(&quote_sign, 1), escape_sign);
 	}
 
 	void TString::Truncate(const usys_t n_max_length)
@@ -1231,13 +1229,13 @@ namespace el1::io::text::string
 
 	TString& TString::ToLower()
 	{
-		Translate(MAP_LETTER_CASE, true);
+		Translate(LetterCaseMap(), true);
 		return *this;
 	}
 
 	TString& TString::ToUpper()
 	{
-		Translate(MAP_LETTER_CASE, false);
+		Translate(LetterCaseMap(), false);
 		return *this;
 	}
 

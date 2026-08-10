@@ -325,12 +325,12 @@ namespace el1::io::file
 		this->n_items = map_size - (offset - map_offset);
 	}
 
-	TMapping::TMapping(TFile* const file, const iosize_t offset, const usys_t size) : array_t<byte_t>(), file(file), offset(offset), access(file->Access())
+	TMapping::TMapping(TFile* const file EL_LIFETIME_BOUND, const iosize_t offset, const usys_t size) : array_t<byte_t>(), file(file), offset(offset), access(file->Access())
 	{
 		this->Remap(offset, size);
 	}
 
-	TMapping::TMapping(TFile* const file, const TAccess access, const iosize_t offset, const usys_t size) : array_t<byte_t>(), file(file), offset(offset), access(access)
+	TMapping::TMapping(TFile* const file EL_LIFETIME_BOUND, const TAccess access, const iosize_t offset, const usys_t size) : array_t<byte_t>(), file(file), offset(offset), access(access)
 	{
 		this->Remap(offset, size);
 	}

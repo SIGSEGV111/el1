@@ -41,7 +41,7 @@ namespace el1::io::net::tls
 		return path;
 	}
 
-	collection::list::array_t<const byte_t> TPemSource::Data() const
+	collection::list::array_t<const byte_t> TPemSource::Data() const EL_LIFETIME_BOUND
 	{
 		EL_ERROR(type != EType::MEMORY, TLogicException);
 		return data;

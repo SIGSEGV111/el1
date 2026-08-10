@@ -221,7 +221,7 @@ namespace el1::system::task
 
 	void TFiber::WaitForMany(const std::initializer_list<const IWaitable*> waitables)
 	{
-		WaitForMany(array_t<const IWaitable*>((const IWaitable**)waitables.begin(), waitables.end() - waitables.begin()));
+		WaitForMany(array_t<const IWaitable*>::FromUnsafePointer((const IWaitable**)waitables.begin(), waitables.end() - waitables.begin()));
 	}
 
 	void TFiber::WaitForMany(const array_t<const IWaitable*> waitables)

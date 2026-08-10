@@ -39,7 +39,7 @@ namespace el1::io::net::tls
 			EType Type() const noexcept EL_GETTER { return type; }
 			bool IsEmpty() const noexcept EL_GETTER { return type == EType::NONE; }
 			const file::TPath& Path() const EL_GETTER;
-			collection::list::array_t<const byte_t> Data() const EL_GETTER;
+			collection::list::array_t<const byte_t> Data() const EL_LIFETIME_BOUND EL_GETTER;
 
 			TPemSource();
 			explicit TPemSource(file::TPath path);

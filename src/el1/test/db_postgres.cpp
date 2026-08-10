@@ -36,7 +36,7 @@ namespace
 		const usys_t size = codec.Serialize(&input, encoded);
 		const array_t<const byte_t> pg_value = size == 0
 			? array_t<const byte_t>()
-			: array_t<const byte_t>(encoded.ItemPtr(0), size);
+			: array_t<const byte_t>::FromUnsafePointer(encoded.ItemPtr(0), size);
 
 		alignas(T) byte_t storage[sizeof(T)];
 		codec.Deserialize(pg_value, storage);
@@ -69,7 +69,7 @@ namespace
 
 		alignas(bool) byte_t bool_storage[sizeof(bool)];
 		const byte_t invalid_bool[] = { 2 };
-		EXPECT_THROW(bool_codec.Deserialize(array_t<const byte_t>(invalid_bool, sizeof(invalid_bool)), bool_storage), TException);
+		EXPECT_THROW(bool_codec.Deserialize(array_t<const byte_t>::FromUnsafePointer(invalid_bool, sizeof(invalid_bool)), bool_storage), TException);
 		EXPECT_THROW(bool_codec.Deserialize(array_t<const byte_t>(), bool_storage), TException);
 
 		const IDatatypeCodec& char_codec = FindDatatypeCodec("char");
@@ -88,21 +88,21 @@ namespace
 
 		const s32_t integer = 0x12345678;
 		byte_t integer_buffer[4] = {};
-		EXPECT_EQ(int4_codec.Serialize(&integer, array_t<byte_t>(integer_buffer, sizeof(integer_buffer))), 4U);
+		EXPECT_EQ(int4_codec.Serialize(&integer, array_t<byte_t>::FromUnsafePointer(integer_buffer, sizeof(integer_buffer))), 4U);
 		EXPECT_EQ(integer_buffer[0], 0x12U);
 		EXPECT_EQ(integer_buffer[1], 0x34U);
 		EXPECT_EQ(integer_buffer[2], 0x56U);
 		EXPECT_EQ(integer_buffer[3], 0x78U);
-		EXPECT_THROW(int4_codec.Serialize(&integer, array_t<byte_t>(integer_buffer, 1)), TException);
+		EXPECT_THROW(int4_codec.Serialize(&integer, array_t<byte_t>::FromUnsafePointer(integer_buffer, 1)), TException);
 		alignas(s32_t) byte_t integer_storage[sizeof(s32_t)];
-		EXPECT_THROW(int4_codec.Deserialize(array_t<const byte_t>(integer_buffer, 3), integer_storage), TException);
+		EXPECT_THROW(int4_codec.Deserialize(array_t<const byte_t>::FromUnsafePointer(integer_buffer, 3), integer_storage), TException);
 
 		const IDatatypeCodec& float4_codec = FindDatatypeCodec("float4");
 		const IDatatypeCodec& float8_codec = FindDatatypeCodec("float8");
 		EXPECT_FLOAT_EQ(RoundTripCodec(float4_codec, 1.25F), 1.25F);
 		EXPECT_DOUBLE_EQ(RoundTripCodec(float8_codec, -123.5), -123.5);
 		alignas(double) byte_t float_storage[sizeof(double)];
-		EXPECT_THROW(float8_codec.Deserialize(array_t<const byte_t>(integer_buffer, sizeof(integer_buffer)), float_storage), TException);
+		EXPECT_THROW(float8_codec.Deserialize(array_t<const byte_t>::FromUnsafePointer(integer_buffer, sizeof(integer_buffer)), float_storage), TException);
 	}
 
 	TEST(db_postgres_codec, ByteArrayAndStrings)
@@ -139,7 +139,7 @@ namespace
 
 		alignas(TJsonValue) byte_t json_storage[sizeof(TJsonValue)];
 		const byte_t invalid_jsonb[] = { 2, '{', '}' };
-		EXPECT_THROW(jsonb_codec.Deserialize(array_t<const byte_t>(invalid_jsonb, sizeof(invalid_jsonb)), json_storage), TException);
+		EXPECT_THROW(jsonb_codec.Deserialize(array_t<const byte_t>::FromUnsafePointer(invalid_jsonb, sizeof(invalid_jsonb)), json_storage), TException);
 		EXPECT_THROW(jsonb_codec.Deserialize(array_t<const byte_t>(), json_storage), TException);
 
 		const IDatatypeCodec& void_codec = FindDatatypeCodec("void");
@@ -161,7 +161,7 @@ namespace
 
 		alignas(el1::io::path::TPath) byte_t storage[sizeof(el1::io::path::TPath)];
 		const byte_t invalid_version[] = { 0, 'T', 'o', 'p' };
-		EXPECT_THROW(codec.Deserialize(array_t<const byte_t>(invalid_version, sizeof(invalid_version)), storage), TException);
+		EXPECT_THROW(codec.Deserialize(array_t<const byte_t>::FromUnsafePointer(invalid_version, sizeof(invalid_version)), storage), TException);
 	}
 
 	TEST(db_postgres, TPostgresConnection_connect)

@@ -76,7 +76,10 @@ namespace
 			const TString input_str = "hello world\nfoobar\ntest\nlast line";
 			TLineReader lr;
 			lr.buffer = "should not be visible";	// this is for testing only - your are not supposed to use it this way!
-			const TList< TString> lines = input_str.chars.Pipe().Transform(lr).Collect();
+			auto line_pipe = input_str.chars.Pipe().Transform(lr);
+			// The temporary array pipe is now owned by the transform adapter. The
+			// stateful lvalue transformator remains borrowed and therefore observable.
+			const TList< TString> lines = line_pipe.Collect();
 			EXPECT_EQ(lines.Count(), 4U);
 			EXPECT_EQ(lines[0], "hello world");
 			EXPECT_EQ(lines[1], "foobar");

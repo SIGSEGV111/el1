@@ -42,15 +42,15 @@ namespace el1::io::stream::fifo
 			// returns an array of items ready to be read from the fifo
 			// this function does not mark these items as read and thus does not free up space for the producer
 			// use Discard() or Read() for this purpose
-			collection::list::array_t<T> Peek() final override
+			collection::list::array_t<T> Peek() EL_LIFETIME_BOUND final override
 			{
 				if(Remaining() == 0 && fib_consumer != fib_producer && fib_producer != nullptr && fib_consumer != nullptr && fib_producer->IsAlive())
 					fib_producer->SwitchTo();
 
 				if(idx_read <= idx_write)
-					return collection::list::array_t<T>(arr_items_fifo + idx_read, idx_write - idx_read);
+					return collection::list::array_t<T>::FromUnsafePointer(arr_items_fifo + idx_read, idx_write - idx_read);
 				else
-					return collection::list::array_t<T>(arr_items_fifo + idx_read, N_ITEMS - idx_read);
+					return collection::list::array_t<T>::FromUnsafePointer(arr_items_fifo + idx_read, N_ITEMS - idx_read);
 			}
 
 			// discards the next n items from the fifo

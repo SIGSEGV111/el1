@@ -94,14 +94,14 @@ namespace el1::io::format::json
 			TJsonValue& operator[](const char* const key) EL_GETTER  { return Map()[key]; }
 			const TJsonValue& operator[](const char* const key) const EL_GETTER { return Map()[key]; }
 
-			TJsonValue& operator[](const ssys_t index) { return Array()[index]; }
-			const TJsonValue& operator[](const ssys_t index) const EL_GETTER { return Array()[index]; }
+			TJsonValue& operator[](const ssys_t index) EL_LIFETIME_BOUND { return Array()[index]; }
+			const TJsonValue& operator[](const ssys_t index) const EL_LIFETIME_BOUND EL_GETTER { return const_cast<TJsonValue*>(this)->Array()[index]; }
 
 			const TJsonValue& operator()(const TString& key) const EL_GETTER;
 
 			#if (__SIZEOF_SIZE_T__ != __SIZEOF_INT__)	// ssys_t vs. int
-				TJsonValue& operator[](const int index) { return Array()[index]; }
-				const TJsonValue& operator[](const int index) const EL_GETTER { return Array()[index]; }
+				TJsonValue& operator[](const int index) EL_LIFETIME_BOUND { return Array()[index]; }
+				const TJsonValue& operator[](const int index) const EL_LIFETIME_BOUND EL_GETTER { return const_cast<TJsonValue*>(this)->Array()[index]; }
 			#endif
 
 			bool IsNull() const EL_GETTER;
@@ -129,8 +129,8 @@ namespace el1::io::format::json
 			explicit operator const TString&() const { return String(); }
 
 			bool IsArray() const { return Type() == EType::ARRAY; }
-			TJsonArray& Array() EL_GETTER;
-			array_t<const TJsonValue> Array() const EL_GETTER;
+			TJsonArray& Array() EL_LIFETIME_BOUND EL_GETTER;
+			array_t<const TJsonValue> Array() const EL_LIFETIME_BOUND EL_GETTER;
 			array_t<const TJsonValue> Array(const array_t<const TJsonValue>& _default) const EL_GETTER;
 			explicit operator TJsonArray&() { return Array(); }
 			explicit operator array_t<const TJsonValue>() const { return Array(); }

@@ -204,7 +204,7 @@ namespace el1::io::text::format::detail
 	void FormatUTF32String(TString& out, const char32_t* const value, const char32_t code, const TDefaultFormatSpec& spec)
 	{
 		TStringFormatter formatter = MakeStringFormatter(code, spec);
-		out += formatter.Format(TStringView(value, UTF32StringLength(value)));
+		out += formatter.Format(TStringView::FromUnsafePointer(value, UTF32StringLength(value)));
 	}
 
 	void FormatCharacter(TString& out, const char value, const char32_t code, const TDefaultFormatSpec& spec)

@@ -19,6 +19,7 @@ namespace el1::io::bcd
 
 namespace el1::io::text::string
 {
+	class TString;
 	using namespace io::types;
 	using namespace io::text::encoding;
 	using namespace io::collection::list;
@@ -31,17 +32,23 @@ namespace el1::io::text::string
 	 * `U"..."` literals bind directly through the array constructor below; the
 	 * terminating U'\0' is intentionally not part of the view.
 	 */
-	class TStringView : public array_t<const char32_t>
+	class EL_LIFETIME_POINTER TStringView : public array_t<const char32_t>
 	{
 		public:
 			using TBase = array_t<const char32_t>;
 
 			constexpr TStringView() noexcept = default;
-			constexpr TStringView(const char32_t* const chars, const usys_t n_chars) noexcept : TBase(chars, n_chars) {}
-			constexpr TStringView(const TBase chars) noexcept : TBase(chars) {}
+			constexpr TStringView(const TBase chars EL_LIFETIME_BOUND) noexcept : TBase(chars) {}
+			TStringView(const TString& string EL_LIFETIME_BOUND) noexcept;
+
+			// Explicit raw-pointer escape hatch; prefer U"...", TString or array_t views.
+			static constexpr TStringView FromUnsafePointer(const char32_t* const chars EL_LIFETIME_BOUND, const usys_t n_chars) noexcept
+			{
+				return TStringView(TBase::FromUnsafePointer(chars, n_chars));
+			}
 
 			template<std::size_t N>
-			constexpr TStringView(const char32_t (&chars)[N]) noexcept : TBase(chars, N > 0 ? N - 1 : 0) {}
+			constexpr TStringView(const char32_t (&chars EL_LIFETIME_BOUND)[N]) noexcept : TBase(chars, N > 0 ? N - 1 : 0) {}
 
 			constexpr usys_t Length() const noexcept EL_GETTER { return Count(); }
 
@@ -53,8 +60,8 @@ namespace el1::io::text::string
 			bool BeginsWith(const TStringView txt) const EL_GETTER;
 			bool EndsWith(const TStringView txt) const EL_GETTER;
 
-			TStringView SliceSL(const ssys_t start, usys_t length = NEG1) const;
-			TStringView SliceBE(const ssys_t begin, const ssys_t end) const;
+			TStringView SliceSL(const ssys_t start, usys_t length = NEG1) const EL_LIFETIME_BOUND;
+			TStringView SliceBE(const ssys_t begin, const ssys_t end) const EL_LIFETIME_BOUND;
 
 			double ToDouble() const EL_GETTER;
 			s64_t ToInteger() const EL_GETTER;
@@ -80,17 +87,17 @@ namespace el1::io::text::string
 		char32_t arr[2];
 	};
 
-	extern const array_t<const char32_t> OCTAL_SYMBOLS;
-	extern const array_t<const char32_t> DECIMAL_SYMBOLS;
-	extern const array_t<const char32_t> HEXADECIMAL_SYMBOLS_UC;
-	extern const array_t<const char32_t> HEXADECIMAL_SYMBOLS_LC;
-	extern const array_t<const char32_t> BINARY_SYMBOLS;
-	extern const array_t<const char32_t> CONTROL_CHARS;
-	extern const array_t<const char32_t> WHITESPACE_CHARS;
-	extern const array_t<const char32_t> ASCII_QUOTE_SYMBOLS;
-	extern const array_t<const symbol_map_t> MAP_LETTER_CASE;	// [0] = lower; [1] = upper
+	inline constexpr TStringView OCTAL_SYMBOLS = U"01234567";
+	inline constexpr TStringView DECIMAL_SYMBOLS = U"0123456789";
+	inline constexpr TStringView HEXADECIMAL_SYMBOLS_UC = U"0123456789ABCDEF";
+	inline constexpr TStringView HEXADECIMAL_SYMBOLS_LC = U"0123456789abcdef";
+	inline constexpr TStringView BINARY_SYMBOLS = U"01";
+	inline constexpr TStringView ASCII_QUOTE_SYMBOLS = U"'\"";
+	inline constexpr TStringView CONTROL_CHARS = U"\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F";
+	inline constexpr TStringView WHITESPACE_CHARS = U"\x09\x0A\x0B\x0C\x0D\x20\x85\xA0\x1680\x2000\x2001\x2002\x2003\x2004\x2005\x2006\x2007\x2008\x2009\x200A\x2028\x2029\x202F\x205F\x3000";
+	array_t<const symbol_map_t> LetterCaseMap();	// [0] = lower; [1] = upper
 
-	class TString
+	class EL_LIFETIME_OWNER TString
 	{
 		public:
 			TList<char32_t> chars;
@@ -190,8 +197,8 @@ namespace el1::io::text::string
 			bool operator< (const TString& rhs) const EL_GETTER { return operator<(rhs.View()); }
 
 			inline usys_t Length() const noexcept EL_GETTER { return chars.Count(); }
-			TStringView View() const noexcept { return TStringView(chars.View()); }
-			operator TStringView() const noexcept { return View(); }
+			TStringView View() const & noexcept EL_LIFETIME_BOUND { return TStringView(chars.View()); }
+			TStringView View() const && = delete;
 			inline char32_t operator[](const ssys_t index) const EL_GETTER { return chars[index]; }
 			inline char32_t& operator[](const ssys_t index) EL_GETTER { return chars[index]; }
 
@@ -211,6 +218,7 @@ namespace el1::io::text::string
 			TString& operator=(TString&&) = default;
 	};
 
+	inline TStringView::TStringView(const TString& string EL_LIFETIME_BOUND) noexcept : TBase(string.chars.View()) {}
 
 	class TLineReader
 	{
@@ -459,6 +467,7 @@ namespace el1::io::text::string
 
 namespace el1::io::text::string
 {
+	class TString;
 	template<typename ... A>
 	TString TString::Format(const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...>& format, A const& ...args)
 	{
