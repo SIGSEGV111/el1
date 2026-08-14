@@ -5,6 +5,8 @@
 #include "system_task.hpp"
 #include "util.hpp"
 
+#include <algorithm>
+
 namespace el1::io::stream::fifo
 {
 	using namespace io::types;
@@ -19,7 +21,7 @@ namespace el1::io::stream::fifo
 			struct TInputWaitable : system::waitable::IWaitable
 			{
 				const TFifo* const fifo;
-				bool IsReady() const final override { return fifo->Remaining() > 0 || fifo->fib_producer == nullptr || !fifo->fib_producer->IsAlive(); }
+				bool IsReady() const final override { return fifo->Count() > 0 || fifo->fib_producer == nullptr || !fifo->fib_producer->IsAlive(); }
 				TInputWaitable(const TFifo* const fifo) : fifo(fifo) {}
 			};
 
@@ -38,34 +40,85 @@ namespace el1::io::stream::fifo
 			u32_t idx_read;
 			T arr_items_fifo[N_ITEMS];
 
-		public:
-			// returns an array of items ready to be read from the fifo
-			// this function does not mark these items as read and thus does not free up space for the producer
-			// use Discard() or Read() for this purpose
-			collection::list::array_t<T> Peek() EL_LIFETIME_BOUND final override
+		protected:
+			void Linearize()
 			{
-				if(Remaining() == 0 && fib_consumer != fib_producer && fib_producer != nullptr && fib_consumer != nullptr && fib_producer->IsAlive())
-					fib_producer->SwitchTo();
+				const usys_t count = Count();
+				if(count == 0)
+				{
+					idx_read = 0;
+					idx_write = 0;
+					return;
+				}
+				if(idx_read == 0)
+					return;
 
-				if(idx_read <= idx_write)
-					return collection::list::array_t<T>::FromUnsafePointer(arr_items_fifo + idx_read, idx_write - idx_read);
-				else
-					return collection::list::array_t<T>::FromUnsafePointer(arr_items_fifo + idx_read, N_ITEMS - idx_read);
+				std::rotate(arr_items_fifo, arr_items_fifo + idx_read, arr_items_fifo + N_ITEMS);
+				idx_read = 0;
+				idx_write = count == N_ITEMS ? N_ITEMS : (u32_t)count;
 			}
 
-			// discards the next n items from the fifo
-			// essentially freeing the space for new items
-			void Discard(const usys_t n_discard) final override
+		public:
+			usys_t Count() const noexcept final override
 			{
-				const usys_t n_remaining = Remaining();
-				EL_ERROR(n_discard > n_remaining, TInvalidArgumentException, "n_discard", "n_discard cannot be larger than Remaining()");
+				if(idx_write == N_ITEMS)
+					return N_ITEMS;
+				return idx_write >= idx_read ? idx_write - idx_read : (N_ITEMS - idx_read) + idx_write;
+			}
 
-				if(n_discard > 0 && idx_write == N_ITEMS)
+			bool Ensure(const usys_t count) final override
+			{
+				if(count > N_ITEMS)
+					return false;
+
+				while(Count() < count && fib_consumer != fib_producer && fib_producer != nullptr && fib_consumer != nullptr && fib_producer->IsAlive())
+				{
+					const usys_t before = Count();
+					fib_producer->SwitchTo();
+					if(Count() <= before)
+						break;
+				}
+
+				if(Count() < count)
+					return false;
+				if(count != 0 && Head().Count() < Count())
+					Linearize();
+				return Head().Count() >= count;
+			}
+
+			const T& operator[](const usys_t index) const final override
+			{
+				EL_ERROR(index >= Count(), TStreamDryException);
+				return arr_items_fifo[(idx_read + index) % N_ITEMS];
+			}
+
+			collection::array::array_t<const T> Head() const noexcept EL_LIFETIME_BOUND final override
+			{
+				const usys_t count = Count();
+				if(count == 0)
+					return {};
+				const usys_t contiguous = util::Min<usys_t>(count, N_ITEMS - idx_read);
+				return collection::array::array_t<const T>::FromUnsafePointer(arr_items_fifo + idx_read, contiguous);
+			}
+
+			collection::array::array_t<T> HeadMutable() EL_LIFETIME_BOUND
+			{
+				const usys_t count = Count();
+				if(count == 0)
+					return {};
+				const usys_t contiguous = util::Min<usys_t>(count, N_ITEMS - idx_read);
+				return collection::array::array_t<T>::FromUnsafePointer(arr_items_fifo + idx_read, contiguous);
+			}
+
+			void Shift(const usys_t count) final override
+			{
+				EL_ERROR(count > Count(), TInvalidArgumentException, "count", "count cannot be larger than Count()");
+				if(count == 0)
+					return;
+
+				if(idx_write == N_ITEMS)
 					idx_write = idx_read;
-
-				idx_read += n_discard;
-				if(idx_read >= N_ITEMS)
-					idx_read -= N_ITEMS;
+				idx_read = (idx_read + count) % N_ITEMS;
 			}
 
 			usys_t Write(const T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
@@ -96,62 +149,28 @@ namespace el1::io::stream::fifo
 				return n_written;
 			}
 
-			iosize_t WriteOut(ISink<T>& sink, const iosize_t _n_items_max, const bool) final override
+			iosize_t WriteOut(ISink<T>& sink, const iosize_t n_items_max, const bool) final override
 			{
-				iosize_t n_read = 0;
-				const usys_t n_items_max = util::Min<usys_t>(Remaining(), _n_items_max);
-
-				while(n_read < n_items_max)
+				const usys_t limit = n_items_max == (iosize_t)-1 ? Count() : util::Min<usys_t>(Count(), n_items_max);
+				usys_t n_written_total = 0;
+				while(n_written_total < limit)
 				{
-					const usys_t n_batch_max = idx_read < idx_write ? idx_write - idx_read : N_ITEMS - idx_read;
-					const usys_t n_remaining = n_items_max - n_read;
-					const usys_t n_now = util::Min(n_batch_max, n_remaining);
-					const usys_t n_written = sink.Write(arr_items_fifo + idx_read, n_now);
-
+					const auto head = Head();
+					const usys_t n_now = util::Min(head.Count(), limit - n_written_total);
+					const usys_t n_written = sink.Write(head.Data(), n_now);
 					EL_ERROR(n_written > n_now, TLogicException);
-					n_read += n_written;
-					idx_read += n_written;
-					if(idx_read >= N_ITEMS)
-						idx_read = 0;
+					Shift(n_written);
+					n_written_total += n_written;
 
 					if(n_written == 0)
 					{
-						auto w = sink.OnOutputReady();
-						if(w == nullptr)
+						const auto* const waitable = sink.OnOutputReady();
+						if(waitable == nullptr)
 							break;
-						w->WaitFor();
+						waitable->WaitFor();
 					}
 				}
-
-				return n_read;
-			}
-
-			usys_t Read(T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
-			{
-				usys_t n_read = 0;
-
-				while(n_read < n_items_max && Remaining() > 0)
-				{
-					const usys_t r = util::Min<usys_t>(Remaining(), n_items_max - n_read);
-
-					if(r > 0 && idx_write == N_ITEMS)
-						idx_write = idx_read;
-
-					for(usys_t i = 0; i < r; i++)
-					{
-						arr_items[n_read + i] = arr_items_fifo[idx_read];
-						idx_read++;
-						if(idx_read >= N_ITEMS)
-							idx_read = 0;
-					}
-
-					n_read += r;
-
-					if(n_read < n_items_max && fib_consumer != fib_producer && fib_producer != nullptr && fib_consumer != nullptr && fib_producer->IsAlive())
-						fib_producer->SwitchTo();
-				}
-
-				return n_read;
+				return n_written_total;
 			}
 
 			const system::waitable::IWaitable* OnOutputReady() const final override
@@ -169,13 +188,6 @@ namespace el1::io::stream::fifo
 				if(idx_write == N_ITEMS)
 					return 0;
 				return idx_write >= idx_read ? (N_ITEMS - idx_write) + idx_read : idx_read - idx_write;
-			}
-
-			u32_t Remaining() const
-			{
-				if(idx_write == N_ITEMS)
-					return N_ITEMS;
-				return idx_write >= idx_read ? idx_write - idx_read : (N_ITEMS - idx_read) + idx_write;
 			}
 
 			void Close() final override

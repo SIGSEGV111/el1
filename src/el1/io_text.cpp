@@ -27,9 +27,17 @@ namespace el1::io::text
 		EL_ERROR(source == nullptr, TInvalidArgumentException, "source", "source cannot be nullptr");
 	}
 
-	bool TStreamTextReader::Extend(const usys_t offset)
+	bool TStreamTextReader::DoEnsure(const usys_t count)
 	{
-		while(!eof && offset >= buffer.Count())
+		if(count <= Count())
+			return true;
+		if(pos != 0)
+		{
+			buffer.Remove(0, pos);
+			pos = 0;
+		}
+
+		while(!eof && buffer.Count() < count)
 		{
 			char32_t* const chr = decoder.NextItem(&byte_input);
 			if(chr == nullptr)
@@ -39,20 +47,24 @@ namespace el1::io::text
 			}
 			buffer.Append(*chr);
 		}
-		return offset < buffer.Count();
+		return buffer.Count() >= count;
 	}
 
-	bool TStreamTextReader::Peek(const usys_t offset, char32_t& out)
+	const char32_t& TStreamTextReader::operator[](const usys_t index) const
 	{
-		if(!Extend(offset))
-			return false;
-		out = buffer[offset];
-		return true;
+		EL_ERROR(index >= Count(), stream::TStreamDryException);
+		return buffer[pos + index];
 	}
 
-	void TStreamTextReader::Consume(const usys_t count)
+	array_t<const char32_t> TStreamTextReader::Head() const noexcept
 	{
-		EL_ERROR(count > buffer.Count(), TLogicException);
-		buffer.Remove(0, count);
+		const usys_t count = Count();
+		return array_t<const char32_t>::FromUnsafePointer(count == 0 ? nullptr : buffer.ItemPtr(pos), count);
+	}
+
+	void TStreamTextReader::DoShift(const usys_t count)
+	{
+		EL_ERROR(count > Count(), TLogicException);
+		pos += count;
 	}
 }

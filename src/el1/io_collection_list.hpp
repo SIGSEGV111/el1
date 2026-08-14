@@ -194,27 +194,42 @@ namespace el1::io::collection::list
 	};
 
 	template<typename T>
-	struct TListSource : stream::ISource<T>
+	struct TListSource : stream::IBufferedSource<T>
 	{
 		TList<T> list;
 		usys_t pos;
 
-		usys_t Remaining() const EL_GETTER
+		usys_t Count() const noexcept final override
 		{
 			return list.Count() - pos;
 		}
 
-		usys_t Read(T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
+		bool Ensure(const usys_t count) final override
 		{
-			const usys_t n = util::Min(Remaining(), n_items_max);
-			for(usys_t i = 0; i < n; i++)
-				arr_items[i] = list[pos++];
-			return n;
+			return count <= Count();
+		}
+
+		const T& operator[](const usys_t index) const final override
+		{
+			EL_ERROR(index >= Count(), stream::TStreamDryException);
+			return list[pos + index];
+		}
+
+		array_t<const T> Head() const noexcept EL_LIFETIME_BOUND final override
+		{
+			const usys_t count = Count();
+			return array_t<const T>::FromUnsafePointer(count == 0 ? nullptr : list.ItemPtr(pos), count);
+		}
+
+		void Shift(const usys_t n_items) final override
+		{
+			EL_ERROR(n_items > Count(), stream::TStreamDryException);
+			pos += n_items;
 		}
 
 		iosize_t WriteOut(stream::ISink<T>& sink, const iosize_t n_items_max, const bool) final override
 		{
-			const usys_t n = n_items_max == (iosize_t)-1 ? Remaining() : util::Min<usys_t>(Remaining(), n_items_max);
+			const usys_t n = n_items_max == (iosize_t)-1 ? Count() : util::Min<usys_t>(Count(), n_items_max);
 			if(n == 0)
 				return 0;
 

@@ -139,6 +139,80 @@ namespace
 		EXPECT_EQ(Decode(bytes), U"ä😀 [0042] 'Hällö' ff / 100% raw%%");
 	}
 
+	TEST(io_text, BufferedTextSources)
+	{
+		static_assert(std::derived_from<ITextReader, el1::io::stream::IBufferedSource<char32_t>>);
+		static_assert(std::derived_from<TStringSource, el1::io::stream::IBufferedSource<char32_t>>);
+
+		TStringSource string_source(TString(U"abcd"));
+		EXPECT_EQ(string_source.Count(), 4U);
+		EXPECT_TRUE(string_source.Ensure(4));
+		EXPECT_EQ(string_source[0], U'a');
+		EXPECT_EQ(string_source[2], U'c');
+		EXPECT_EQ(string_source.Head().Count(), 4U);
+		string_source.Shift(1);
+		char32_t read[2] = {};
+		EXPECT_EQ(string_source.Read(read, 2), 2U);
+		EXPECT_EQ(read[0], U'b');
+		EXPECT_EQ(read[1], U'c');
+		EXPECT_EQ(string_source.First(), U'd');
+
+		TListSource<byte_t> bytes(Encode(U"ä😀x"));
+		TStreamTextReader reader(&bytes);
+		ASSERT_TRUE(reader.Ensure(2));
+		EXPECT_EQ(reader[1], U'😀');
+		const auto head = reader.Head();
+		ASSERT_GE(head.Count(), 2U);
+		EXPECT_EQ(head[0], U'ä');
+		reader.Shift(2);
+		ASSERT_TRUE(reader.Ensure(1));
+		EXPECT_EQ(reader[0], U'x');
+	}
+
+
+	TEST(io_text, TStringViewTextReaderBorrowsWithoutCopying)
+	{
+		TString text(U"1234");
+		const TStringView view = text.View();
+		TStringViewTextReader reader(view);
+		ASSERT_TRUE(reader.Ensure(4));
+		EXPECT_EQ(reader.ItemPtr(0), view.Data());
+		u16_t value = 0;
+		EXPECT_TRUE(reader.TryScan(U"%d", value));
+		EXPECT_EQ(value, 1234U);
+		EXPECT_EQ(reader.Count(), 0U);
+	}
+
+	TEST(io_text, TextReaderTracksCharacterAndLineIndices)
+	{
+		TStringTextReader string_reader(TString(U"a\nbc\n"));
+		EXPECT_EQ(string_reader.CharacterIndex(), (iosize_t)0);
+		EXPECT_EQ(string_reader.LineIndex(), (iosize_t)0);
+		EXPECT_EQ(string_reader.Position(4).character_index, (iosize_t)4);
+		EXPECT_EQ(string_reader.Position(4).line_index, (iosize_t)1);
+
+		string_reader.Shift(3);
+		EXPECT_EQ(string_reader.CharacterIndex(), (iosize_t)3);
+		EXPECT_EQ(string_reader.LineIndex(), (iosize_t)1);
+		EXPECT_EQ(string_reader.Position(2).character_index, (iosize_t)5);
+		EXPECT_EQ(string_reader.Position(2).line_index, (iosize_t)2);
+
+		TListTextReader list_reader(TList<char32_t>{U'x', U'\n', U'y'});
+		list_reader.Shift(2);
+		EXPECT_EQ(list_reader.CharacterIndex(), (iosize_t)2);
+		EXPECT_EQ(list_reader.LineIndex(), (iosize_t)1);
+
+		TListSource<byte_t> bytes(Encode(U"ä\n😀x"));
+		TStreamTextReader stream_reader(&bytes);
+		ASSERT_TRUE(stream_reader.Ensure(4));
+		EXPECT_EQ(stream_reader[3], U'x');
+		stream_reader.Shift(3);
+		EXPECT_EQ(stream_reader.CharacterIndex(), (iosize_t)3);
+		EXPECT_EQ(stream_reader.LineIndex(), (iosize_t)1);
+		ASSERT_TRUE(stream_reader.Ensure(1));
+		EXPECT_EQ(stream_reader[0], U'x');
+	}
+
 	TEST(io_text, TStreamTextReaderScanUnicodeAndTypes)
 	{
 		static_assert(scan::IsValidScan<s32_t, u32_t, TString, char32_t>(U"ä😀 %d %x %q %c"));
@@ -168,6 +242,47 @@ namespace
 		TFixed fixed;
 		EXPECT_TRUE(fixed_reader.TryScan(U"%d", fixed));
 		EXPECT_EQ(TString::Format(U"%.4d", fixed), U"12.3456");
+	}
+
+	TEST(io_text, TTextReaderScanIntegerRangeAndHex)
+	{
+		TStringTextReader reader(TString(U"9223372036854775807 fFfF"));
+		s64_t signed_value = 0;
+		u16_t hex_value = 0;
+		EXPECT_TRUE(reader.TryScan(U"%d %x", signed_value, hex_value));
+		EXPECT_EQ(signed_value, std::numeric_limits<s64_t>::max());
+		EXPECT_EQ(hex_value, 0xffffu);
+
+		TStringTextReader signed_overflow(TString(U"9223372036854775808"));
+		signed_value = 123;
+		EXPECT_FALSE(signed_overflow.TryScan(U"%d", signed_value));
+		EXPECT_EQ(signed_value, 123);
+		EXPECT_EQ(signed_overflow.CharacterIndex(), (iosize_t)0);
+
+		TStringTextReader hex_overflow(TString(U"10000"));
+		hex_value = 123;
+		EXPECT_FALSE(hex_overflow.TryScan(U"%x", hex_value));
+		EXPECT_EQ(hex_value, 123);
+		EXPECT_EQ(hex_overflow.CharacterIndex(), (iosize_t)0);
+	}
+
+	TEST(io_text, TTextReaderScanFloatingExponent)
+	{
+		TStringTextReader reader(TString(U"1e3 -2.5E-2 +.5 1e"));
+
+		double first = 0;
+		double second = 0;
+		double third = 0;
+		EXPECT_TRUE(reader.TryScan(U"%f %f %f ", first, second, third));
+		EXPECT_DOUBLE_EQ(first, 1000.0);
+		EXPECT_DOUBLE_EQ(second, -0.025);
+		EXPECT_DOUBLE_EQ(third, 0.5);
+
+		const iosize_t before = reader.CharacterIndex();
+		double malformed = 123.0;
+		EXPECT_FALSE(reader.TryScan(U"%f", malformed));
+		EXPECT_EQ(malformed, 123.0);
+		EXPECT_EQ(reader.CharacterIndex(), before);
 	}
 
 	TEST(io_text, TStreamTextReaderScanRollbackAndWidth)

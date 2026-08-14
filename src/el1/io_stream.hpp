@@ -281,11 +281,65 @@ namespace el1::io::stream
 	template<typename T>
 	struct IBufferedSource : ISource<T>
 	{
-		// returns a preview of the available items in the source directly from its internal buffers
-		// use Discard() or Read() to remove the items from the source when you no longer need them
-		// this invalidates the previously returned buffer
-		// and allows the source to retrieve or produce the next batch of items
-		virtual collection::array::array_t<T> Peek() EL_LIFETIME_BOUND = 0;
+		/** Number of items currently buffered and addressable through operator[]. */
+		virtual usys_t Count() const noexcept = 0;
+
+		/**
+		 * Tries to make at least count items available as one contiguous prefix.
+		 * Returns true iff Head().Count() >= count afterwards. Implementations may
+		 * refill, compact or linearize their internal buffer to satisfy this.
+		 */
+		virtual bool Ensure(usys_t count) = 0;
+
+		/** Random access within the current buffered window. */
+		virtual const T& operator[](usys_t index) const = 0;
+
+		/** Pointer access into the contiguous prefix established by Ensure(). */
+		const T* ItemPtr(const usys_t index) const noexcept EL_LIFETIME_BOUND
+		{
+			return index < Head().Count() ? &(*this)[index] : nullptr;
+		}
+
+		/**
+		 * Returns the currently contiguous prefix of the buffered window. After a
+		 * successful Ensure(n), Head().Count() is guaranteed to be at least n.
+		 */
+		virtual collection::array::array_t<const T> Head() const noexcept EL_LIFETIME_BOUND = 0;
+
+		/** Permanently consumes the first count buffered items. */
+		virtual void Shift(usys_t count) = 0;
+
+		bool IsEmpty() const noexcept { return Count() == 0; }
+
+		const T& First() const
+		{
+			EL_ERROR(Count() == 0, TStreamDryException);
+			return (*this)[0];
+		}
+
+		void Discard(const usys_t n_items) final override
+		{
+			Shift(n_items);
+		}
+
+		usys_t Read(T* const arr_items, const usys_t n_items_max) override EL_WARN_UNUSED_RESULT
+		{
+			usys_t n_read = 0;
+			while(n_read < n_items_max)
+			{
+				if(Count() == 0 && !Ensure(1))
+					break;
+
+				const auto head = Head();
+				EL_ERROR(head.Count() == 0 && Count() != 0, TLogicException);
+				const usys_t n = util::Min(head.Count(), n_items_max - n_read);
+				for(usys_t i = 0; i < n; i++)
+					arr_items[n_read + i] = head[i];
+				Shift(n);
+				n_read += n;
+			}
+			return n_read;
+		}
 	};
 
 	using IBinarySink = ISink<byte_t>;

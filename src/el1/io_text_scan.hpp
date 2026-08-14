@@ -5,7 +5,9 @@
 #include "io_text_string.hpp"
 #include "io_bcd.hpp"
 
+#include <charconv>
 #include <limits>
+#include <string>
 #include <optional>
 #include <tuple>
 #include <type_traits>
@@ -21,15 +23,23 @@ namespace el1::io::text::scan
 
 	namespace detail
 	{
+		inline bool At(stream::IBufferedSource<char32_t>& input, const usys_t index, char32_t& out)
+		{
+			if(!input.Ensure(index + 1))
+				return false;
+			out = input[index];
+			return true;
+		}
+
 		inline bool IsWhitespace(const char32_t chr)
 		{
 			return string::WHITESPACE_CHARS.Contains(chr);
 		}
 
-		inline void SkipWhitespace(parser::IInput& input, usys_t& pos)
+		inline void SkipWhitespace(stream::IBufferedSource<char32_t>& input, usys_t& pos)
 		{
 			char32_t chr;
-			while(input.Peek(pos, chr) && IsWhitespace(chr))
+			while(detail::At(input, pos, chr) && IsWhitespace(chr))
 				pos++;
 		}
 
@@ -93,13 +103,13 @@ namespace el1::io::text::scan
 		}
 
 		template<typename T>
-		concept CDirectScanner = requires(parser::IInput& input, usys_t& pos, const char32_t code, const scanner_spec_t<T>& spec)
+		concept CDirectScanner = requires(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t code, const scanner_spec_t<T>& spec)
 		{
 			{ TScanner<T>::Scan(input, pos, code, spec) } -> std::same_as<std::optional<T>>;
 		};
 
 		template<typename T>
-		concept CParserScanner = requires(parser::IInput& input, usys_t& pos, const char32_t code, const scanner_spec_t<T>& spec)
+		concept CParserScanner = requires(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t code, const scanner_spec_t<T>& spec)
 		{
 			{ TScanner<T>::Parser(code, spec).TryParse(input, pos) } -> std::same_as<std::optional<T>>;
 		};
@@ -111,7 +121,7 @@ namespace el1::io::text::scan
 		} && (CDirectScanner<T> || CParserScanner<T>);
 
 		template<typename T>
-		std::optional<T> ScanValue(parser::IInput& input, usys_t& pos, const char32_t code, const scanner_spec_t<T>& spec)
+		std::optional<T> ScanValue(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t code, const scanner_spec_t<T>& spec)
 		{
 			if constexpr(CDirectScanner<T>)
 				return TScanner<T>::Scan(input, pos, code, spec);
@@ -119,7 +129,7 @@ namespace el1::io::text::scan
 				return TScanner<T>::Parser(code, spec).TryParse(input, pos);
 		}
 
-		inline std::optional<string::TString> NumericToken(parser::IInput& input, usys_t& pos, const unsigned radix, const bool decimal, const TDefaultFormatSpec& spec)
+		inline std::optional<string::TStringView> NumericToken(stream::IBufferedSource<char32_t>& input, usys_t& pos, const unsigned radix, const bool decimal, const bool exponent, const TDefaultFormatSpec& spec)
 		{
 			usys_t p = pos;
 			SkipWhitespace(input, p);
@@ -127,29 +137,23 @@ namespace el1::io::text::scan
 			const usys_t field_end = spec.has_width ? field_begin + spec.width : NEG1;
 			auto within = [&](const usys_t at) { return field_end == NEG1 || at < field_end; };
 
-			string::TString token;
 			char32_t chr;
-			if(within(p) && input.Peek(p, chr) && (chr == U'+' || chr == U'-'))
-			{
-				token += chr;
+			if(within(p) && detail::At(input, p, chr) && (chr == U'+' || chr == U'-'))
 				p++;
-			}
 
 			bool have_digit = false;
 			bool have_decimal = false;
-			while(within(p) && input.Peek(p, chr))
+			while(within(p) && detail::At(input, p, chr))
 			{
 				const int digit = DigitValue(chr);
 				if(digit >= 0 && (unsigned)digit < radix)
 				{
-					token += chr;
 					have_digit = true;
 					p++;
 					continue;
 				}
 				if(decimal && !have_decimal && chr == U'.')
 				{
-					token += chr;
 					have_decimal = true;
 					p++;
 					continue;
@@ -158,8 +162,79 @@ namespace el1::io::text::scan
 			}
 			if(!have_digit)
 				return std::nullopt;
+
+			if(exponent && radix == 10 && within(p) && detail::At(input, p, chr) && (chr == U'e' || chr == U'E'))
+			{
+				p++;
+				if(within(p) && detail::At(input, p, chr) && (chr == U'+' || chr == U'-'))
+					p++;
+
+				bool have_exponent_digit = false;
+				while(within(p) && detail::At(input, p, chr) && chr >= U'0' && chr <= U'9')
+				{
+					have_exponent_digit = true;
+					p++;
+				}
+				if(!have_exponent_digit)
+					return std::nullopt;
+			}
+
+			EL_ERROR(p <= field_begin || !input.Ensure(p), error::TLogicException);
 			pos = p;
-			return token;
+			return string::TStringView::FromUnsafePointer(input.ItemPtr(field_begin), p - field_begin);
+		}
+
+		inline std::string AsciiToken(const string::TStringView token)
+		{
+			std::string text;
+			text.reserve(token.Length());
+			for(usys_t i = 0; i < token.Length(); i++)
+				text.push_back((char)token[i]);
+			return text;
+		}
+
+		template<typename T, bool IS_ENUM = std::is_enum_v<T>>
+		struct TIntegerValueType { using type = T; };
+
+		template<typename T>
+		struct TIntegerValueType<T, true> { using type = std::underlying_type_t<T>; };
+
+		template<typename T>
+		requires (std::is_integral_v<T> || std::is_enum_v<T>)
+		std::optional<T> TokenToInteger(const string::TStringView token, const unsigned radix)
+		{
+			using value_t = typename TIntegerValueType<T>::type;
+			const std::string text = AsciiToken(token);
+			const char* begin = text.data();
+			const char* const end = begin + text.size();
+			if(begin != end && *begin == '+')
+				begin++;
+			if constexpr(std::is_unsigned_v<value_t>)
+				if(begin != end && *begin == '-')
+					return std::nullopt;
+
+			value_t value = 0;
+			const auto parsed = std::from_chars(begin, end, value, (int)radix);
+			if(parsed.ec != std::errc() || parsed.ptr != end)
+				return std::nullopt;
+			return (T)value;
+		}
+
+		template<typename T>
+		requires std::is_floating_point_v<T>
+		std::optional<T> TokenToFloating(const string::TStringView token)
+		{
+			const std::string text = AsciiToken(token);
+			const char* begin = text.data();
+			const char* const end = begin + text.size();
+			if(begin != end && *begin == '+')
+				begin++;
+
+			T value = 0;
+			const auto parsed = std::from_chars(begin, end, value, std::chars_format::general);
+			if(parsed.ec != std::errc() || parsed.ptr != end)
+				return std::nullopt;
+			return value;
 		}
 
 		inline string::TStringView Symbols(const unsigned radix)
@@ -174,9 +249,10 @@ namespace el1::io::text::scan
 			}
 		}
 
-		inline bcd::TBCD TokenToBCD(string::TString token, const unsigned radix)
+		inline bcd::TBCD TokenToBCD(const string::TStringView token, const unsigned radix)
 		{
-			return bcd::TBCD::FromString(token.Reverse().View(), Symbols(radix));
+			string::TString owned(token);
+			return bcd::TBCD::FromString(owned.Reverse().View(), Symbols(radix));
 		}
 	}
 
@@ -184,44 +260,13 @@ namespace el1::io::text::scan
 	requires ((std::is_integral_v<T> && !format::detail::IsCharacterType<T>) || std::is_enum_v<T>)
 	struct TScanner<T> : detail::TNumericScannerBase
 	{
-		static std::optional<T> Scan(parser::IInput& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
+		static std::optional<T> Scan(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			const unsigned radix = Radix(code);
-			auto token = detail::NumericToken(input, pos, radix, false, spec);
+			auto token = detail::NumericToken(input, pos, radix, false, false, spec);
 			if(!token)
 				return std::nullopt;
-			try
-			{
-				const bcd::TBCD value = detail::TokenToBCD(std::move(*token), radix);
-				if constexpr(std::is_enum_v<T>)
-				{
-					using U = std::underlying_type_t<T>;
-					if constexpr(std::is_signed_v<U>)
-						return (T)(U)value.ToSignedInt();
-					else
-						return (T)(U)value.ToUnsignedInt();
-				}
-				else if constexpr(std::is_signed_v<T>)
-				{
-					const s64_t v = value.ToSignedInt();
-					if(v < (s64_t)std::numeric_limits<T>::min() || v > (s64_t)std::numeric_limits<T>::max())
-						return std::nullopt;
-					return (T)v;
-				}
-				else
-				{
-					if(value.IsNegative())
-						return std::nullopt;
-					const u64_t v = value.ToUnsignedInt();
-					if(v > (u64_t)std::numeric_limits<T>::max())
-						return std::nullopt;
-					return (T)v;
-				}
-			}
-			catch(const error::IException&)
-			{
-				return std::nullopt;
-			}
+			return detail::TokenToInteger<T>(*token, radix);
 		}
 	};
 
@@ -229,13 +274,15 @@ namespace el1::io::text::scan
 	requires std::is_floating_point_v<T>
 	struct TScanner<T> : detail::TNumericScannerBase
 	{
-		static std::optional<T> Scan(parser::IInput& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
+		static std::optional<T> Scan(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			const unsigned radix = Radix(code);
-			auto token = detail::NumericToken(input, pos, radix, true, spec);
+			auto token = detail::NumericToken(input, pos, radix, true, radix == 10, spec);
 			if(!token)
 				return std::nullopt;
-			try { return (T)detail::TokenToBCD(std::move(*token), radix).ToDouble(); }
+			if(radix == 10)
+				return detail::TokenToFloating<T>(*token);
+			try { return (T)detail::TokenToBCD(*token, radix).ToDouble(); }
 			catch(const error::IException&) { return std::nullopt; }
 		}
 	};
@@ -243,13 +290,13 @@ namespace el1::io::text::scan
 	template<>
 	struct TScanner<bcd::TBCD> : detail::TNumericScannerBase
 	{
-		static std::optional<bcd::TBCD> Scan(parser::IInput& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
+		static std::optional<bcd::TBCD> Scan(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			const unsigned radix = Radix(code);
-			auto token = detail::NumericToken(input, pos, radix, true, spec);
+			auto token = detail::NumericToken(input, pos, radix, true, false, spec);
 			if(!token)
 				return std::nullopt;
-			try { return detail::TokenToBCD(std::move(*token), radix); }
+			try { return detail::TokenToBCD(*token, radix); }
 			catch(const error::IException&) { return std::nullopt; }
 		}
 	};
@@ -262,16 +309,16 @@ namespace el1::io::text::scan
 	})
 	struct TScanner<T> : detail::TNumericScannerBase
 	{
-		static std::optional<T> Scan(parser::IInput& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
+		static std::optional<T> Scan(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			const unsigned radix = Radix(code);
-			auto token = detail::NumericToken(input, pos, radix, true, spec);
+			auto token = detail::NumericToken(input, pos, radix, true, false, spec);
 			if(!token)
 				return std::nullopt;
 			try
 			{
 				T result;
-				result = detail::TokenToBCD(std::move(*token), radix);
+				result = detail::TokenToBCD(*token, radix);
 				return result;
 			}
 			catch(const error::IException&) { return std::nullopt; }
@@ -284,10 +331,10 @@ namespace el1::io::text::scan
 	{
 		static constexpr bool Supports(const char32_t code) noexcept { return code == U'c'; }
 		static constexpr bool Validate(const char32_t, const TDefaultFormatSpec& spec) noexcept { return !spec.has_pad && !spec.has_precision && (!spec.has_width || spec.width == 1); }
-		static std::optional<T> Scan(parser::IInput& input, usys_t& pos, const char32_t, const TDefaultFormatSpec&)
+		static std::optional<T> Scan(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t, const TDefaultFormatSpec&)
 		{
 			char32_t chr;
-			if(!input.Peek(pos, chr))
+			if(!detail::At(input, pos, chr))
 				return std::nullopt;
 			pos++;
 			if constexpr(std::same_as<T, char32_t>)
@@ -305,7 +352,7 @@ namespace el1::io::text::scan
 		static constexpr bool Supports(const char32_t code) noexcept { return code == U's' || code == U'q'; }
 		static constexpr bool Validate(const char32_t, const TDefaultFormatSpec& spec) noexcept { return !spec.has_pad && !spec.has_precision; }
 
-		static std::optional<string::TString> Scan(parser::IInput& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
+		static std::optional<string::TString> Scan(stream::IBufferedSource<char32_t>& input, usys_t& pos, const char32_t code, const TDefaultFormatSpec& spec)
 		{
 			usys_t p = pos;
 			detail::SkipWhitespace(input, p);
@@ -314,7 +361,7 @@ namespace el1::io::text::scan
 			char32_t chr;
 			if(code == U's')
 			{
-				while(result.Length() < limit && input.Peek(p, chr) && !detail::IsWhitespace(chr))
+				while(result.Length() < limit && detail::At(input, p, chr) && !detail::IsWhitespace(chr))
 				{
 					result += chr;
 					p++;
@@ -324,12 +371,12 @@ namespace el1::io::text::scan
 			}
 			else
 			{
-				if(!input.Peek(p, chr) || (chr != U'\'' && chr != U'"'))
+				if(!detail::At(input, p, chr) || (chr != U'\'' && chr != U'"'))
 					return std::nullopt;
 				const char32_t quote = chr;
 				p++;
 				bool closed = false;
-				while(result.Length() < limit && input.Peek(p, chr))
+				while(result.Length() < limit && detail::At(input, p, chr))
 				{
 					p++;
 					if(chr == quote)
@@ -339,7 +386,7 @@ namespace el1::io::text::scan
 					}
 					if(chr == U'\\')
 					{
-						if(!input.Peek(p, chr))
+						if(!detail::At(input, p, chr))
 							return std::nullopt;
 						p++;
 					}
@@ -462,7 +509,7 @@ namespace el1::io::text::scan
 			}
 		}
 
-		bool MatchLiteral(parser::IInput& input, usys_t& pos, const usys_t begin, const usys_t end) const
+		bool MatchLiteral(stream::IBufferedSource<char32_t>& input, usys_t& pos, const usys_t begin, const usys_t end) const
 		{
 			for(usys_t i = begin; i < end; i++)
 			{
@@ -473,7 +520,7 @@ namespace el1::io::text::scan
 					i++;
 				}
 				char32_t actual;
-				if(!input.Peek(pos, actual) || actual != expected)
+				if(!detail::At(input, pos, actual) || actual != expected)
 					return false;
 				pos++;
 			}
@@ -481,7 +528,7 @@ namespace el1::io::text::scan
 		}
 
 		template<usys_t I = 0>
-		bool ScanFrom(parser::IInput& input, usys_t& pos, usys_t literal_pos, std::tuple<std::optional<TArgs>...>& values) const
+		bool ScanFrom(stream::IBufferedSource<char32_t>& input, usys_t& pos, usys_t literal_pos, std::tuple<std::optional<TArgs>...>& values) const
 		{
 			if constexpr(I == sizeof...(TArgs))
 				return MatchLiteral(input, pos, literal_pos, length);
@@ -512,7 +559,7 @@ namespace el1::io::text::scan
 
 		constexpr bool IsValid() const noexcept { return ValidateFrom<0>(0); }
 
-		bool TryScan(parser::IInput& input, std::tuple<std::optional<TArgs>...>& values, usys_t& consumed) const
+		bool TryScan(stream::IBufferedSource<char32_t>& input, std::tuple<std::optional<TArgs>...>& values, usys_t& consumed) const
 		{
 			consumed = 0;
 			return ScanFrom(input, consumed, 0, values);

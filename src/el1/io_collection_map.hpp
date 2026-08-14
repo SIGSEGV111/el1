@@ -13,6 +13,12 @@ namespace el1::io::collection::map
 
 	// WARNING: TKey and TValue must be trivially moveable!
 
+	enum class EInputOrder : u8_t
+	{
+		UNSORTED,
+		ASSUME_SORTED
+	};
+
 	template<typename TKey, typename TValue>
 	class TSortedMap;
 
@@ -102,7 +108,8 @@ namespace el1::io::collection::map
 			TSortedMap(TSortedMap&& other) = default;
 			TSortedMap(const TSortedMap& other) = default;
 			TSortedMap(sorter_function_t sorter = &StdSorter<TKey>);
-			TSortedMap(const TList< kv_pair_t>& items, sorter_function_t sorter = &StdSorter<TKey>);
+			TSortedMap(TList<kv_pair_t>&& items, EInputOrder input_order = EInputOrder::UNSORTED, sorter_function_t sorter = &StdSorter<TKey>);
+			TSortedMap(const TList<kv_pair_t>& items, sorter_function_t sorter = &StdSorter<TKey>);
 			TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter = &StdSorter<TKey>);
 	};
 
@@ -139,7 +146,8 @@ namespace el1::io::collection::map
 			TSortedMap(const TSortedMap& other) = default;
 			TSortedMap(const TSortedMap<TKey, const TValue>& other);
 			TSortedMap(sorter_function_t sorter = &StdSorter<TKey>);
-			TSortedMap(const TList< kv_pair_t>& items, sorter_function_t sorter = &StdSorter<TKey>);
+			TSortedMap(TList<kv_pair_t>&& items, EInputOrder input_order = EInputOrder::UNSORTED, sorter_function_t sorter = &StdSorter<TKey>);
+			TSortedMap(const TList<kv_pair_t>& items, sorter_function_t sorter = &StdSorter<TKey>);
 			TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter = &StdSorter<TKey>);
 	};
 
@@ -185,7 +193,17 @@ namespace el1::io::collection::map
 	/*****************************************************************************/
 
 	template<typename TKey, typename TValue>
-	TSortedMap<TKey, const TValue>::TSortedMap(const TList< kv_pair_t>& items, sorter_function_t sorter) : items(items), sorter(sorter)
+	TSortedMap<TKey, const TValue>::TSortedMap(TList<kv_pair_t>&& items, const EInputOrder input_order, sorter_function_t sorter) : items(std::move(items)), sorter(sorter)
+	{
+		if(input_order == EInputOrder::UNSORTED)
+			this->items.Sort(ESortOrder::ASCENDING, [this](const kv_pair_t& a, const kv_pair_t& b) { return this->sorter(a.key, b.key); });
+
+		for(usys_t i = 1; i < this->items.Count(); i++)
+			EL_ERROR(this->sorter(this->items[i - 1].key, this->items[i].key) == 0, TKeyAlreadyExistsException<TKey>, this->items[i].key);
+	}
+
+	template<typename TKey, typename TValue>
+	TSortedMap<TKey, const TValue>::TSortedMap(const TList<kv_pair_t>& items, sorter_function_t sorter) : TSortedMap(TList<kv_pair_t>(items), EInputOrder::UNSORTED, sorter)
 	{
 	}
 
@@ -195,7 +213,7 @@ namespace el1::io::collection::map
 	}
 
 	template<typename TKey, typename TValue>
-	TSortedMap<TKey, const TValue>::TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter) : items(list), sorter(sorter)
+	TSortedMap<TKey, const TValue>::TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter) : TSortedMap(TList<kv_pair_t>(list), EInputOrder::UNSORTED, sorter)
 	{
 	}
 
@@ -298,7 +316,7 @@ namespace el1::io::collection::map
 	/*****************************************************************************/
 
 	template<typename TKey, typename TValue>
-	TSortedMap<TKey, TValue>::TSortedMap(const TSortedMap<TKey, const TValue>& other) : TSortedMap<TKey, const TValue>(other.Items(), other.Sorter())
+	TSortedMap<TKey, TValue>::TSortedMap(const TSortedMap<TKey, const TValue>& other) : TSortedMap<TKey, const TValue>(TList<kv_pair_t>(other.Items()), EInputOrder::ASSUME_SORTED, other.Sorter())
 	{
 	}
 
@@ -308,7 +326,12 @@ namespace el1::io::collection::map
 	}
 
 	template<typename TKey, typename TValue>
-	TSortedMap<TKey, TValue>::TSortedMap(const TList< kv_pair_t>& items, sorter_function_t sorter) : TSortedMap<TKey, const TValue>(items, sorter)
+	TSortedMap<TKey, TValue>::TSortedMap(TList<kv_pair_t>&& items, const EInputOrder input_order, sorter_function_t sorter) : TSortedMap<TKey, const TValue>(std::move(items), input_order, sorter)
+	{
+	}
+
+	template<typename TKey, typename TValue>
+	TSortedMap<TKey, TValue>::TSortedMap(const TList<kv_pair_t>& items, sorter_function_t sorter) : TSortedMap<TKey, const TValue>(items, sorter)
 	{
 	}
 

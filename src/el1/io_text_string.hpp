@@ -210,7 +210,7 @@ namespace el1::io::text::string
 			TString(const char* const str, const usys_t maxlen = NEG1);
 			TString(const wchar_t* const str, const usys_t maxlen = NEG1);
 			explicit TString(const char32_t* const str, const usys_t maxlen = NEG1);
-			TString(TList<char32_t> chars) : chars(chars) {}
+			TString(TList<char32_t> chars) : chars(std::move(chars)) {}
 			TString(array_t<const char32_t> chars) : chars(chars) {}
 			TString(const TStringView chars) : chars(static_cast<const array_t<const char32_t>&>(chars)) {}
 
@@ -219,6 +219,38 @@ namespace el1::io::text::string
 	};
 
 	inline TStringView::TStringView(const TString& string EL_LIFETIME_BOUND) noexcept : TBase(string.chars.View()) {}
+
+	/** Owning buffered source for text that must outlive its original TString. */
+	class TStringSource final : public stream::IBufferedSource<char32_t>
+	{
+		TString string;
+		usys_t pos = 0;
+
+	public:
+		explicit TStringSource(TString string) : string(std::move(string)) {}
+		explicit TStringSource(const TStringView string) : string(string) {}
+
+		usys_t Count() const noexcept final override { return string.Length() - pos; }
+		bool Ensure(const usys_t count) final override { return count <= Count(); }
+
+		const char32_t& operator[](const usys_t index) const final override
+		{
+			EL_ERROR(index >= Count(), stream::TStreamDryException);
+			return string.chars[pos + index];
+		}
+
+		array_t<const char32_t> Head() const noexcept EL_LIFETIME_BOUND final override
+		{
+			const usys_t count = Count();
+			return array_t<const char32_t>::FromUnsafePointer(count == 0 ? nullptr : string.chars.ItemPtr(pos), count);
+		}
+
+		void Shift(const usys_t count) final override
+		{
+			EL_ERROR(count > Count(), stream::TStreamDryException);
+			pos += count;
+		}
+	};
 
 	class TLineReader
 	{

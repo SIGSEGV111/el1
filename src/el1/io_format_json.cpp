@@ -1,40 +1,17 @@
 #include "io_format_json.hpp"
-#include "io_text_encoding_utf8.hpp"
 #include "io_file.hpp"
 
 namespace el1::io::format::json
 {
-	using namespace text::encoding::utf8;
 	using namespace stream::producer;
 	using namespace file;
 
 	// LCOV_EXCL_START
 	TString TInvalidJsonException::Message() const
 	{
-		switch(reason)
-		{
-			case EReason::UNEXPECTED_EOF:
-				return TString::Format(U"unexpected EOF in line %d", line);
-				break;
-
-			case EReason::SYNTAX_ERROR:
-				return TString::Format(U"syntax error in line %d ('%c')", line, chr);
-				break;
-
-			case EReason::NUMBER_TOO_BIG:
-				return TString::Format(U"number too big in line %d ('%c')", line, chr);
-				break;
-
-			case EReason::UNESCAPED_CTRL:
-				return TString::Format(U"unescaped control character in string encountered in line %d (0x%02x)", line, chr);
-				break;
-
-			case EReason::INVALID_ESCAPE:
-				return TString::Format(U"incorrect escape of character %q in line %d", chr, line);
-				break;
-		}
-
-		EL_THROW(TLogicException);
+		if(chr == U'\0')
+			return TString::Format(U"invalid JSON at character %d (line %d): unexpected end of input", pos, line);
+		return TString::Format(U"invalid JSON at character %d (line %d) near %q", pos, line, chr);
 	}
 	// LCOV_EXCL_STOP
 
@@ -58,6 +35,9 @@ namespace el1::io::format::json
 			case EType::NUMBER:
 				return "number";
 
+			case EType::INTEGER:
+				return "integer";
+
 			case EType::STRING:
 				return "string";
 
@@ -80,6 +60,7 @@ namespace el1::io::format::json
 			case EType::NULLVALUE:
 			case EType::BOOLEAN:
 			case EType::NUMBER:
+			case EType::INTEGER:
 				// nothing to do
 				break;
 
@@ -115,6 +96,9 @@ namespace el1::io::format::json
 
 				case EType::NUMBER:
 					return this->Number() == rhs.Number();
+
+				case EType::INTEGER:
+					return this->Integer() == rhs.Integer();
 
 				case EType::STRING:
 					return this->String() == rhs.String();
@@ -191,10 +175,34 @@ namespace el1::io::format::json
 
 	////////////////////////////////////////////////////////////////////
 
+	s64_t& TJsonValue::Integer()
+	{
+		EL_ERROR(Type() != EType::INTEGER, TException, TString::Format(U"requested integer value, but contains %s", JsonTypeToString(Type())));
+		return integer;
+	}
+
+	const s64_t& TJsonValue::Integer() const
+	{
+		return const_cast<TJsonValue*>(this)->Integer();
+	}
+
+	const s64_t& TJsonValue::Integer(const s64_t& _default) const
+	{
+		return IsInteger() ? Integer() : _default;
+	}
+
+	////////////////////////////////////////////////////////////////////
+
+	double TJsonValue::ToDouble() const
+	{
+		EL_ERROR(!IsNumeric(), TException, TString::Format(U"requested numeric value, but contains %s", JsonTypeToString(Type())));
+		return IsInteger() ? (double)Integer() : Number();
+	}
+
 	double& TJsonValue::Number()
 	{
 		EL_ERROR(Type() != EType::NUMBER, TException, TString::Format(U"requested number value, but contains %s", JsonTypeToString(Type())));
-		return *reinterpret_cast<double*>(__placeholder);
+		return number;
 	}
 
 	const double& TJsonValue::Number() const
@@ -265,6 +273,8 @@ namespace el1::io::format::json
 
 	TJsonValue& TJsonValue::operator=(const TJsonValue& rhs)
 	{
+		if(this == &rhs)
+			return *this;
 		Destruct();
 
 		switch(rhs.type)
@@ -278,6 +288,10 @@ namespace el1::io::format::json
 
 			case EType::NUMBER:
 				this->number = rhs.number;
+				break;
+
+			case EType::INTEGER:
+				this->integer = rhs.integer;
 				break;
 
 			case EType::STRING:
@@ -299,6 +313,8 @@ namespace el1::io::format::json
 
 	TJsonValue& TJsonValue::operator=(TJsonValue&& rhs)
 	{
+		if(this == &rhs)
+			return *this;
 		Destruct();
 
 		switch(rhs.type)
@@ -312,6 +328,10 @@ namespace el1::io::format::json
 
 			case EType::NUMBER:
 				this->number = rhs.number;
+				break;
+
+			case EType::INTEGER:
+				this->integer = rhs.integer;
 				break;
 
 			case EType::STRING:
@@ -337,6 +357,12 @@ namespace el1::io::format::json
 	{
 		type = EType::BOOLEAN;
 		this->boolean = boolean;
+	}
+
+	TJsonValue::TJsonValue(const s64_t integer)
+	{
+		type = EType::INTEGER;
+		this->integer = integer;
 	}
 
 	TJsonValue::TJsonValue(const double number)
@@ -435,58 +461,9 @@ namespace el1::io::format::json
 
 	TString JsonUnquote(const TString& input)
 	{
-		TString output;
-
-		EL_ERROR(input.Length() < 2, TInvalidArgumentException, "input", "input must be at least of length 2");
-		EL_ERROR(input.chars[ 0] != '\"', TInvalidArgumentException, "input", "input must begin with a quote");
-		EL_ERROR(input.chars[-1] != '\"', TInvalidArgumentException, "input", "input must end with a quote");
-		EL_ERROR(input.chars[-2] == '\\', TInvalidArgumentException, "input", "input the final quotation mark cannot be escaped");
-
-		for(usys_t i = 1; i < input.chars.Count() - 1; i++)
-		{
-			if(input.chars[i] == '\\')
-			{
-				i++;
-				switch(input.chars[i])
-				{
-					case 'b':
-						output.chars.Append('\b');
-						break;
-					case 'f':
-						output.chars.Append('\f');
-						break;
-					case 'n':
-						output.chars.Append('\n');
-						break;
-					case 'r':
-						output.chars.Append('\r');
-						break;
-					case 't':
-						output.chars.Append('\t');
-						break;
-					case '\"':
-						output.chars.Append('\"');
-						break;
-					case '\\':
-						output.chars.Append('\\');
-						break;
-
-					case 'u':
-					{
-						EL_NOT_IMPLEMENTED;
-					}
-
-					default:
-						EL_THROW(TException, TString::Format(U"invalid escape of character %q encountered in input", input.chars[i]));
-				}
-			}
-			else
-			{
-				output.chars.Append(input.chars[i]);
-			}
-		}
-
-		return output;
+		TJsonValue value = TJsonValue::Parse(input);
+		EL_ERROR(!value.IsString(), TInvalidArgumentException, "input", "input must contain one JSON string");
+		return value.String();
 	}
 
 	TString JsonQuote(const TString& input)
@@ -544,22 +521,15 @@ namespace el1::io::format::json
 				sink.WriteAll(str.chars);
 				break;
 
-			case EType::NUMBER:
-			{
-				const s64_t i = (s64_t)this->Number();
-				if((double)i == this->Number())
-				{
-					// integer
-					str = TString::Format(U"%d", i);
-				}
-				else
-				{
-					// float
-					str = TString::Format(U"%d", this->Number());
-				}
+			case EType::INTEGER:
+				str = TString::Format(U"%d", this->Integer());
 				sink.WriteAll(str.chars);
 				break;
-			}
+
+			case EType::NUMBER:
+				str = TString::Format(U"%d", this->Number());
+				sink.WriteAll(str.chars);
+				break;
 
 			case EType::STRING:
 				str = JsonQuote(this->String());
@@ -624,21 +594,88 @@ namespace el1::io::format::json
 
 	////////////////////////////////////////////////////////////////////
 
+	/**************************************************************************/
+	// JSON syntax is described by TJsonParser::Parser(). Number conversion uses
+	// the generic text scanner so JSON does not duplicate numeric parsing.
+	namespace
+	{
+		[[noreturn]] void ThrowSyntaxError(ITextReader& reader, const usys_t lookahead)
+		{
+			const text_position_t position = reader.Position(lookahead);
+			char32_t chr = U'\0';
+			if(reader.Ensure(lookahead + 1))
+				chr = reader[lookahead];
+			EL_THROW(TInvalidJsonException, position.character_index, position.line_index + 1, chr);
+		}
+	}
+
+	u16_t TJsonParser::ConvertCodeUnit(const TStringView token)
+	{
+		TStringViewTextReader reader(token);
+		u16_t value = 0;
+		reader.Scan(U"%x", value);
+		EL_ERROR(reader.Ensure(1), TLogicException);
+		return value;
+	}
+
+	std::optional<TJsonValue> TJsonParser::ConvertInteger(const TStringView token)
+	{
+		TStringViewTextReader reader(token);
+		s64_t value = 0;
+		if(!reader.TryScan(U"%d", value) || reader.Ensure(1))
+			return std::nullopt;
+		return TJsonValue(value);
+	}
+
+	std::optional<TJsonValue> TJsonParser::ConvertNumber(const TStringView token)
+	{
+		TStringViewTextReader reader(token);
+		double value = 0;
+		if(!reader.TryScan(U"%f", value) || reader.Ensure(1))
+			return std::nullopt;
+		return TJsonValue(value);
+	}
+
 	TJsonValue TJsonValue::Parse(const TString& str, const bool tolerant)
 	{
-		return str.chars.Pipe().Transform(TJsonParser(tolerant)).First();
+		TStringTextReader reader(str.View());
+		TJsonValue value = Parse(reader, tolerant);
+		if(reader.Ensure(1))
+			ThrowSyntaxError(reader, 0);
+		return value;
+	}
+
+	TJsonValue TJsonValue::Parse(ITextReader& reader, const bool tolerant)
+	{
+		text::parser::TParseContext context(reader);
+		usys_t consumed = 0;
+		std::optional<TJsonValue> value;
+		try
+		{
+			value = TJsonParser::Parser(tolerant).TryParse(context, consumed);
+		}
+		catch(const text::parser::TParseException& error)
+		{
+			ThrowSyntaxError(reader, error.position);
+		}
+		if(!value)
+			ThrowSyntaxError(reader, context.FarthestPosition());
+		reader.Shift(consumed);
+		return std::move(*value);
 	}
 
 	TJsonValue TJsonValue::Parse(const TFile& file, const bool tolerant)
 	{
 		TMapping map(const_cast<TFile*>(&file), TAccess::RO);
-		return map.Pipe().Transform(TUTF8Decoder()).Transform(TJsonParser(tolerant)).First();
+		auto source = map.Source();
+		TStreamTextReader reader(&source);
+		return Parse(reader, tolerant);
 	}
 
 	const TJsonValue TJsonValue::NULLVALUE = TJsonValue();
 	const TJsonValue TJsonValue::TRUE = TJsonValue(true);
 	const TJsonValue TJsonValue::FALSE = TJsonValue(false);
-	const TJsonValue TJsonValue::ZERO = TJsonValue(0.0);
+	const TJsonValue TJsonValue::ZERO = TJsonValue((s64_t)0);
 	const TJsonValue TJsonValue::EMPTY_STRING = TJsonValue(TString());
 	const TJsonValue TJsonValue::EMPTY_ARRAY = TJsonValue(TJsonArray());
 	const TJsonValue TJsonValue::EMPTY_MAP = TJsonValue(TJsonMap());

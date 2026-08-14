@@ -269,43 +269,43 @@ namespace el1::io::collection::array
 		};
 
 	template<typename T>
-	struct EL_LIFETIME_POINTER TArraySource : stream::ISource<T>
+	struct EL_LIFETIME_POINTER TArraySource : stream::IBufferedSource<T>
 	{
-		const array_t<const T> array;
-		usys_t pos;
+		array_t<const T> array;
 
-		usys_t Remaining() const EL_GETTER
+		usys_t Count() const noexcept final override { return array.Count(); }
+		bool Ensure(const usys_t count) final override { return count <= Count(); }
+
+		const T& operator[](const usys_t index) const final override
 		{
-			return array.Count() - pos;
+			EL_ERROR(index >= Count(), stream::TStreamDryException);
+			return array[index];
 		}
 
-		usys_t Read(T* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT
+		array_t<const T> Head() const noexcept EL_LIFETIME_BOUND final override
 		{
-			const usys_t n = util::Min(Remaining(), n_items_max);
-			for(usys_t i = 0; i < n; i++)
-				arr_items[i] = array[pos++];
-			return n;
+			return array;
 		}
 
 		iosize_t WriteOut(stream::ISink<T>& sink, const iosize_t n_items_max, const bool) final override
 		{
-			const iosize_t n_want = util::Min<iosize_t>(Remaining(), n_items_max);
+			const iosize_t n_want = n_items_max == (iosize_t)-1 ? Count() : util::Min<iosize_t>(Count(), n_items_max);
 			if(n_want == 0)
 				return 0;
 
-			const iosize_t n_wrote = sink.Write(array.Data() + pos, n_want);
-			pos += n_wrote;
+			const iosize_t n_wrote = sink.Write(array.Data(), n_want);
+			array.Shift(n_wrote);
 			return n_wrote;
 		}
 
-		void Discard(const usys_t n_items) final override
+		void Shift(const usys_t n_items) final override
 		{
-			EL_ERROR(Remaining() < n_items, stream::TStreamDryException);
-			pos += n_items;
+			EL_ERROR(Count() < n_items, stream::TStreamDryException);
+			array.Shift(n_items);
 		}
 
 		TArraySource(const TArraySource&) = delete;
-		constexpr TArraySource(const array_t<const T> array EL_LIFETIME_BOUND) noexcept : array(array), pos(0) {}
+		constexpr TArraySource(const array_t<const T> array EL_LIFETIME_BOUND) noexcept : array(array) {}
 	};
 
 	template<typename T>

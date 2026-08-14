@@ -80,10 +80,11 @@ int main(const int argc, char* argv[])
 			}
 
 			EL_ERROR(request.body == nullptr, TInvalidArgumentException, "body", "POST request requires a JSON body");
-			auto json = request.body->Pipe().Transform(TUTF8Decoder()).Transform(TJsonParser(false)).First();
-			const f64_t red = json["color"]["red"].Number();
-			const f64_t green = json["color"]["green"].Number();
-			const f64_t blue = json["color"]["blue"].Number();
+			TStreamTextReader json_reader(request.body);
+			auto json = TJsonValue::Parse(json_reader);
+			const f64_t red = json["color"]["red"].ToDouble();
+			const f64_t green = json["color"]["green"].ToDouble();
+			const f64_t blue = json["color"]["blue"].ToDouble();
 			EL_ERROR(red < 0 || red > 1, TInvalidArgumentException, "red", "range 0-1");
 			EL_ERROR(green < 0 || green > 1, TInvalidArgumentException, "green", "range 0-1");
 			EL_ERROR(blue < 0 || blue > 1, TInvalidArgumentException, "blue", "range 0-1");

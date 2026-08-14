@@ -5,6 +5,10 @@
 #include "io_collection_list.hpp"
 #include "io_collection_map.hpp"
 #include "io_stream_producer.hpp"
+#include "io_text_parser.hpp"
+#include <concepts>
+#include <limits>
+#include <utility>
 
 namespace el1::io::file
 {
@@ -25,26 +29,17 @@ namespace el1::io::format::json
 	using TJsonArray = TList<TJsonValue>;
 	using TConstJsonArray = const array_t<const TJsonValue>;
 
-	enum class EReason : u8_t
-	{
-		UNEXPECTED_EOF,
-		SYNTAX_ERROR,
-		NUMBER_TOO_BIG,
-		UNESCAPED_CTRL,
-		INVALID_ESCAPE,
-	};
 
 	struct TInvalidJsonException : IException
 	{
 		const iosize_t pos;
 		const iosize_t line;
 		const char32_t chr;
-		const EReason reason;
 
 		TString Message() const final override;
 		IException* Clone() const override;
 
-		TInvalidJsonException(const iosize_t pos, const iosize_t line, const char32_t chr, const EReason reason) : pos(pos), line(line), chr(chr), reason(reason) {}
+		TInvalidJsonException(const iosize_t pos, const iosize_t line, const char32_t chr) : pos(pos), line(line), chr(chr) {}
 	};
 
 	enum class EType : usys_t // usys_t required for alignment of TJsonValue::__placeholder
@@ -54,7 +49,8 @@ namespace el1::io::format::json
 		NUMBER = 2,		// => double
 		STRING = 3,		// => TString
 		ARRAY = 4,		// => TJsonArray
-		MAP = 5			// => TJsonMap
+		MAP = 5,			// => TJsonMap
+		INTEGER = 6		// => s64_t
 	};
 
 	const char* JsonTypeToString(const EType type);
@@ -71,6 +67,7 @@ namespace el1::io::format::json
 			{
 				bool boolean;
 				double number;
+				s64_t integer;
 
 				struct
 				{
@@ -114,7 +111,16 @@ namespace el1::io::format::json
 			explicit operator bool&() { return Boolean(); }
 			explicit operator const bool&() const { return Boolean(); }
 
+			bool IsInteger() const { return Type() == EType::INTEGER; }
+			s64_t& Integer() EL_GETTER;
+			const s64_t& Integer() const EL_GETTER;
+			const s64_t& Integer(const s64_t& _default) const EL_GETTER;
+			explicit operator s64_t&() { return Integer(); }
+			explicit operator const s64_t&() const { return Integer(); }
+
 			bool IsNumber() const { return Type() == EType::NUMBER; }
+			bool IsNumeric() const { return IsInteger() || IsNumber(); }
+			double ToDouble() const EL_GETTER;
 			double& Number() EL_GETTER;
 			const double& Number() const EL_GETTER;
 			const double& Number(const double& _default) const EL_GETTER;
@@ -146,6 +152,18 @@ namespace el1::io::format::json
 			TJsonValue& operator=(TJsonValue&& rhs);
 
 			TJsonValue(const bool boolean);
+			TJsonValue(const s64_t integer);
+
+			template<std::integral T>
+			requires (!std::same_as<std::remove_cv_t<T>, bool> && !std::same_as<std::remove_cv_t<T>, s64_t>)
+			TJsonValue(const T integer)
+			{
+				type = EType::INTEGER;
+				if constexpr(std::is_unsigned_v<T>)
+					EL_ERROR((u64_t)integer > (u64_t)std::numeric_limits<s64_t>::max(), TInvalidArgumentException, "integer", "JSON integer exceeds s64_t range");
+				this->integer = (s64_t)integer;
+			}
+
 			TJsonValue(const double number);
 
 			TJsonValue(const TString& string);
@@ -179,384 +197,131 @@ namespace el1::io::format::json
 			static const TJsonValue EMPTY_MAP;
 
 			static TJsonValue Parse(const TString& str, const bool tolerant = false);
+			static TJsonValue Parse(ITextReader& reader, const bool tolerant = false);
 			static TJsonValue Parse(const file::TFile& file, const bool tolerant = false);
 	};
 
 	class TJsonParser
 	{
-		protected:
-			iosize_t pos;
-			iosize_t line;
-			const char32_t* current_char;
-			TJsonValue value;
-			const bool tolerant;
+		static u16_t ConvertCodeUnit(TStringView token);
+		static std::optional<TJsonValue> ConvertInteger(TStringView token);
+		static std::optional<TJsonValue> ConvertNumber(TStringView token);
 
-			static bool IsWhitespace(const char32_t& chr)
+	public:
+		static constexpr auto Parser(const bool tolerant = false)
+		{
+			using namespace text::parser;
+
+			return Recursive<TJsonValue>([tolerant](auto self)
 			{
-				return chr == ' ' || chr == '\t' || chr == '\n';
-			}
-
-			template<typename TSourceStream>
-			const char32_t* NextChar(TSourceStream* const source)
-			{
-				if(current_char != nullptr)
-					return current_char;
-
-				current_char = source->NextItem();
-				if(current_char == nullptr)
-					return nullptr;
-				pos++;
-				return current_char;
-			}
-
-			void ConsumeChar()
-			{
-				current_char = nullptr;
-			}
-
-			template<typename TSourceStream>
-			void EatLiteral(TSourceStream* const source, const char* const literal)
-			{
-				for(usys_t i = 0; literal[i] != 0; i++)
+				auto whitespace = Discard(Repeat(CharList(U' ', U'\t', U'\n', U'\r'), 0, NEG1));
+				auto token = [whitespace](auto parser)
 				{
-					const char32_t* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-					EL_ERROR(*chr != (unsigned char)literal[i], TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-					ConsumeChar();
-				}
-			}
+					return whitespace + std::move(parser) + whitespace;
+				};
 
-			template<typename TSourceStream>
-			const char32_t* EatWhitespace(TSourceStream* const source)
-			{
-				const char32_t* chr;
-				for(chr = NextChar(source); chr != nullptr && IsWhitespace(*chr); chr = NextChar(source))
+				auto boundary = LookAhead(Discard(CharList(U',', U']', U'}'))) || End();
+				auto value = [boundary](auto parser)
 				{
-					if(*chr == '\n')
-						line++;
-					ConsumeChar();
-				}
-				return chr;
-			}
+					return std::move(parser) + boundary;
+				};
 
-			template<typename TSourceStream>
-			TJsonValue ParseArray(TSourceStream* const source)
-			{
-				TJsonArray list;
-
-				{
-					const char32_t* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-					EL_ERROR(*chr != '[', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-					ConsumeChar();
-				}
-
-				for(;;)
-				{
-					const char32_t* chr = EatWhitespace(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-
-					if(*chr == ']')
+				// JSON string grammar. Capture a complete UTF-16 code unit and use
+				// the generic text number scanner for hexadecimal conversion.
+				auto hex = CharRange(U'0', U'9') || CharRange(U'A', U'F') || CharRange(U'a', U'f');
+				auto code_unit = Translate(ConvertCodeUnit, Capture(Repeat(hex, 4, 4)));
+				auto unicode_unit = Discard(U"\\u"_P) + Expect(code_unit);
+				auto high_surrogate = Where(
+					[](const u16_t value) { return value >= 0xd800 && value <= 0xdbff; },
+					unicode_unit
+				);
+				auto low_surrogate = Expect(Validate(
+					[](const u16_t value) { return value >= 0xdc00 && value <= 0xdfff; },
+					unicode_unit
+				));
+				auto surrogate_pair = Translate(
+					[](const u16_t high, const u16_t low) -> char32_t
 					{
-						ConsumeChar();
-						break;
-					}
-					else
+						return (char32_t)(0x10000u + (((u32_t)high - 0xd800u) << 10) + ((u32_t)low - 0xdc00u));
+					},
+					high_surrogate, low_surrogate
+				);
+				auto unicode_scalar = Translate(
+					[](const u16_t value) { return (char32_t)value; },
+					Validate(
+						[](const u16_t value) { return value < 0xd800 || value > 0xdfff; },
+						unicode_unit
+					)
+				);
+
+				auto simple_escape = Discard(U'\\'_P) + (
+					Translate([](char32_t) { return U'"'; }, U'"'_P) ||
+					Translate([](char32_t) { return U'\\'; }, U'\\'_P) ||
+					Translate([](char32_t) { return U'/'; }, U'/'_P) ||
+					Translate([](char32_t) { return U'\b'; }, U'b'_P) ||
+					Translate([](char32_t) { return U'\f'; }, U'f'_P) ||
+					Translate([](char32_t) { return U'\n'; }, U'n'_P) ||
+					Translate([](char32_t) { return U'\r'; }, U'r'_P) ||
+					Translate([](char32_t) { return U'\t'; }, U't'_P)
+				);
+				constexpr char32_t unicode_max = (char32_t)0x10ffff;
+				auto non_unicode_escape = CharRange((char32_t)0, U't') || CharRange(U'v', unicode_max);
+				auto tolerant_escape = If(tolerant, Discard(U'\\'_P) + non_unicode_escape);
+				auto escaped = surrogate_pair || unicode_scalar || simple_escape || tolerant_escape;
+				auto plain = ~(
+					CharList(U'"', U'\\') ||
+					If(!tolerant, CharRange((char32_t)0, (char32_t)0x1f))
+				);
+				auto string = token(Translate(
+					[](TList<char32_t> chars) { return TString(std::move(chars)); },
+					Between(U'"'_P, Repeat(escaped || plain, 0, NEG1), U'"'_P)
+				));
+				auto string_value = value(Translate([](TString value) { return TJsonValue(std::move(value)); }, string));
+
+				// RFC 8259 number grammar:
+				// -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
+				auto digit = CharRange(U'0', U'9');
+				auto zero = Repeat(U'0'_P, 1, 1);
+				auto nonzero_integer = CharRange(U'1', U'9') + Repeat(digit, 0, NEG1);
+				auto integer_part = zero || nonzero_integer;
+				auto sign = Optional(U'-'_P);
+				auto integer_syntax = sign + integer_part;
+				auto integer_token = Capture(integer_syntax);
+				auto fraction = Repeat(U'.'_P, 1, 1) + OneOrMore(digit);
+				auto exponent = Repeat(CharList(U'e', U'E'), 1, 1) + Optional(CharList(U'+', U'-')) + OneOrMore(digit);
+				auto fractional_or_exponent = (fraction + exponent) || fraction || exponent;
+				auto number_token = Capture(integer_syntax + fractional_or_exponent);
+				auto number = value(token(
+					TryTranslate(ConvertNumber, number_token) ||
+					TryTranslate(ConvertInteger, integer_token)
+				));
+
+				auto true_value = value(Translate([](TString) { return TJsonValue(true); }, token(U"true"_P)));
+				auto false_value = value(Translate([](TString) { return TJsonValue(false); }, token(U"false"_P)));
+				auto null_value = value(Translate([](TString) { return TJsonValue(); }, token(U"null"_P)));
+
+				auto array = value(Translate(
+					[](TJsonArray values) { return TJsonValue(std::move(values)); },
+					Between(token(U'['_P), SeparatedBy(self, token(U','_P)), token(U']'_P))
+				));
+
+				auto member = Translate(
+					[](TString key, TJsonValue value)
 					{
-						list.Append(ParseAny(source));
-						chr = EatWhitespace(source);
-						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-
-						if(*chr == ']')
-						{
-							ConsumeChar();
-							break;
-						}
-						else if(*chr == ',')
-						{
-							ConsumeChar();
-							chr = EatWhitespace(source);
-							EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-							EL_ERROR(*chr == ']', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-						}
-						else
-							EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-					}
-				}
-
-				return TJsonValue(std::move(list));
-			}
-
-			template<typename TSourceStream>
-			TJsonValue ParseMap(TSourceStream* const source)
-			{
-				TJsonMap map;
-
-				{
-					const char32_t* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-					EL_ERROR(*chr != '{', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-					ConsumeChar();
-				}
-
-				for(;;)
-				{
-					const char32_t* chr = EatWhitespace(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-
-					if(*chr == '}')
+						return TJsonMap::kv_pair_t{std::move(key), std::move(value)};
+					},
+					string + Discard(token(U':'_P)), self
+				);
+				auto map = value(Translate(
+					[](TList<TJsonMap::kv_pair_t> members)
 					{
-						ConsumeChar();
-						break;
-					}
-					else
-					{
-						TJsonValue key = ParseString(source);
-						chr = EatWhitespace(source);
-						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-						EL_ERROR(*chr != ':', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-						ConsumeChar();
-						TJsonValue value = ParseAny(source);
-						map.Add(std::move(key.String()), std::move(value));
+						return TJsonValue(TJsonMap(std::move(members)));
+					},
+					Between(token(U'{'_P), SeparatedBy(member, token(U','_P)), token(U'}'_P))
+				));
 
-						chr = EatWhitespace(source);
-						EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-
-						if(*chr == '}')
-						{
-							ConsumeChar();
-							break;
-						}
-						else if(*chr == ',')
-						{
-							ConsumeChar();
-							chr = EatWhitespace(source);
-							EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-							EL_ERROR(*chr == '}', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-						}
-						else
-							EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-					}
-				}
-
-				return TJsonValue(std::move(map));
-			}
-
-			template<typename TSourceStream>
-			TJsonValue ParseString(TSourceStream* const source)
-			{
-				TString str;
-				bool escape = false;
-
-				{
-					const char32_t* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-					EL_ERROR(*chr != '\"', TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-					ConsumeChar();
-				}
-
-				for(;;)
-				{
-					const char32_t* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-					EL_ERROR(!tolerant && *chr < 32, TInvalidJsonException, pos, line, *chr, EReason::UNESCAPED_CTRL);
-
-					if(*chr == '\\')
-					{
-						if(escape)
-						{
-							str += '\\';
-							escape = false;
-						}
-						else
-						{
-							escape = true;
-						}
-					}
-					else if(*chr == '\"')
-					{
-						if(escape)
-						{
-							str += '\"';
-							escape = false;
-						}
-						else
-						{
-							ConsumeChar();
-							break;
-						}
-					}
-					else
-					{
-						if(escape)
-						{
-							switch(*chr)
-							{
-								case 'b':
-									str += '\b';
-									break;
-								case 'f':
-									str += '\f';
-									break;
-								case 'n':
-									str += '\n';
-									break;
-								case 'r':
-									str += '\r';
-									break;
-								case 't':
-									str += '\t';
-									break;
-
-								case 'u':
-								{
-									EL_NOT_IMPLEMENTED;
-								}
-
-								default:
-								{
-									EL_ERROR(!tolerant, TInvalidJsonException, pos, line, *chr, EReason::INVALID_ESCAPE);
-									str += *chr;
-								}
-							}
-							escape = false;
-						}
-						else
-						{
-							str += *chr;
-						}
-					}
-
-					ConsumeChar();
-				}
-
-				return TJsonValue(std::move(str));
-			}
-
-			template<typename TSourceStream>
-			TJsonValue ParseNumber(TSourceStream* const source)
-			{
-				double number = 0.0;
-				double divider = 10.0;
-
-				u8_t integer_part[22];
-				bool parse_int = true;
-				bool negative = false;
-				unsigned ii = 0;
-
-				for(;;)
-				{
-					const char32_t* const chr = NextChar(source);
-					EL_ERROR(chr == nullptr && ii == 0 && parse_int, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-
-					if(chr == nullptr)
-						break;
-					else if(*chr == '-' && parse_int && ii == 0 && !negative)
-					{
-						negative = true;
-					}
-					else if(*chr == '.' && parse_int)
-					{
-						parse_int = false;
-					}
-					else if(*chr >= '0' && *chr <= '9')
-					{
-						if(parse_int)
-						{
-							EL_ERROR(ii >= sizeof(integer_part), TInvalidJsonException, pos, line, *chr, EReason::NUMBER_TOO_BIG);
-							integer_part[ii++] = ((u8_t)(*chr - '0'));
-						}
-						else
-						{
-							number += (*chr - '0') / divider;
-							divider *= 10.0;
-						}
-					}
-					else if(IsWhitespace(*chr) || *chr == ',' || *chr == ']' || *chr == '}')
-						break;
-					else
-						EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-
-					ConsumeChar();
-				}
-
-				u64_t m = 1;
-				for(usys_t i = ii; i > 0; i--)
-				{
-					number += m * integer_part[i-1];
-					m *= 10;
-				}
-
-				if(negative)
-					number *= -1.0;
-
-				return TJsonValue(number);
-			}
-
-			template<typename TSourceStream>
-			TJsonValue ParseNull(TSourceStream* const source)
-			{
-				EatLiteral(source, "null");
-				value.SetNull();
-				return TJsonValue();
-			}
-
-			template<typename TSourceStream>
-			TJsonValue ParseBoolean(TSourceStream* const source)
-			{
-				const char32_t* const chr = NextChar(source);
-				EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-
-				if(*chr == 't')
-				{
-					EatLiteral(source, "true");
-					return TJsonValue(true);
-				}
-				else if(*chr == 'f')
-				{
-					EatLiteral(source, "false");
-					return TJsonValue(false);
-				}
-				else
-					EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-			}
-
-			template<typename TSourceStream>
-			TJsonValue ParseAny(TSourceStream* const source)
-			{
-				const char32_t* const chr = EatWhitespace(source);
-				EL_ERROR(chr == nullptr, TInvalidJsonException, pos, line, U'\0', EReason::UNEXPECTED_EOF);
-
-				if(*chr == '[')
-					return ParseArray(source);
-				else if(*chr == '{')
-					return ParseMap(source);
-				else if(*chr == '\"')
-					return ParseString(source);
-				else if( (*chr >= '0' && *chr <= '9') || *chr == '-' || *chr == '.' )
-					return ParseNumber(source);
-				else if(*chr == 'n')
-					return ParseNull(source);
-				else if(*chr == 't' || *chr == 'f')
-					return ParseBoolean(source);
-				else
-					EL_THROW(TInvalidJsonException, pos, line, *chr, EReason::SYNTAX_ERROR);
-			}
-
-		public:
-			using TIn = char32_t;
-			using TOut = TJsonValue;
-
-			template<typename TSourceStream>
-			TJsonValue* NextItem(TSourceStream* const source)
-			{
-				const char32_t* const chr = EatWhitespace(source);
-				if(chr == nullptr)
-					return nullptr;
-
-				return &(value = ParseAny(source));
-			}
-
-			TJsonParser(const bool tolerant = false) : pos(0), line(1), current_char(nullptr), value(), tolerant(tolerant) {}
+				return null_value || true_value || false_value || number || string_value || array || map;
+			});
+		}
 	};
 }

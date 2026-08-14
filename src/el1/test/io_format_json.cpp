@@ -13,26 +13,23 @@ namespace
 	{
 		{
 			const TJsonValue json = TJsonValue::Parse("12345");
-			EXPECT_EQ(json.Type(), EType::NUMBER);
-			EXPECT_EQ(json.Number(), 12345.0);
-		}
-
-		{
-			const TJsonValue json = TJsonValue::Parse(".55");
-			EXPECT_EQ(json.Type(), EType::NUMBER);
-			EXPECT_EQ(json.Number(), 0.55);
-		}
-
-		{
-			const TJsonValue json = TJsonValue::Parse("-.55");
-			EXPECT_EQ(json.Type(), EType::NUMBER);
-			EXPECT_EQ(json.Number(), -0.55);
+			EXPECT_EQ(json.Type(), EType::INTEGER);
+			EXPECT_EQ(json.Integer(), 12345);
+			EXPECT_TRUE(json.IsNumeric());
+			EXPECT_EQ(json.ToDouble(), 12345.0);
 		}
 
 		{
 			const TJsonValue json = TJsonValue::Parse("-0.55");
 			EXPECT_EQ(json.Type(), EType::NUMBER);
 			EXPECT_EQ(json.Number(), -0.55);
+		}
+
+		{
+			const TJsonValue exponent = TJsonValue::Parse("1e3");
+			const TJsonValue fraction_exponent = TJsonValue::Parse("-2.5E-2");
+			EXPECT_EQ(exponent.Number(), 1000.0);
+			EXPECT_EQ(fraction_exponent.Number(), -0.025);
 		}
 
 		{
@@ -97,14 +94,14 @@ namespace
 			EXPECT_EQ(json[1].String(), "hello world");
 			EXPECT_EQ(json[2].Number(), 17.5);
 			EXPECT_EQ(json[3].Number(), 12.5);
-			EXPECT_EQ(json[4].Number(), 7);
-			EXPECT_EQ(json[5].Number(), 3);
-			EXPECT_EQ(json[6].Number(), -2);
+			EXPECT_EQ(json[4].Integer(), 7);
+			EXPECT_EQ(json[5].Integer(), 3);
+			EXPECT_EQ(json[6].Integer(), -2);
 			EXPECT_EQ(json[7].Array().Count(), 0U);
 			EXPECT_EQ(json[8].Array().Count(), 3U);
-			EXPECT_EQ(json[8][0].Number(), 1);
-			EXPECT_EQ(json[8][1].Number(), 2);
-			EXPECT_EQ(json[8][2].Number(), 3);
+			EXPECT_EQ(json[8][0].Integer(), 1);
+			EXPECT_EQ(json[8][1].Integer(), 2);
+			EXPECT_EQ(json[8][2].Integer(), 3);
 		}
 
 		{
@@ -114,9 +111,11 @@ namespace
 		}
 
 		{
-			const TJsonValue json = TJsonValue::Parse("{ \"key1\":{}, \"key2\": []}");
+			const TJsonValue json = TJsonValue::Parse("{ \"key2\": [], \"key1\":{}}");
 			EXPECT_EQ(json.Type(), EType::MAP);
-			EXPECT_EQ(json.Map().Items().Count(), 2U);
+			ASSERT_EQ(json.Map().Items().Count(), 2U);
+			EXPECT_EQ(json.Map().Items()[0].key, "key1");
+			EXPECT_EQ(json.Map().Items()[1].key, "key2");
 			EXPECT_EQ(json["key1"].Type(), EType::MAP);
 			EXPECT_EQ(json["key2"].Type(), EType::ARRAY);
 		}
@@ -131,6 +130,12 @@ namespace
 			EXPECT_THROW(TJsonValue::Parse("\"\n\""), TInvalidJsonException);
 			EXPECT_THROW(TJsonValue::Parse("\"\\I\""), TInvalidJsonException);
 			EXPECT_THROW(TJsonValue::Parse("-"), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse(".55"), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse("-.55"), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse("01"), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse("-01"), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse("1."), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse("+1"), TInvalidJsonException);
 			EXPECT_THROW(TJsonValue::Parse("a"), TInvalidJsonException);
 			EXPECT_THROW(TJsonValue::Parse(":"), TInvalidJsonException);
 			EXPECT_THROW(TJsonValue::Parse("\"test"), TInvalidJsonException);
@@ -148,11 +153,62 @@ namespace
 			EXPECT_EQ(json.Type(), EType::STRING);
 			EXPECT_EQ(json.String(), " \b\f\n\r\t\" ");
 		}
+
+		{
+			const TJsonValue max = TJsonValue::Parse("9223372036854775807");
+			const TJsonValue min = TJsonValue::Parse("-9223372036854775808");
+			EXPECT_EQ(max.Integer(), std::numeric_limits<s64_t>::max());
+			EXPECT_EQ(min.Integer(), std::numeric_limits<s64_t>::min());
+			EXPECT_THROW(TJsonValue::Parse("9223372036854775808"), TInvalidJsonException);
+		}
+
+		{
+			EXPECT_EQ(TJsonValue::Parse("\"\\u20ac\\ud83d\\ude00\"").String(), TString(U"€😀"));
+
+			// Once a high surrogate has been recognized the following low surrogate
+			// is mandatory. These are committed syntax errors, not alternative mismatches.
+			EXPECT_THROW(TJsonValue::Parse("\"\\ud800\\ud800\""), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse("\"\\ud800x\""), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse("\"\\udc00\""), TInvalidJsonException);
+			EXPECT_THROW(TJsonValue::Parse("\"\\u12x4\""), TInvalidJsonException);
+		}
+
+		{
+			try
+			{
+				(void)TJsonValue::Parse(TString(U"{\"a\":[1,]}"));
+				FAIL() << "expected TInvalidJsonException";
+			}
+			catch(const TInvalidJsonException& error)
+			{
+				EXPECT_EQ(error.pos, (iosize_t)8);
+			}
+		}
+
+		{
+			TStringTextReader reader(TString(U"skip\n{\"a\":[1,]}"));
+			reader.Shift(5);
+			EXPECT_EQ(reader.CharacterIndex(), (iosize_t)5);
+			EXPECT_EQ(reader.LineIndex(), (iosize_t)1);
+			try
+			{
+				(void)TJsonValue::Parse(reader);
+				FAIL() << "expected TInvalidJsonException";
+			}
+			catch(const TInvalidJsonException& error)
+			{
+				EXPECT_EQ(error.pos, (iosize_t)13);
+				EXPECT_EQ(error.line, (iosize_t)2);
+				EXPECT_EQ(reader.CharacterIndex(), (iosize_t)5);
+				EXPECT_EQ(reader.LineIndex(), (iosize_t)1);
+			}
+		}
 	}
 
 	TEST(io_format_json, JsonUnquote)
 	{
 		EXPECT_EQ(JsonUnquote("\" abc 123 \\b\\f\\n\\r\\t\\\"\\\\ \""), " abc 123 \b\f\n\r\t\"\\ ");
+		EXPECT_EQ(JsonUnquote("\"\\u20ac\\ud83d\\ude00\""), TString(U"€😀"));
 	}
 
 	TEST(io_format_json, TJsonValue_construct)
@@ -161,6 +217,13 @@ namespace
 			TJsonValue value = true;
 			EXPECT_EQ(value.Type(), EType::BOOLEAN);
 			EXPECT_EQ(value.Boolean(), true);
+		}
+
+		{
+			TJsonValue value = (s64_t)9223372036854775807LL;
+			EXPECT_EQ(value.Type(), EType::INTEGER);
+			EXPECT_EQ(value.Integer(), std::numeric_limits<s64_t>::max());
+			EXPECT_EQ(value.ToString(), "9223372036854775807");
 		}
 
 		{
@@ -284,6 +347,15 @@ namespace
 			EXPECT_EQ(v2.Type(), EType::MAP);
 			EXPECT_EQ(v2.Map().Items().Count(), 1U);
 		}
+	}
+
+	TEST(io_format_json, TJsonValue_self_assign)
+	{
+		TJsonValue value(TString(U"keep"));
+		value = value;
+		EXPECT_EQ(value.String(), TString(U"keep"));
+		value = std::move(value);
+		EXPECT_EQ(value.String(), TString(U"keep"));
 	}
 
 	TEST(io_format_json, TJsonValue_wrong_datatype)

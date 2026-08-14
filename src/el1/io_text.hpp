@@ -49,67 +49,168 @@ namespace el1::io::text
 		void Flush() { sink->Flush(); }
 	};
 
-	/**
-	 * Buffered text input with arbitrary lookahead. Scan() is type-safe and
-	 * compile-time validates its native UTF-32 scan literal.
-	 */
-	struct ITextReader : parser::IInput
+	struct text_position_t
 	{
-		virtual ~ITextReader() = default;
-		virtual void Consume(usys_t count) = 0;
+		iosize_t character_index;
+		iosize_t line_index;
+	};
 
-		template<typename N>
-		auto TryParse(const parser::TParser<N>& parser) -> std::optional<typename N::return_t>
-		{
-			usys_t consumed = 0;
-			auto value = parser.TryParsePrefix(*this, consumed);
-			if(value)
-				Consume(consumed);
-			return value;
-		}
+	/**
+	 * Buffered text input with arbitrary lookahead. CharacterIndex() and
+	 * LineIndex() refer to the next unconsumed character and are zero-based.
+	 */
+	struct ITextReader : stream::IBufferedSource<char32_t>
+	{
+		private:
+			iosize_t character_index = 0;
+			iosize_t line_index = 0;
 
-		template<typename N>
-		auto Parse(const parser::TParser<N>& parser) -> typename N::return_t
-		{
-			auto value = TryParse(parser);
-			EL_ERROR(!value, TException, "text input does not match parser");
-			return std::move(*value);
-		}
+		protected:
+			virtual bool DoEnsure(usys_t count) = 0;
+			virtual void DoShift(usys_t count) = 0;
 
-		template<typename... A>
-		bool TryScan(const scan::TScanString<std::remove_cvref_t<A>...>& fmt, A&... output)
-		{
-			std::tuple<std::optional<std::remove_cvref_t<A>>...> values;
-			usys_t consumed = 0;
-			if(!fmt.TryScan(*this, values, consumed))
-				return false;
-			AssignTuple(values, output...);
-			Consume(consumed);
-			return true;
-		}
+		public:
+			virtual ~ITextReader() = default;
 
-		template<typename... A>
-		usys_t Scan(const scan::TScanString<std::remove_cvref_t<A>...>& fmt, A&... output)
-		{
-			std::tuple<std::optional<std::remove_cvref_t<A>>...> values;
-			usys_t consumed = 0;
-			EL_ERROR(!fmt.TryScan(*this, values, consumed), TException, "text input does not match scan format");
-			AssignTuple(values, output...);
-			Consume(consumed);
-			return consumed;
-		}
+			iosize_t CharacterIndex() const noexcept { return character_index; }
+			iosize_t LineIndex() const noexcept { return line_index; }
 
-	private:
-		template<usys_t I = 0, typename TTuple, typename... A>
-		static void AssignTuple(TTuple& values, A&... output)
-		{
-			if constexpr(I < sizeof...(A))
+			bool Ensure(const usys_t count) final override
 			{
-				auto refs = std::tie(output...);
-				std::get<I>(refs) = std::move(*std::get<I>(values));
-				AssignTuple<I + 1>(values, output...);
+				if(!DoEnsure(count))
+					return false;
+				return Head().Count() >= count;
 			}
-		}
+
+			/** Resolve a lookahead offset to an absolute character/line position. */
+			text_position_t Position(usys_t offset = 0)
+			{
+				if(!Ensure(offset))
+				{
+					offset = util::Min(offset, Count());
+					EL_ERROR(!Ensure(offset), TLogicException);
+				}
+
+				iosize_t line = line_index;
+				const auto head = Head();
+				for(usys_t i = 0; i < offset; i++)
+					if(head[i] == U'\n')
+						line++;
+				return {character_index + (iosize_t)offset, line};
+			}
+
+			void Shift(const usys_t count) final override
+			{
+				if(count == 0)
+					return;
+				EL_ERROR(!Ensure(count), stream::TStreamDryException);
+
+				iosize_t lines = 0;
+				const auto head = Head();
+				for(usys_t i = 0; i < count; i++)
+					if(head[i] == U'\n')
+						lines++;
+				DoShift(count);
+
+				character_index += (iosize_t)count;
+				line_index += lines;
+			}
+
+			template<typename N>
+			auto TryParse(const parser::TParser<N>& grammar, const parser::TParseLimits limits = {}) -> std::optional<typename N::return_t>
+			{
+				usys_t consumed = 0;
+				auto value = grammar.TryParsePrefix(*this, consumed, limits);
+				if(value)
+					Shift(consumed);
+				return value;
+			}
+
+			template<typename N>
+			auto Parse(const parser::TParser<N>& grammar, const parser::TParseLimits limits = {}) -> typename N::return_t
+			{
+				auto value = TryParse(grammar, limits);
+				EL_ERROR(!value, TException, "text input does not match parser");
+				return std::move(*value);
+			}
+
+			template<typename... A>
+			bool TryScan(const scan::TScanString<std::remove_cvref_t<A>...>& fmt, A&... output)
+			{
+				std::tuple<std::optional<std::remove_cvref_t<A>>...> values;
+				usys_t consumed = 0;
+				if(!fmt.TryScan(*this, values, consumed))
+					return false;
+				AssignTuple(values, output...);
+				Shift(consumed);
+				return true;
+			}
+
+			template<typename... A>
+			usys_t Scan(const scan::TScanString<std::remove_cvref_t<A>...>& fmt, A&... output)
+			{
+				std::tuple<std::optional<std::remove_cvref_t<A>>...> values;
+				usys_t consumed = 0;
+				EL_ERROR(!fmt.TryScan(*this, values, consumed), TException, "text input does not match scan format");
+				AssignTuple(values, output...);
+				Shift(consumed);
+				return consumed;
+			}
+
+		private:
+			template<usys_t I = 0, typename TTuple, typename... A>
+			static void AssignTuple(TTuple& values, A&... output)
+			{
+				if constexpr(I < sizeof...(A))
+				{
+					auto refs = std::tie(output...);
+					std::get<I>(refs) = std::move(*std::get<I>(values));
+					AssignTuple<I + 1>(values, output...);
+				}
+			}
+	};
+
+	/** Non-owning text reader over a TStringView. */
+	class EL_LIFETIME_POINTER TStringViewTextReader final : public ITextReader
+	{
+		io::collection::array::TArraySource<char32_t> source;
+	protected:
+		bool DoEnsure(const usys_t count) final { return source.Ensure(count); }
+		void DoShift(const usys_t count) final { source.Shift(count); }
+	public:
+		explicit TStringViewTextReader(const string::TStringView string EL_LIFETIME_BOUND) : source(static_cast<const io::collection::array::array_t<const char32_t>&>(string)) {}
+		usys_t Count() const noexcept final { return source.Count(); }
+		const char32_t& operator[](const usys_t index) const final { return source[index]; }
+		io::collection::array::array_t<const char32_t> Head() const noexcept EL_LIFETIME_BOUND final { return source.Head(); }
+	};
+
+	/** Owning text reader for an in-memory TString/TStringView. */
+	class TStringTextReader final : public ITextReader
+	{
+		string::TStringSource source;
+	protected:
+		bool DoEnsure(const usys_t count) final { return source.Ensure(count); }
+		void DoShift(const usys_t count) final { source.Shift(count); }
+	public:
+		explicit TStringTextReader(string::TString string) : source(std::move(string)) {}
+		explicit TStringTextReader(const string::TStringView string) : source(string) {}
+		usys_t Count() const noexcept final { return source.Count(); }
+		const char32_t& operator[](const usys_t index) const final { return source[index]; }
+		io::collection::array::array_t<const char32_t> Head() const noexcept EL_LIFETIME_BOUND final { return source.Head(); }
+	};
+
+	/** Owning text reader for an in-memory TList<char32_t>. */
+	class TListTextReader final : public ITextReader
+	{
+		io::collection::list::TListSource<char32_t> source;
+	protected:
+		bool DoEnsure(const usys_t count) final { return source.Ensure(count); }
+		void DoShift(const usys_t count) final { source.Shift(count); }
+	public:
+		explicit TListTextReader(io::collection::list::TList<char32_t> chars) : source(std::move(chars)) {}
+		usys_t Count() const noexcept final { return source.Count(); }
+		const char32_t& operator[](const usys_t index) const final { return source[index]; }
+		io::collection::array::array_t<const char32_t> Head() const noexcept EL_LIFETIME_BOUND final { return source.Head(); }
 	};
 
 	class EL_LIFETIME_POINTER TStreamTextReader final : public ITextReader
@@ -124,13 +225,17 @@ namespace el1::io::text
 		TByteInput byte_input;
 		encoding::utf8::TUTF8Decoder decoder;
 		io::collection::list::TList<char32_t> buffer;
+		usys_t pos = 0;
 		bool eof = false;
 
-		bool Extend(usys_t offset);
+	protected:
+		bool DoEnsure(usys_t count) final;
+		void DoShift(usys_t count) final;
 
 	public:
 		explicit TStreamTextReader(stream::IBinarySource* source EL_LIFETIME_BOUND);
-		bool Peek(usys_t offset, char32_t& out) final;
-		void Consume(usys_t count) final;
+		usys_t Count() const noexcept final { return buffer.Count() - pos; }
+		const char32_t& operator[](usys_t index) const final;
+		io::collection::array::array_t<const char32_t> Head() const noexcept EL_LIFETIME_BOUND final;
 	};
 }

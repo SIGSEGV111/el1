@@ -627,7 +627,7 @@ namespace el1::db::postgres
 
 	bool TResultStream::IsNextRowReady() const
 	{
-		return fifo.Remaining() > 0;
+		return fifo.Count() > 0;
 	}
 
 	IDatabaseConnection* TResultStream::Connection() const
@@ -639,7 +639,7 @@ namespace el1::db::postgres
 	{
 		if(!IsMetadataReady())
 			const_cast<TResultStream*>(this)->MoveFirst();
-		return fifo.Remaining() == 0 && fifo.OnInputReady() == nullptr;
+		return fifo.Count() == 0 && fifo.OnInputReady() == nullptr;
 	}
 
 	usys_t TResultStream::CountColumns() const
@@ -703,7 +703,7 @@ namespace el1::db::postgres
 
 		for(;;)
 		{
-			while(fifo.Remaining() == 0)
+			while(fifo.Count() == 0)
 			{
 				auto w = OnNewData();
 				if(w == nullptr)

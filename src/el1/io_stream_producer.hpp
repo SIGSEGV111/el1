@@ -18,8 +18,8 @@ namespace el1::io::stream::producer
 			TProducerFunction producer;
 			system::task::TFiber fiber;
 			fifo::TFifo<T> fifo;
-			collection::list::array_t<T> peek_buffer;
-			usys_t idx_peek;
+			collection::list::array_t<T> head_buffer;
+			usys_t idx_head;
 
 			void FiberMain()
 			{
@@ -29,30 +29,30 @@ namespace el1::io::stream::producer
 		public:
 			TOut* NextItem()
 			{
-				if(idx_peek >= peek_buffer.Count())
+				if(idx_head >= head_buffer.Count())
 				{
-					fifo.Discard(idx_peek);
-					peek_buffer = fifo.Peek();
-					while(peek_buffer.Count() == 0)
+					fifo.Shift(idx_head);
+					head_buffer = fifo.HeadMutable();
+					while(head_buffer.Count() == 0)
 					{
 						const auto* waitable = fifo.OnInputReady();
 						if(waitable == nullptr)
 							return nullptr;
 
 						waitable->WaitFor();
-						peek_buffer = fifo.Peek();
+						head_buffer = fifo.HeadMutable();
 					}
-					idx_peek = 0;
+					idx_head = 0;
 				}
 
-				return peek_buffer.ItemPtr(idx_peek++);
+				return head_buffer.ItemPtr(idx_head++);
 			}
 
 			TProducerPipe(TProducerFunction producer) :
 				producer(producer),
 				fifo(&fiber, system::task::TFiber::Self()),
-				peek_buffer(),
-				idx_peek(0)
+				head_buffer(),
+				idx_head(0)
 			{
 				fiber.Start(util::function::TFunction<void>(this, &TProducerPipe::FiberMain));
 			}

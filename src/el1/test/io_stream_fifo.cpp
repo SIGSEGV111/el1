@@ -28,11 +28,11 @@ namespace
 	{
 		TFifo<char, 16U> fifo(TFiber::Self(), TFiber::Self());
 		EXPECT_EQ(fifo.Space(), 16U);
-		EXPECT_EQ(fifo.Remaining(), 0U);
+		EXPECT_EQ(fifo.Count(), 0U);
 
 		EXPECT_EQ(fifo.Write("hello world!\n", 13U), 13U);
 		EXPECT_EQ(fifo.Space(), 3U);
-		EXPECT_EQ(fifo.Remaining(), 13U);
+		EXPECT_EQ(fifo.Count(), 13U);
 
 		char rx[16] = {};
 		EXPECT_EQ(fifo.Read(rx, sizeof(rx)), 13U);
@@ -43,34 +43,34 @@ namespace
 	{
 		TFifo<char, 16U> fifo(TFiber::Self(), TFiber::Self());
 		EXPECT_EQ(fifo.Space(), 16U);
-		EXPECT_EQ(fifo.Remaining(), 0U);
+		EXPECT_EQ(fifo.Count(), 0U);
 
 		EXPECT_EQ(fifo.Write("hello world!\n", 13U), 13U);
 		EXPECT_EQ(fifo.Space(), 3U);
-		EXPECT_EQ(fifo.Remaining(), 13U);
+		EXPECT_EQ(fifo.Count(), 13U);
 
 		EXPECT_EQ(fifo.Write("foobar!\n", 8U), 3U);
 		EXPECT_EQ(fifo.Space(), 0U);
-		EXPECT_EQ(fifo.Remaining(), 16U);
+		EXPECT_EQ(fifo.Count(), 16U);
 
 		EXPECT_EQ(fifo.Write("test!\n", 7U), 0U);
 		EXPECT_EQ(fifo.Space(), 0U);
-		EXPECT_EQ(fifo.Remaining(), 16U);
+		EXPECT_EQ(fifo.Count(), 16U);
 
 		char rx[16] = {};
 		EXPECT_EQ(fifo.Read(rx, 13U), 13U);
 		EXPECT_TRUE(strncmp(rx, "hello world!\n", 13U) == 0);
 		EXPECT_EQ(fifo.Space(), 13U);
-		EXPECT_EQ(fifo.Remaining(), 3U);
+		EXPECT_EQ(fifo.Count(), 3U);
 
 		EXPECT_EQ(fifo.Write("bar!\n", 5U), 5U);
 		EXPECT_EQ(fifo.Space(), 8U);
-		EXPECT_EQ(fifo.Remaining(), 8U);
+		EXPECT_EQ(fifo.Count(), 8U);
 
 		EXPECT_EQ(fifo.Read(rx, 8U), 8U);
 		EXPECT_TRUE(strncmp(rx, "foobar!\n", 8U) == 0);
 		EXPECT_EQ(fifo.Space(), 16U);
-		EXPECT_EQ(fifo.Remaining(), 0U);
+		EXPECT_EQ(fifo.Count(), 0U);
 	}
 
 	TEST(io_stream_fifo, TFifo_producer_consumer)
@@ -98,4 +98,32 @@ namespace
 		for(u32_t i = 0; i < n_tx; i++)
 			EXPECT_EQ(buffer[i], ((byte_t)i % 256));
 	}
+	TEST(io_stream_fifo, TFifoBufferedCollectionWraparound)
+	{
+		TFifo<char, 8U> fifo(TFiber::Self(), TFiber::Self());
+		ASSERT_EQ(fifo.Write("abcdef", 6), 6U);
+		fifo.Shift(5);
+		ASSERT_EQ(fifo.Write("ghijkl", 6), 6U);
+
+		ASSERT_EQ(fifo.Count(), 7U);
+		ASSERT_EQ(fifo.Head().Count(), 3U);
+		ASSERT_TRUE(fifo.Ensure(1));
+		EXPECT_FALSE(fifo.Ensure(9));
+
+		const auto head = fifo.Head();
+		ASSERT_EQ(head.Count(), 7U);
+		EXPECT_EQ(head[0], 'f');
+		EXPECT_EQ(head[1], 'g');
+		EXPECT_EQ(head[2], 'h');
+
+		constexpr char expected[] = "fghijkl";
+		for(usys_t i = 0; i < 7; i++)
+			EXPECT_EQ(fifo[i], expected[i]);
+
+		char output[8] = {};
+		EXPECT_EQ(fifo.Read(output, 7), 7U);
+		EXPECT_EQ(std::string(output, 7), "fghijkl");
+		EXPECT_EQ(fifo.Count(), 0U);
+	}
+
 }

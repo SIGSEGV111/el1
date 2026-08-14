@@ -22,12 +22,12 @@ namespace el1::io::stream::buffer
 			{
 				for(;;)
 				{
-					while(fifo->WriteOut(*sink, fifo->Remaining()));
+					while(fifo->WriteOut(*sink, fifo->Count()));
 
 					auto w_fifo_ready = fifo->OnInputReady();
 					if(w_fifo_ready == nullptr)
 					{
-						while(fifo->WriteOut(*sink, fifo->Remaining()));
+						while(fifo->WriteOut(*sink, fifo->Count()));
 						break;
 					}
 					w_fifo_ready->WaitFor();
@@ -35,7 +35,7 @@ namespace el1::io::stream::buffer
 					auto w_sink_ready = sink->OnOutputReady();
 					if(w_sink_ready == nullptr)
 					{
-						while(fifo->WriteOut(*sink, fifo->Remaining()));
+						while(fifo->WriteOut(*sink, fifo->Count()));
 						break;
 					}
 					w_sink_ready->WaitFor();
@@ -61,60 +61,70 @@ namespace el1::io::stream::buffer
 	};
 
 	template<typename T>
-	class TPullBuffer
+	class EL_LIFETIME_POINTER TPullBuffer : public IBufferedSource<T>
 	{
 		protected:
 			ISource<T>* source;
-			usys_t offset;
 			io::collection::list::TList<T> buffer;
-
-			void Extend(usys_t index)
-			{
-				io::collection::list::TListSink sink(&buffer);
-				while(source && index >= buffer.Count())
-				{
-					for(;;)
-					{
-						if(sink.ReadIn(*source))
-							break;
-						auto w = source->OnInputReady();
-						if(!w)
-						{
-							// eof
-							source = nullptr;
-							break;
-						}
-						w->WaitFor();
-					}
-				}
-			}
+			usys_t pos = 0;
 
 		public:
-			T* operator[](usys_t index)
+			usys_t Count() const noexcept final override
 			{
-				EL_ERROR(index < offset, TLogicException);
-				index -= offset;
-
-				Extend(index);
-
-				if(index >= buffer.Count())
-					return nullptr;
-
-				return &buffer[index];
+				return buffer.Count() - pos;
 			}
 
-			void Discard(const usys_t n_discard)
+			bool Ensure(const usys_t count) final override
 			{
-				EL_ERROR(n_discard > buffer.Count(), TLogicException);
-				offset += n_discard;
-				buffer.Remove(0, n_discard);
+				if(count <= Count())
+					return true;
+				if(pos != 0)
+				{
+					buffer.Remove(0, pos);
+					pos = 0;
+				}
+
+				io::collection::list::TListSink sink(&buffer);
+				while(source != nullptr && buffer.Count() < count)
+				{
+					if(sink.ReadIn(*source) != 0)
+						continue;
+
+					const auto* const waitable = source->OnInputReady();
+					if(waitable == nullptr)
+					{
+						source = nullptr;
+						break;
+					}
+					waitable->WaitFor();
+				}
+				return buffer.Count() >= count;
 			}
 
-			void ResetOffset()
+			const T& operator[](const usys_t index) const final override
 			{
-				offset = 0;
+				EL_ERROR(index >= Count(), TStreamDryException);
+				return buffer[pos + index];
 			}
 
-			constexpr TPullBuffer(ISource<T>* source) : source(source), offset(0), buffer() {}
+			io::collection::array::array_t<const T> Head() const noexcept EL_LIFETIME_BOUND final override
+			{
+				const usys_t count = Count();
+				return io::collection::array::array_t<const T>::FromUnsafePointer(count == 0 ? nullptr : buffer.ItemPtr(pos), count);
+			}
+
+			void Shift(const usys_t count) final override
+			{
+				EL_ERROR(count > Count(), TStreamDryException);
+				pos += count;
+			}
+
+			const system::waitable::IWaitable* OnInputReady() const final override
+			{
+				return Count() != 0 || source == nullptr ? nullptr : source->OnInputReady();
+			}
+
+			explicit constexpr TPullBuffer(ISource<T>* source EL_LIFETIME_BOUND) : source(source), buffer() {}
 	};
+
 }

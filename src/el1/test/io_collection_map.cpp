@@ -22,6 +22,71 @@ namespace
 		EXPECT_EQ(string_map.Items().Count(), 0U);
 	}
 
+	TEST(io_collection_map, TSortedMap_ListConstructor)
+	{
+		using map_t = TSortedMap<int, TString>;
+		using pair_t = map_t::kv_pair_t;
+
+		TList<pair_t> unsorted = {
+			{3, "three"},
+			{1, "one"},
+			{2, "two"}
+		};
+		const pair_t* const storage = unsorted.ItemPtr(0);
+		map_t sorted(std::move(unsorted));
+
+		ASSERT_EQ(sorted.Items().Count(), 3U);
+		EXPECT_EQ(sorted.Items().ItemPtr(0), storage);
+		EXPECT_EQ(sorted.Items()[0].key, 1);
+		EXPECT_EQ(sorted.Items()[1].key, 2);
+		EXPECT_EQ(sorted.Items()[2].key, 3);
+		EXPECT_EQ(sorted[1], "one");
+		EXPECT_EQ(sorted[2], "two");
+		EXPECT_EQ(sorted[3], "three");
+
+		TList<pair_t> already_sorted = {
+			{1, "one"},
+			{2, "two"},
+			{3, "three"}
+		};
+		const pair_t* const sorted_storage = already_sorted.ItemPtr(0);
+		map_t assumed_sorted(std::move(already_sorted), EInputOrder::ASSUME_SORTED);
+		EXPECT_EQ(assumed_sorted.Items().ItemPtr(0), sorted_storage);
+		EXPECT_EQ(assumed_sorted[1], "one");
+		EXPECT_EQ(assumed_sorted[2], "two");
+		EXPECT_EQ(assumed_sorted[3], "three");
+
+		TList<pair_t> duplicates = {
+			{2, "first"},
+			{1, "one"},
+			{2, "second"}
+		};
+		EXPECT_THROW((map_t(std::move(duplicates))), TKeyAlreadyExistsException<int>);
+
+		map_t initialized = {
+			{3, "three"},
+			{1, "one"},
+			{2, "two"}
+		};
+		EXPECT_EQ(initialized[1], "one");
+		EXPECT_EQ(initialized[2], "two");
+		EXPECT_EQ(initialized[3], "three");
+
+		auto reverse = [](const int& a, const int& b) -> int { return StdSorter(b, a); };
+		TList<pair_t> reverse_items = {
+			{1, "one"},
+			{3, "three"},
+			{2, "two"}
+		};
+		map_t reverse_sorted(std::move(reverse_items), EInputOrder::UNSORTED, reverse);
+		EXPECT_EQ(reverse_sorted.Items()[0].key, 3);
+		EXPECT_EQ(reverse_sorted.Items()[1].key, 2);
+		EXPECT_EQ(reverse_sorted.Items()[2].key, 1);
+		EXPECT_EQ(reverse_sorted[1], "one");
+		EXPECT_EQ(reverse_sorted[2], "two");
+		EXPECT_EQ(reverse_sorted[3], "three");
+	}
+
 	TEST(io_collection_map, TSortedMap_UniquePtr)
 	{
 		TSortedMap<int, std::unique_ptr<int>> map;
