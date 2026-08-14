@@ -44,6 +44,19 @@ namespace el1::io::bcd
 
 	namespace detail
 	{
+		template<typename T, bool IS_ENUM = std::is_enum_v<T>>
+		struct TIntegerValueType { using type = T; };
+
+		template<typename T>
+		struct TIntegerValueType<T, true> { using type = std::underlying_type_t<T>; };
+
+		constexpr unsigned MSDDigitValue(const char32_t chr) noexcept
+		{
+			if(chr >= U'0' && chr <= U'9') return (unsigned)(chr - U'0');
+			if(chr >= U'a' && chr <= U'z') return 10U + (unsigned)(chr - U'a');
+			if(chr >= U'A' && chr <= U'Z') return 10U + (unsigned)(chr - U'A');
+			return 255U;
+		}
 
 		struct TBinaryFloatParts
 		{
@@ -879,9 +892,106 @@ namespace el1::io::bcd
 			static TBCD FromString(text::string::TStringView str, text::string::TStringView symbols, const char32_t decimal_seperator = '.', const char32_t negative_symbol = '-', const char32_t positive_symbol = '+', const bool default_negative = false);
 
 			// Parses the conventional most-significant-digit-first spelling without reversing or copying the input.
+			// This is a fast conversion path intended for already validated numeric tokens. Only cheap
+			// structural argument checks are performed; invalid digit alphabets/input may produce an
+			// invalid numeric value (garbage in => garbage out).
 			static TBCD FromStringMSD(text::string::TStringView str, text::string::TStringView symbols, const char32_t decimal_seperator = '.', const char32_t negative_symbol = '-', const char32_t positive_symbol = '+', const bool default_negative = false);
 			// Fast path for conventional 2..36 digit alphabets (0-9, a-z/A-Z).
 			static TBCD FromStringMSD(text::string::TStringView str, digit_t base, const char32_t decimal_seperator = '.', const char32_t negative_symbol = '-', const char32_t positive_symbol = '+', const bool default_negative = false);
+			// Same conversion with an additional radix-point shift. This directly represents scientific
+			// notation without constructing an expanded intermediate string (e.g. 1.25 + shift 3 => 1250).
+			static TBCD FromStringMSDShifted(text::string::TStringView str, digit_t base, ssys_t radix_point_shift, const char32_t decimal_seperator = '.', const char32_t negative_symbol = '-', const char32_t positive_symbol = '+', const bool default_negative = false);
+			// Converts an already validated MSD-first numeric token directly to double without
+			// materializing dynamic BCD digit storage. The arithmetic order intentionally matches
+			// FromStringMSDShifted(...).ToDouble().
+			static double ParseDoubleMSD(text::string::TStringView str, digit_t base, ssys_t radix_point_shift = 0, bool scientific_notation = false, const char32_t decimal_seperator = '.', const char32_t negative_symbol = '-', const char32_t positive_symbol = '+', const bool default_negative = false);
+
+			template<typename T, digit_t BASE>
+			requires (std::is_integral_v<T> || std::is_enum_v<T>)
+			static bool ParseIntegerMSD(io::collection::array::array_t<const char32_t> str, T& out, const char32_t negative_symbol = '-', const char32_t positive_symbol = '+') noexcept
+			{
+				using value_t = typename detail::TIntegerValueType<T>::type;
+				constexpr unsigned radix = BASE == 0 ? 256U : (unsigned)BASE;
+				static_assert(radix >= 2 && radix <= 36);
+				if(str.Count() == 0)
+					return false;
+
+				usys_t begin = 0;
+				bool negative = false;
+				if(str[0] == negative_symbol || str[0] == positive_symbol)
+				{
+					negative = str[0] == negative_symbol;
+					begin = 1;
+				}
+				if(begin == str.Count() || (negative && !std::is_signed_v<value_t>))
+					return false;
+
+				auto parse_digit = [&](const usys_t i, unsigned& digit) -> bool
+				{
+					digit = detail::MSDDigitValue(str[i]);
+					return digit < radix;
+				};
+
+				if constexpr(std::same_as<std::remove_cv_t<value_t>, bool>)
+				{
+					unsigned magnitude = 0;
+					for(usys_t i = begin; i < str.Count(); i++)
+					{
+						unsigned digit;
+						if(!parse_digit(i, digit) || digit > 1U || magnitude != 0U)
+							return false;
+						magnitude = digit;
+					}
+					out = (T)(magnitude != 0);
+					return true;
+				}
+				else
+				{
+					using unsigned_t = std::make_unsigned_t<value_t>;
+					const unsigned_t limit = [&]() -> unsigned_t
+					{
+						if constexpr(std::is_signed_v<value_t>)
+							return negative
+								? (unsigned_t)0 - (unsigned_t)std::numeric_limits<value_t>::min()
+								: (unsigned_t)std::numeric_limits<value_t>::max();
+						else
+							return std::numeric_limits<value_t>::max();
+					}();
+
+					unsigned_t magnitude = 0;
+					for(usys_t i = begin; i < str.Count(); i++)
+					{
+						unsigned digit;
+						if(!parse_digit(i, digit) || (unsigned_t)digit > limit || magnitude > (limit - (unsigned_t)digit) / (unsigned_t)radix)
+							return false;
+						magnitude = magnitude * (unsigned_t)radix + (unsigned_t)digit;
+					}
+
+					value_t value;
+					if constexpr(std::is_signed_v<value_t>)
+						value = negative
+							? (magnitude == limit ? std::numeric_limits<value_t>::min() : (value_t)-(value_t)magnitude)
+							: (value_t)magnitude;
+					else
+						value = (value_t)magnitude;
+					out = (T)value;
+					return true;
+				}
+			}
+
+			template<typename T>
+			requires (std::is_integral_v<T> || std::is_enum_v<T>)
+			static bool ParseIntegerMSD(io::collection::array::array_t<const char32_t> str, T& out, const digit_t base = 10, const char32_t negative_symbol = '-', const char32_t positive_symbol = '+') noexcept
+			{
+				switch(base)
+				{
+					case 2: return ParseIntegerMSD<T, 2>(str, out, negative_symbol, positive_symbol);
+					case 8: return ParseIntegerMSD<T, 8>(str, out, negative_symbol, positive_symbol);
+					case 10: return ParseIntegerMSD<T, 10>(str, out, negative_symbol, positive_symbol);
+					case 16: return ParseIntegerMSD<T, 16>(str, out, negative_symbol, positive_symbol);
+					default: return false;
+				}
+			}
 
 			static TBCD Random(const digit_t base, const usys_t n_integer, const usys_t n_decimal);
 	};

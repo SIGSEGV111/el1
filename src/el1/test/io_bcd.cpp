@@ -736,6 +736,13 @@ namespace
 		ExpectValue(TBCD::FromStringMSD(U"+17.28", DECIMAL_SYMBOLS), "17.28");
 		ExpectValue(TBCD::FromStringMSD(U"-17.28", (digit_t)10), "-17.28");
 		EXPECT_EQ(TBCD::FromStringMSD(U"fF", (digit_t)16), 255);
+		EXPECT_NO_THROW((void)TBCD::FromStringMSD(U"1x", (digit_t)10));
+		EXPECT_NO_THROW((void)TBCD::FromStringMSD(U"1.2.3", (digit_t)10));
+		EXPECT_NO_THROW((void)TBCD::FromStringMSD(U"12", TStringView(U"0012345678")));
+		ExpectValue(TBCD::FromStringMSDShifted(U"1.25", (digit_t)10, 3), "1250");
+		ExpectValue(TBCD::FromStringMSDShifted(U"123", (digit_t)10, -5), "0.00123");
+		EXPECT_DOUBLE_EQ(TBCD::ParseDoubleMSD(U"-12345.6789", (digit_t)10), TBCD::FromStringMSD(U"-12345.6789", (digit_t)10).ToDouble());
+		EXPECT_DOUBLE_EQ(TBCD::ParseDoubleMSD(U"-1.23456789", (digit_t)10, 4), TBCD::FromStringMSDShifted(U"-1.23456789", (digit_t)10, 4).ToDouble());
 
 		TFixedBCD<20, 20, 0, 10> maximum((u64_t)std::numeric_limits<s64_t>::max());
 		s64_t signed_value = 0;

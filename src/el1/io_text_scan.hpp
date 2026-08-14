@@ -223,73 +223,23 @@ namespace el1::io::text::scan
 			return input.Capture(field_begin, p);
 		}
 
-		template<typename T, bool IS_ENUM = std::is_enum_v<T>>
-		struct TIntegerValueType { using type = T; };
-
-		template<typename T>
-		struct TIntegerValueType<T, true> { using type = std::underlying_type_t<T>; };
-
-		template<typename T, bcd::digit_t BASE>
-		requires (std::is_integral_v<T> || std::is_enum_v<T>)
-		std::optional<T> TokenToFixedInteger(const string::TStringView token)
-		{
-			using value_t = typename TIntegerValueType<T>::type;
-			using unsigned_t = std::make_unsigned_t<value_t>;
-			constexpr usys_t N_BITS = sizeof(value_t) * CHAR_BIT;
-			constexpr usys_t N_DIGITS =
-				BASE == 2 ? N_BITS :
-				BASE == 8 ? (N_BITS + 2U) / 3U :
-				BASE == 16 ? (N_BITS + 3U) / 4U :
-				(usys_t)std::numeric_limits<unsigned_t>::digits10 + 1U;
-			using fixed_bcd_t = bcd::TFixedBCD<N_DIGITS, N_DIGITS, 0, BASE>;
-
-			if(token.Length() == 0)
-				return std::nullopt;
-
-			usys_t begin = 0;
-			bool negative = false;
-			if(token[0] == U'+' || token[0] == U'-')
-			{
-				negative = token[0] == U'-';
-				begin = 1;
-			}
-			if(begin == token.Length() || (negative && !std::is_signed_v<value_t>))
-				return std::nullopt;
-
-			fixed_bcd_t value(0);
-			usys_t output = 0;
-			for(usys_t i = token.Length(); i > begin; i--)
-			{
-				const int digit = DigitValue(token[i - 1]);
-				if(digit < 0 || (unsigned)digit >= fixed_bcd_t::Radix())
-					return std::nullopt;
-				if(output >= fixed_bcd_t::CAPACITY)
-				{
-					if(digit != 0)
-						return std::nullopt;
-					continue;
-				}
-				value.Digit((ssys_t)output++, (bcd::digit_t)digit);
-			}
-			value.IsNegative(negative);
-			value_t result;
-			if(!value.TryToInteger(result))
-				return std::nullopt;
-			return (T)result;
-		}
-
 		template<typename T>
 		requires (std::is_integral_v<T> || std::is_enum_v<T>)
 		std::optional<T> TokenToInteger(const string::TStringView token, const unsigned radix)
 		{
+			T result;
+			bool ok;
 			switch(radix)
 			{
-				case 2: return TokenToFixedInteger<T, 2>(token);
-				case 8: return TokenToFixedInteger<T, 8>(token);
-				case 10: return TokenToFixedInteger<T, 10>(token);
-				case 16: return TokenToFixedInteger<T, 16>(token);
-				default: EL_THROW(error::TLogicException);
+				case 2: ok = bcd::TBCD::ParseIntegerMSD<T, 2>(token, result); break;
+				case 8: ok = bcd::TBCD::ParseIntegerMSD<T, 8>(token, result); break;
+				case 10: ok = bcd::TBCD::ParseIntegerMSD<T, 10>(token, result); break;
+				case 16: ok = bcd::TBCD::ParseIntegerMSD<T, 16>(token, result); break;
+				default: return std::nullopt;
 			}
+			if(!ok)
+				return std::nullopt;
+			return result;
 		}
 
 		inline bcd::TBCD TokenToBCD(const string::TStringView token, const unsigned radix)
@@ -298,94 +248,13 @@ namespace el1::io::text::scan
 			return bcd::TBCD::FromStringMSD(token, (bcd::digit_t)radix);
 		}
 
-		inline std::optional<string::TString> ExpandDecimalExponent(const string::TStringView token)
-		{
-			const usys_t exponent_pos_lower = token.Find(U'e');
-			const usys_t exponent_pos_upper = token.Find(U'E');
-			const usys_t exponent_pos = exponent_pos_lower != NEG1 ? exponent_pos_lower : exponent_pos_upper;
-			if(exponent_pos == NEG1)
-				return string::TString(token);
-
-			const string::TStringView mantissa = token.SliceBE(0, (ssys_t)exponent_pos);
-			const string::TStringView exponent_token = token.SliceSL((ssys_t)exponent_pos + 1);
-			const auto exponent = TokenToInteger<ssys_t>(exponent_token, 10);
-			if(!exponent)
-				return std::nullopt;
-
-			usys_t begin = 0;
-			char32_t sign = U'\0';
-			if(mantissa.Length() != 0 && (mantissa[0] == U'+' || mantissa[0] == U'-'))
-			{
-				sign = mantissa[0];
-				begin = 1;
-			}
-
-			const usys_t decimal_pos = mantissa.Find(U'.');
-			const usys_t integer_digits = decimal_pos == NEG1 ? mantissa.Length() - begin : decimal_pos - begin;
-			const usys_t fraction_digits = decimal_pos == NEG1 ? 0 : mantissa.Length() - decimal_pos - 1;
-			const usys_t n_digits = integer_digits + fraction_digits;
-			EL_ERROR(n_digits == 0, error::TLogicException);
-
-			if(*exponent > (ssys_t)bcd::MAX_PRECISION || *exponent < -(ssys_t)bcd::MAX_PRECISION)
-				return std::nullopt;
-			const ssys_t shifted_decimal = (ssys_t)integer_digits + *exponent;
-			if(shifted_decimal > (ssys_t)bcd::MAX_PRECISION || (ssys_t)n_digits - shifted_decimal > (ssys_t)bcd::MAX_PRECISION)
-				return std::nullopt;
-
-			string::TString result;
-			if(sign != U'\0')
-				result += sign;
-
-			auto append_digits = [&](const usys_t from, const usys_t to)
-			{
-				for(usys_t i = from; i < to; i++)
-				{
-					const char32_t chr = mantissa[begin + i + (decimal_pos != NEG1 && i >= integer_digits ? 1 : 0)];
-					result += chr;
-				}
-			};
-
-			if(shifted_decimal <= 0)
-			{
-				result += U'0';
-				result += U'.';
-				for(ssys_t i = 0; i < -shifted_decimal; i++) result += U'0';
-				append_digits(0, n_digits);
-			}
-			else if((usys_t)shifted_decimal >= n_digits)
-			{
-				append_digits(0, n_digits);
-				for(usys_t i = n_digits; i < (usys_t)shifted_decimal; i++) result += U'0';
-			}
-			else
-			{
-				append_digits(0, (usys_t)shifted_decimal);
-				result += U'.';
-				append_digits((usys_t)shifted_decimal, n_digits);
-			}
-			return result;
-		}
-
 		template<typename T>
 		requires std::is_floating_point_v<T>
 		std::optional<T> TokenToFloating(const string::TStringView token)
 		{
 			try
 			{
-				double parsed;
-				if(token.Contains(U'e') || token.Contains(U'E'))
-				{
-					const auto expanded = ExpandDecimalExponent(token);
-					if(!expanded)
-						return std::nullopt;
-					parsed = TokenToBCD(expanded->View(), 10).ToDouble();
-				}
-				else
-				{
-					parsed = TokenToBCD(token, 10).ToDouble();
-				}
-
-				const T result = (T)parsed;
+				const T result = (T)bcd::TBCD::ParseDoubleMSD(token, 10, 0, true);
 				if(!std::isfinite(result))
 					return std::nullopt;
 				return result;
@@ -395,6 +264,7 @@ namespace el1::io::text::scan
 				return std::nullopt;
 			}
 		}
+
 	}
 
 	template<typename T>
@@ -405,7 +275,7 @@ namespace el1::io::text::scan
 		{
 			if(radix == 10)
 				return detail::TokenToFloating<T>(token);
-			try { return (T)detail::TokenToBCD(token, radix).ToDouble(); }
+			try { return (T)bcd::TBCD::ParseDoubleMSD(token, (bcd::digit_t)radix); }
 			catch(const error::IException&) { return std::nullopt; }
 		}
 		else

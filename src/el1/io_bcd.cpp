@@ -1572,15 +1572,9 @@ namespace el1::io::bcd
 		if(str.Length() == 0)
 			return INVALID;
 
+		// Keep only the cheap checks that are required to construct a meaningful TBCD
+		// configuration. The caller is expected to have validated the token/alphabet.
 		EL_ERROR(symbols.Length() < 2 || symbols.Length() > 256, TInvalidArgumentException, "symbols", "between 2 and 256 numeric symbols are required");
-		EL_ERROR(symbols.Contains(decimal_seperator), TInvalidArgumentException, "symbols", "symbols must not include the decimal separator");
-		EL_ERROR(symbols.Contains(negative_symbol), TInvalidArgumentException, "symbols", "symbols must not include the negative sign");
-		EL_ERROR(symbols.Contains(positive_symbol), TInvalidArgumentException, "symbols", "symbols must not include the positive sign");
-		EL_ERROR(decimal_seperator == negative_symbol || decimal_seperator == positive_symbol || negative_symbol == positive_symbol, TInvalidArgumentException, "symbols", "separator and sign characters must be distinct");
-
-		for(usys_t i = 0; i < symbols.Length(); i++)
-			for(usys_t j = i + 1U; j < symbols.Length(); j++)
-				EL_ERROR(symbols[i] == symbols[j], TInvalidArgumentException, "symbols", "numeric symbols must be unique");
 
 		usys_t begin = 0;
 		bool negative = default_negative;
@@ -1589,40 +1583,33 @@ namespace el1::io::bcd
 			negative = str[0] == negative_symbol;
 			begin = 1;
 		}
-		EL_ERROR(begin == str.Length(), TInvalidArgumentException, "str", "numeric string contains no digits");
 
 		usys_t decimal = NEG1;
-		usys_t n_digits = 0;
 		for(usys_t i = begin; i < str.Length(); i++)
-		{
 			if(str[i] == decimal_seperator)
 			{
-				EL_ERROR(decimal != NEG1, TInvalidArgumentException, "str", "numeric string contains multiple decimal separators");
 				decimal = i;
+				break;
 			}
-			else
-			{
-				n_digits++;
-			}
-		}
-		EL_ERROR(n_digits == 0, TInvalidArgumentException, "str", "numeric string contains no digits");
 
+		const usys_t n_integer_digits = decimal == NEG1 ? str.Length() - begin : decimal - begin;
 		const usys_t n_decimal_digits = decimal == NEG1 ? 0U : str.Length() - decimal - 1U;
-		const usys_t n_integer_digits = n_digits - n_decimal_digits;
 		const digit_t base = symbols.Length() == 256U ? 0 : (digit_t)symbols.Length();
 		TBCD result(0, base, n_integer_digits, n_decimal_digits);
-		result.EnsureDigits();
-		usys_t output = 0;
-		for(usys_t i = str.Length(); i > begin; i--)
+		if(n_integer_digits + n_decimal_digits != 0)
 		{
-			const char32_t chr = str[i - 1U];
-			if(chr == decimal_seperator)
-				continue;
-			const usys_t value = symbols.Find(chr);
-			EL_ERROR(value == NEG1, TInvalidArgumentException, "str", "numeric string contains a character not present in symbols");
-			result.DigitsPointer()[output++] = (digit_t)value;
-			if(value != 0)
-				result.is_zero = 0;
+			result.EnsureDigits();
+			usys_t output = 0;
+			for(usys_t i = str.Length(); i > begin; i--)
+			{
+				const char32_t chr = str[i - 1U];
+				if(chr == decimal_seperator)
+					continue;
+				const digit_t value = (digit_t)symbols.Find(chr);
+				result.DigitsPointer()[output++] = value;
+				if(value != 0)
+					result.is_zero = 0;
+			}
 		}
 		result.is_negative = negative;
 		return result;
@@ -1630,18 +1617,11 @@ namespace el1::io::bcd
 
 	TBCD TBCD::FromStringMSD(const text::string::TStringView str, const digit_t base, const char32_t decimal_seperator, const char32_t negative_symbol, const char32_t positive_symbol, const bool default_negative)
 	{
+		if(str.Length() == 0)
+			return INVALID;
+
 		const unsigned radix = base == 0 ? 256U : (unsigned)base;
 		EL_ERROR(radix < 2 || radix > 36, TInvalidArgumentException, "base", "standard string parsing supports bases 2 through 36");
-		EL_ERROR(str.Length() == 0, TInvalidArgumentException, "str", "numeric string contains no digits");
-		EL_ERROR(decimal_seperator == negative_symbol || decimal_seperator == positive_symbol || negative_symbol == positive_symbol, TInvalidArgumentException, "str", "separator and sign characters must be distinct");
-
-		auto digit_value = [](const char32_t chr) -> int
-		{
-			if(chr >= U'0' && chr <= U'9') return (int)(chr - U'0');
-			if(chr >= U'a' && chr <= U'z') return 10 + (int)(chr - U'a');
-			if(chr >= U'A' && chr <= U'Z') return 10 + (int)(chr - U'A');
-			return -1;
-		};
 
 		usys_t begin = 0;
 		bool negative = default_negative;
@@ -1650,42 +1630,184 @@ namespace el1::io::bcd
 			negative = str[0] == negative_symbol;
 			begin = 1;
 		}
-		EL_ERROR(begin == str.Length(), TInvalidArgumentException, "str", "numeric string contains no digits");
 
 		usys_t decimal = NEG1;
-		usys_t n_digits = 0;
 		for(usys_t i = begin; i < str.Length(); i++)
-		{
 			if(str[i] == decimal_seperator)
 			{
-				EL_ERROR(decimal != NEG1, TInvalidArgumentException, "str", "numeric string contains multiple decimal separators");
 				decimal = i;
-				continue;
+				break;
 			}
 
-			const int value = digit_value(str[i]);
-			EL_ERROR(value < 0 || (unsigned)value >= radix, TInvalidArgumentException, "str", "numeric string contains a digit outside the numeric base");
-			n_digits++;
-		}
-		EL_ERROR(n_digits == 0, TInvalidArgumentException, "str", "numeric string contains no digits");
-
+		const usys_t n_integer_digits = decimal == NEG1 ? str.Length() - begin : decimal - begin;
 		const usys_t n_decimal_digits = decimal == NEG1 ? 0U : str.Length() - decimal - 1U;
-		const usys_t n_integer_digits = n_digits - n_decimal_digits;
 		TBCD result(0, base, n_integer_digits, n_decimal_digits);
-		result.EnsureDigits();
-		usys_t output = 0;
-		for(usys_t i = str.Length(); i > begin; i--)
+		if(n_integer_digits + n_decimal_digits != 0)
 		{
-			const char32_t chr = str[i - 1U];
-			if(chr == decimal_seperator)
-				continue;
-			const digit_t value = (digit_t)digit_value(chr);
-			result.DigitsPointer()[output++] = value;
-			if(value != 0)
-				result.is_zero = 0;
+			result.EnsureDigits();
+			usys_t output = 0;
+			for(usys_t i = str.Length(); i > begin; i--)
+			{
+				const char32_t chr = str[i - 1U];
+				if(chr == decimal_seperator)
+					continue;
+				const digit_t value = (digit_t)detail::MSDDigitValue(chr);
+				result.DigitsPointer()[output++] = value;
+				if(value != 0)
+					result.is_zero = 0;
+			}
 		}
 		result.is_negative = negative;
 		return result;
+	}
+
+	TBCD TBCD::FromStringMSDShifted(const text::string::TStringView str, const digit_t base, const ssys_t radix_point_shift, const char32_t decimal_seperator, const char32_t negative_symbol, const char32_t positive_symbol, const bool default_negative)
+	{
+		if(str.Length() == 0)
+			return INVALID;
+
+		const unsigned radix = base == 0 ? 256U : (unsigned)base;
+		EL_ERROR(radix < 2 || radix > 36, TInvalidArgumentException, "base", "standard string parsing supports bases 2 through 36");
+		EL_ERROR(radix_point_shift > (ssys_t)MAX_PRECISION || radix_point_shift < -(ssys_t)MAX_PRECISION, TInvalidArgumentException, "radix_point_shift", "radix-point shift exceeds BCD precision range");
+
+		usys_t begin = 0;
+		bool negative = default_negative;
+		if(str[0] == negative_symbol || str[0] == positive_symbol)
+		{
+			negative = str[0] == negative_symbol;
+			begin = 1;
+		}
+
+		usys_t decimal = NEG1;
+		for(usys_t i = begin; i < str.Length(); i++)
+			if(str[i] == decimal_seperator)
+			{
+				decimal = i;
+				break;
+			}
+
+		const usys_t source_integer = decimal == NEG1 ? str.Length() - begin : decimal - begin;
+		const usys_t source_decimal = decimal == NEG1 ? 0U : str.Length() - decimal - 1U;
+
+		const ssys_t shifted_integer = (ssys_t)source_integer + radix_point_shift;
+		const ssys_t shifted_decimal = (ssys_t)source_decimal - radix_point_shift;
+		const usys_t n_integer_digits = shifted_integer > 0 ? (usys_t)shifted_integer : 0U;
+		const usys_t n_decimal_digits = shifted_decimal > 0 ? (usys_t)shifted_decimal : 0U;
+		EL_ERROR(n_integer_digits > MAX_PRECISION || n_decimal_digits > MAX_PRECISION, TInvalidArgumentException, "radix_point_shift", "shifted BCD precision exceeds supported range");
+
+		TBCD result(0, base, n_integer_digits, n_decimal_digits);
+		if(source_integer + source_decimal != 0)
+		{
+			result.EnsureDigits();
+			// A positive shift that moves beyond all source fractional places appends
+			// zeroes at the least-significant end. EnsureDigits() already initialized them.
+			usys_t output = radix_point_shift > (ssys_t)source_decimal ? (usys_t)(radix_point_shift - (ssys_t)source_decimal) : 0U;
+			for(usys_t i = str.Length(); i > begin; i--)
+			{
+				const char32_t chr = str[i - 1U];
+				if(chr == decimal_seperator)
+					continue;
+				const digit_t value = (digit_t)detail::MSDDigitValue(chr);
+				if(output < n_integer_digits + n_decimal_digits)
+					result.DigitsPointer()[output] = value;
+				output++;
+				if(value != 0)
+					result.is_zero = 0;
+			}
+		}
+		result.is_negative = negative;
+		return result;
+	}
+
+
+	double TBCD::ParseDoubleMSD(const text::string::TStringView str, const digit_t base, const ssys_t radix_point_shift, const bool scientific_notation, const char32_t decimal_seperator, const char32_t negative_symbol, const char32_t positive_symbol, const bool default_negative)
+	{
+		if(str.Length() == 0)
+			return 0;
+
+		const unsigned radix = base == 0 ? 256U : (unsigned)base;
+		EL_ERROR(radix < 2 || radix > 36, TInvalidArgumentException, "base", "standard string parsing supports bases 2 through 36");
+		EL_ERROR(radix_point_shift > (ssys_t)MAX_PRECISION || radix_point_shift < -(ssys_t)MAX_PRECISION, TInvalidArgumentException, "radix_point_shift", "radix-point shift exceeds BCD precision range");
+
+		usys_t begin = 0;
+		bool negative = default_negative;
+		if(str[0] == negative_symbol || str[0] == positive_symbol)
+		{
+			negative = str[0] == negative_symbol;
+			begin = 1;
+		}
+
+		long double value = 0;
+		usys_t source_integer = 0;
+		usys_t source_decimal = 0;
+		bool after_decimal = false;
+		usys_t exponent_begin = NEG1;
+		for(usys_t i = begin; i < str.Length(); i++)
+		{
+			const char32_t chr = str[i];
+			if(scientific_notation && (chr == U'e' || chr == U'E'))
+			{
+				exponent_begin = i + 1U;
+				break;
+			}
+			if(chr == decimal_seperator)
+			{
+				after_decimal = true;
+				continue;
+			}
+			value = value * radix + detail::MSDDigitValue(chr);
+			(after_decimal ? source_decimal : source_integer)++;
+		}
+
+		ssys_t shift = radix_point_shift;
+		if(exponent_begin != NEG1)
+		{
+			bool exponent_negative = false;
+			if(exponent_begin < str.Length() && (str[exponent_begin] == negative_symbol || str[exponent_begin] == positive_symbol))
+			{
+				exponent_negative = str[exponent_begin] == negative_symbol;
+				exponent_begin++;
+			}
+
+			usys_t exponent = 0;
+			for(usys_t i = exponent_begin; i < str.Length(); i++)
+			{
+				const unsigned digit = (unsigned)(str[i] - U'0');
+				if(exponent > (MAX_PRECISION - util::Min<usys_t>(digit, MAX_PRECISION)) / 10U)
+					return std::numeric_limits<double>::quiet_NaN();
+				exponent = exponent * 10U + digit;
+				if(exponent > MAX_PRECISION)
+					return std::numeric_limits<double>::quiet_NaN();
+			}
+			const ssys_t signed_exponent = exponent_negative ? -(ssys_t)exponent : (ssys_t)exponent;
+			if((signed_exponent > 0 && shift > (ssys_t)MAX_PRECISION - signed_exponent) ||
+			   (signed_exponent < 0 && shift < -(ssys_t)MAX_PRECISION - signed_exponent))
+				return std::numeric_limits<double>::quiet_NaN();
+			shift += signed_exponent;
+		}
+
+		const ssys_t shifted_integer = (ssys_t)source_integer + shift;
+		const ssys_t shifted_decimal = (ssys_t)source_decimal - shift;
+		if((shifted_integer > 0 && (usys_t)shifted_integer > MAX_PRECISION) ||
+		   (shifted_decimal > 0 && (usys_t)shifted_decimal > MAX_PRECISION))
+			return std::numeric_limits<double>::quiet_NaN();
+
+		// TBCD::ToDouble() normalizes all representations of zero to positive zero.
+		if(value == 0)
+			return 0;
+
+		if(shift > (ssys_t)source_decimal)
+			for(ssys_t i = shift - (ssys_t)source_decimal; i > 0; i--)
+				value *= radix;
+
+		const ssys_t n_decimal = (ssys_t)source_decimal - shift;
+		if(n_decimal > 0)
+			for(ssys_t i = n_decimal; i > 0; i--)
+				value /= radix;
+
+		if(negative)
+			value = -value;
+		return (double)value;
 	}
 
 	TBCD TBCD::Random(const digit_t base, const usys_t n_integer, const usys_t n_decimal)
