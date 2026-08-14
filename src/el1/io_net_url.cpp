@@ -123,14 +123,7 @@ namespace el1::io::net::url
 
 	TUrl TUrl::FromString(const TStringView text)
 	{
-		try
-		{
-			return MakeParser().Parse(text);
-		}
-		catch(const TException&)
-		{
-			EL_THROW(TInvalidArgumentException, "text", "invalid URL");
-		}
+		return EL_ANNOTATE_ERROR(MakeParser().Parse(text), TInvalidArgumentException, "text", "invalid URL");
 	}
 
 	TString TUrl::RequestTarget() const
