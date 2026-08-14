@@ -47,6 +47,7 @@ namespace el1::dev::obd2::elm327
 			io::text::string::TString Initialize(const EProtocol protocol = EProtocol::AUTOMATIC);
 			io::text::string::TString CloseProtocol();
 			f64_t SupplyVoltage();
+			bool WaitForBusActivity(const system::time::TTime timeout);
 			void ConfigureIsoTpExtendedAddressing(const u16_t request_can_id, const u16_t response_can_id, const u8_t target_address);
 			io::collection::list::TList<u8_t> ReadDataByIdentifier(const u16_t did);
 			static io::collection::list::TList<u8_t> ParseReadDataByIdentifierResponse(const io::text::string::TString& response, const u16_t did);

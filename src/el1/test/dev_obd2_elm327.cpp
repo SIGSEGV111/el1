@@ -141,4 +141,25 @@ namespace
 		EXPECT_DOUBLE_EQ(elm327.SupplyVoltage(), 13.78);
 		EXPECT_TRUE(stream.Complete());
 	}
+	TEST(dev_obd2_elm327, WaitForBusActivity)
+	{
+		TScriptStream active_stream({
+			{ "ATAR", "OK\r>" },
+			{ "ATMA", "6078F6210AABBCC\r" },
+			{ "", ">" },
+		});
+		TELM327 active_elm327(active_stream, active_stream, 1);
+		EXPECT_TRUE(active_elm327.WaitForBusActivity(0.1));
+		EXPECT_TRUE(active_stream.Complete());
+
+		TScriptStream quiet_stream({
+			{ "ATAR", "OK\r>" },
+			{ "ATMA", "" },
+			{ "", ">" },
+		});
+		TELM327 quiet_elm327(quiet_stream, quiet_stream, 1);
+		EXPECT_FALSE(quiet_elm327.WaitForBusActivity(0.01));
+		EXPECT_TRUE(quiet_stream.Complete());
+	}
+
 }

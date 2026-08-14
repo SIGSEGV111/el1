@@ -139,6 +139,70 @@ namespace el1::dev::obd2::elm327
 		return response.View().SliceBE(begin, suffix).ToDouble();
 	}
 
+	bool TELM327::WaitForBusActivity(const TTime timeout)
+	{
+		EL_ERROR(timeout <= 0, TInvalidArgumentException, "timeout", "must be greater than zero");
+
+		// Reset any receive-address filter left by a previous physical ECU request.
+		// ATMA itself is passive on CAN: it does not acknowledge or transmit bus frames.
+		ExpectOk("ATAR");
+		FlushInput();
+
+		static constexpr char MONITOR_COMMAND[] = "ATMA\r";
+		const TTime monitor_deadline = TTime::Now(EClock::MONOTONIC) + timeout;
+		const usys_t n_written = sink->BlockingWrite(
+			reinterpret_cast<const byte_t*>(MONITOR_COMMAND),
+			sizeof(MONITOR_COMMAND) - 1,
+			monitor_deadline,
+			true
+		);
+		EL_ERROR(n_written != sizeof(MONITOR_COMMAND) - 1, TException, "ELM327 monitor command write timed out");
+
+		bool activity = false;
+		bool prompt_seen = false;
+		while(!activity && !prompt_seen)
+		{
+			byte_t buffer[512];
+			const usys_t size = source->Read(buffer, sizeof(buffer));
+			for(usys_t i = 0; i < size; i++)
+			{
+				const char character = static_cast<char>(buffer[i]);
+				if(character == '>')
+					prompt_seen = true;
+				else if(character != ' ' && character != '\t' && character != '\r' && character != '\n')
+					activity = true;
+			}
+
+			if(activity || prompt_seen)
+				break;
+			const auto* const input_ready = source->OnInputReady();
+			EL_ERROR(input_ready == nullptr, TStreamDryException);
+			if(!input_ready->WaitFor(monitor_deadline, true))
+				break;
+		}
+
+		EL_ERROR(prompt_seen, TException, "ELM327 left monitor mode unexpectedly");
+
+		// Any serial input stops ATMA. CR is harmless and gives us a prompt to
+		// synchronize the byte stream before issuing the next command.
+		static constexpr byte_t STOP_MONITOR = '\r';
+		const TTime stop_deadline = TTime::Now(EClock::MONOTONIC) + command_timeout;
+		EL_ERROR(sink->BlockingWrite(&STOP_MONITOR, 1, stop_deadline, true) != 1, TException, "ELM327 monitor stop write timed out");
+
+		for(;;)
+		{
+			byte_t buffer[512];
+			const usys_t size = source->Read(buffer, sizeof(buffer));
+			for(usys_t i = 0; i < size; i++)
+				if(buffer[i] == static_cast<byte_t>('>'))
+					return activity;
+
+			const auto* const input_ready = source->OnInputReady();
+			EL_ERROR(input_ready == nullptr, TStreamDryException);
+			EL_ERROR(!input_ready->WaitFor(stop_deadline, true), TException, "ELM327 did not leave monitor mode");
+		}
+	}
+
 	void TELM327::ConfigureIsoTpExtendedAddressing(const u16_t request_can_id, const u16_t response_can_id, const u8_t target_address)
 	{
 		EL_ERROR(request_can_id > 0x7FF, TInvalidArgumentException, "request_can_id", "must be an 11-bit CAN identifier");
