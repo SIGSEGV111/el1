@@ -18,6 +18,8 @@ namespace el1::io::text::string
 
 namespace el1::io::text::format
 {
+	template<typename TLeft, typename TRight>
+	class TConcatenatedFormatString;
 	using namespace io::types;
 	using namespace io::text::encoding;
 
@@ -400,6 +402,9 @@ namespace el1::io::text::format
 	class TFormatString
 	{
 		public:
+			using TArguments = std::tuple<TArgs...>;
+			static constexpr usys_t N_ARGUMENTS = sizeof...(TArgs);
+
 			const char32_t* const literal;
 			const usys_t length;
 
@@ -598,8 +603,61 @@ namespace el1::io::text::format
 				AppendLiteral(out, pos, length);
 			}
 
+			template<typename... TOtherArgs>
+			constexpr auto operator+(const TFormatString<TOtherArgs...>& rhs) const noexcept
+			{
+				return TConcatenatedFormatString<TFormatString<TArgs...>, TFormatString<TOtherArgs...>>(*this, rhs);
+			}
+
 			template<typename... A, std::size_t N>
 			friend consteval bool IsValidFormat(const char32_t (&value)[N]) noexcept;
+	};
+
+	namespace detail
+	{
+		template<typename TLeftTuple, typename TRightTuple>
+		struct TConcatenatedTuple;
+
+		template<typename... TLeftArgs, typename... TRightArgs>
+		struct TConcatenatedTuple<std::tuple<TLeftArgs...>, std::tuple<TRightArgs...>>
+		{
+			using type = std::tuple<TLeftArgs..., TRightArgs...>;
+		};
+
+		template<usys_t OFFSET, typename TFormat, typename TTuple, std::size_t... I>
+		void RenderTupleSlice(const TFormat& format, IFormatSink& out, const TTuple& args, std::index_sequence<I...>)
+		{
+			format.RenderInto(out, std::get<OFFSET + I>(args)...);
+		}
+	}
+
+	template<typename TLeft, typename TRight>
+	class TConcatenatedFormatString
+	{
+		public:
+			using TArguments = typename detail::TConcatenatedTuple<typename TLeft::TArguments, typename TRight::TArguments>::type;
+			static constexpr usys_t N_ARGUMENTS = TLeft::N_ARGUMENTS + TRight::N_ARGUMENTS;
+
+			const TLeft left;
+			const TRight right;
+
+			constexpr TConcatenatedFormatString(const TLeft& left, const TRight& right) noexcept : left(left), right(right) {}
+
+			template<typename... A>
+			void RenderInto(IFormatSink& out, const A&... args) const
+			{
+				static_assert(std::is_same_v<std::tuple<std::decay_t<const A>...>, TArguments>);
+				const auto arguments = std::tie(args...);
+				detail::RenderTupleSlice<0>(left, out, arguments, std::make_index_sequence<TLeft::N_ARGUMENTS>{});
+				detail::RenderTupleSlice<TLeft::N_ARGUMENTS>(right, out, arguments, std::make_index_sequence<TRight::N_ARGUMENTS>{});
+			}
+
+			template<typename TOther>
+			constexpr auto operator+(const TOther& rhs) const noexcept
+			requires requires { typename TOther::TArguments; TOther::N_ARGUMENTS; }
+			{
+				return TConcatenatedFormatString<TConcatenatedFormatString<TLeft, TRight>, TOther>(*this, rhs);
+			}
 	};
 
 	template<typename... TArgs, std::size_t N>

@@ -75,6 +75,12 @@ namespace el1::io::text::format
 	};
 }
 
+template<typename TFormat, typename... TArgs>
+concept CCanFormat = requires(const TFormat& format, const TArgs&... args)
+{
+	el1::io::text::string::TString::Format(format, args...);
+};
+
 template<typename T>
 concept CCanUseRuntimeFormatString = requires(T value)
 {
@@ -595,6 +601,19 @@ namespace
 		static_assert(!std::is_constructible_v<TFormatString<int>, const char (&)[3]>);
 		static_assert(!std::is_constructible_v<TFormatString<int>, const wchar_t (&)[3]>);
 		static_assert(std::is_constructible_v<TFormatString<int>, const char32_t (&)[3]>);
+
+		constexpr TFormatString<int> format_left(U"left=%d");
+		constexpr TFormatString<const char*> format_right(U", right=%s");
+		constexpr auto format_combined = format_left + format_right;
+		static_assert(format_combined.N_ARGUMENTS == 2U);
+		static_assert(CCanFormat<decltype(format_combined), int, const char*>);
+		static_assert(!CCanFormat<decltype(format_combined), unsigned, const char*>);
+		EXPECT_EQ(TString::Format(format_combined, 17, "test"), "left=17, right=test");
+
+		constexpr TFormatString<> format_prefix(U"prefix: ");
+		constexpr auto format_combined_three = format_prefix + format_left + format_right;
+		static_assert(format_combined_three.N_ARGUMENTS == 2U);
+		EXPECT_EQ(TString::Format(format_combined_three, 23, "ok"), "prefix: left=23, right=ok");
 
 		EXPECT_EQ(TString::Format(U"%10.9d", 12), "        12.000000000");
 		EXPECT_EQ(TString::Format(U"%010.9d", 12), "0000000012.000000000");

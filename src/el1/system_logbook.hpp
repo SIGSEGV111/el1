@@ -1,6 +1,7 @@
 #pragma once
 
 #include "io_text_string.hpp"
+#include "debug.hpp"
 
 namespace el1::system::logbook
 {
@@ -16,43 +17,33 @@ namespace el1::system::logbook
 		EXCEPTION
 	};
 
-	struct ILogRecord
+	struct TLogRecord
 	{
-
-		virtual TString RenderMessage() const = 0;
+		TString msg;
+		u64_t ts;	// EClock::MONOTONIC in nanoseconds
+		const void* ip;	// instruction pointer of log call site
+		ECategory category;
 	};
 
-	/*
-	 * Return Address == Call-Site
-	 * Category
-	 * Message Text
-	 */
+	template<typename T>
+	TString GetObjectIdentity(const T* const object)
+	{
+		constexpr debug::TTypeNameView type_name = debug::GetTypeName<T>();
+		return TString::Format(U"%s@%x", TString(type_name.data, type_name.length), reinterpret_cast<usys_t>(object));
+	}
 
 	template<typename O, typename ... A>
-	static void WriteLog(const ECategory category, const O* const object, const io::text::format::TFormatString<std::type_identity_t<std::decay_t<const A>>...> format, A const& ...args)
+	[[gnu::noinline]] static void WriteLog(const ECategory category, const O* const object, const io::text::format::TFormatString<std::type_identity_t<std::decay_t<const A>>...> format, A const& ...args)
 	{
-		struct TRecord : ILogRecord
+		TLogRecord record;
+		if(object)
 		{
-			const TStringView format;
-			const std::tuple<A...> args;
-
-			TString RenderMessage() const final override
-			{
-				return std::apply(
-					[this](auto const&... args)
-					{
-						return TString::Format(format, args...);
-					},
-					args
-				);
-			}
-
-			TRecord(
-				TStringView _format,
-				std::tuple<A...> _args
-			) : format(std::move(_format)), args(std::move(_args)) {}
-		};
-
-		(void)New<TRecord>(TStringView::FromUnsafePointer(format.literal, format.length), std::tuple<A...>(std::move(args)...));
+			constexpr io::text::format::TFormatString<TString> object_prefix(U"[%s]");
+			record.msg = TString::Format(object_prefix + format, GetObjectIdentity(object), args...);
+		}
+		else
+			record.msg = TString::Format(format, args...);
+		record.ip = __builtin_extract_return_addr(__builtin_return_address(0));
+		record.category = category;
 	}
 }

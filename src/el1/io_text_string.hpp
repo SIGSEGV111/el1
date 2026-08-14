@@ -47,6 +47,14 @@ namespace el1::io::text::string
 				return TStringView(TBase::FromUnsafePointer(chars, n_chars));
 			}
 
+			static constexpr TStringView FromUnsafePointerStrlen(const char32_t* const chars EL_LIFETIME_BOUND) noexcept
+			{
+				usys_t n_chars = 0;
+				if(chars != nullptr)
+					for(; chars[n_chars] != 0; n_chars++);
+				return TStringView::FromUnsafePointer(chars, n_chars);
+			}
+
 			template<std::size_t N>
 			constexpr TStringView(const char32_t (&chars EL_LIFETIME_BOUND)[N]) noexcept : TBase(chars, N > 0 ? N - 1 : 0) {}
 
@@ -104,6 +112,10 @@ namespace el1::io::text::string
 
 			template<typename ... A>
 			static TString Format(const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...>& format, A const& ...args);
+
+			template<typename TLeft, typename TRight, typename ... A>
+			requires std::is_same_v<std::tuple<std::type_identity_t<std::decay_t<const A>>...>, typename format::TConcatenatedFormatString<TLeft, TRight>::TArguments>
+			static TString Format(const format::TConcatenatedFormatString<TLeft, TRight>& format, A const& ...args);
 
 			template<typename F, typename ... A>
 			requires std::is_same_v<std::remove_cvref_t<F>, TStringView>
@@ -354,6 +366,16 @@ namespace el1::io::text::string
 	class TString;
 	template<typename ... A>
 	TString TString::Format(const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...>& format, A const& ...args)
+	{
+		TString out;
+		detail::TStringFormatSink sink(out);
+		format.RenderInto(sink, args...);
+		return out;
+	}
+
+	template<typename TLeft, typename TRight, typename ... A>
+	requires std::is_same_v<std::tuple<std::type_identity_t<std::decay_t<const A>>...>, typename format::TConcatenatedFormatString<TLeft, TRight>::TArguments>
+	TString TString::Format(const format::TConcatenatedFormatString<TLeft, TRight>& format, A const& ...args)
 	{
 		TString out;
 		detail::TStringFormatSink sink(out);
