@@ -381,9 +381,10 @@ namespace el1::io::text::format
 	};
 
 	/**
-	 * Validated native UTF-32 format literal. TString::Format() accepts only
-	 * `U"..."` literals. Source-code UTF-8 is therefore converted to char32_t by
-	 * the compiler before this parser runs; every index is one Unicode code point.
+	 * Parsed native UTF-32 format string. `U"..."` literals are validated at
+	 * compile time; runtime TStringView formats use the same parser at runtime.
+	 * Source-code UTF-8 is converted to char32_t by the compiler before this
+	 * parser runs, so every index is one Unicode code point.
 	 *
 	 * The conversion code is the first ASCII letter after `%`. Therefore a
 	 * normal spec cannot contain letters:
@@ -416,6 +417,7 @@ namespace el1::io::text::format
 			struct TUncheckedTag {};
 
 			std::tuple<TVariable<TArgs>...> variables = {};
+			bool valid = false;
 
 			constexpr TFormatSpecView SpecView(const usys_t begin, const usys_t end, const bool braced) const noexcept
 			{
@@ -498,25 +500,7 @@ namespace el1::io::text::format
 			}
 
 			template<usys_t I>
-			constexpr bool ValidateFrom(const usys_t pos) const noexcept
-			{
-				if constexpr(I == sizeof...(TArgs))
-					return !HasUnescapedVariable(pos);
-				else
-				{
-					using T = std::tuple_element_t<I, std::tuple<TArgs...>>;
-					if constexpr(!detail::CFormatter<T>)
-						return false;
-					else
-					{
-						const TVariable<T> variable = Find<T>(pos);
-						return variable.valid && ValidateFrom<I + 1>(variable.end);
-					}
-				}
-			}
-
-			template<usys_t I>
-			consteval bool InitializeFrom(const usys_t pos)
+			constexpr bool InitializeFrom(const usys_t pos) noexcept
 			{
 				if constexpr(I == sizeof...(TArgs))
 					return !HasUnescapedVariable(pos);
@@ -569,25 +553,39 @@ namespace el1::io::text::format
 					RenderFrom<I + 1>(out, pos, rest...);
 			}
 
-			consteval void RequireValid()
+			constexpr void Initialize() noexcept
 			{
-				if(!InitializeFrom<0>(0))
+				valid = InitializeFrom<0>(0);
+			}
+
+			consteval void RequireValid() const
+			{
+				if(!valid)
 					throw "invalid format literal or formatter/argument mismatch";
 			}
 
 			template<std::size_t N>
-			consteval TFormatString(TUncheckedTag, const char32_t (&value)[N]) noexcept : literal(value), length(N - 1) {}
+			consteval TFormatString(TUncheckedTag, const char32_t (&value)[N]) noexcept : literal(value), length(N - 1)
+			{
+				Initialize();
+			}
 
 		public:
+			constexpr TFormatString(const char32_t* const value, const usys_t n_chars) noexcept : literal(value), length(n_chars)
+			{
+				Initialize();
+			}
+
 			template<std::size_t N>
 			consteval TFormatString(const char32_t (&value)[N]) : literal(value), length(N - 1)
 			{
+				Initialize();
 				RequireValid();
 			}
 
 			constexpr bool IsValid() const noexcept
 			{
-				return ValidateFrom<0>(0);
+				return valid;
 			}
 
 			template<typename... A>

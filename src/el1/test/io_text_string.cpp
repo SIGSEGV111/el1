@@ -588,7 +588,7 @@ namespace
 		static_assert(!IsValidFormat<TDefaultSpecFormatValue>(U"%{17.3}m"));
 		static_assert(!IsValidFormat<int>(U"%{10}d"));
 		static_assert(!CCanUseRuntimeFormatString<TString>);
-		static_assert(!CCanUseRuntimeFormatString<TStringView>);
+		static_assert(CCanUseRuntimeFormatString<TStringView>);
 		static_assert(!CCanUseRuntimeFormatString<const char*>);
 		static_assert(!CCanUseRuntimeFormatString<const char32_t*>);
 		static_assert(!std::is_constructible_v<TFormatString<int>, const char32_t*>);
@@ -613,6 +613,17 @@ namespace
 		EXPECT_EQ(TString::Format(U"wide %04x", 42), "wide 002a");
 		EXPECT_EQ(TString::Format(U"unicode %s", "ok"), "unicode ok");
 		EXPECT_EQ(TString::Format(U"unicode %s", U"ä😀"), TStringView(U"unicode ä😀"));
+
+		const TStringView runtime_format = U"runtime %04x %s %%";
+		EXPECT_EQ(TString::Format(runtime_format, 42, U"ok"), TStringView(U"runtime 002a ok %"));
+
+		const TStringView runtime_source = U"xx%04xyy";
+		const TStringView runtime_slice = runtime_source.SliceSL(2, 4);
+		EXPECT_EQ(TString::Format(runtime_slice, 42), "002a");
+
+		const TStringView invalid_runtime_format = U"wrong %s";
+		EXPECT_THROW(TString::Format(invalid_runtime_format, 42), TException);
+
 		static constexpr char32_t NAMED_FORMAT[] = U"named %04x";
 		EXPECT_EQ(TString::Format(NAMED_FORMAT, 42), "named 002a");
 

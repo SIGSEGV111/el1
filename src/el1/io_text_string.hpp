@@ -105,6 +105,10 @@ namespace el1::io::text::string
 			template<typename ... A>
 			static TString Format(const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...>& format, A const& ...args);
 
+			template<typename F, typename ... A>
+			requires std::is_same_v<std::remove_cvref_t<F>, TStringView>
+			static TString Format(F&& format, A const& ...args);
+
 			static TString Join(array_t<const TString> list, const TStringView delimiter);
 			static TString Join(array_t<const TString> list, const TString& delimiter) { return Join(list, delimiter.View()); }
 
@@ -355,6 +359,15 @@ namespace el1::io::text::string
 		detail::TStringFormatSink sink(out);
 		format.RenderInto(sink, args...);
 		return out;
+	}
+
+	template<typename F, typename ... A>
+	requires std::is_same_v<std::remove_cvref_t<F>, TStringView>
+	TString TString::Format(F&& runtime_format, A const& ...args)
+	{
+		const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...> parsed_format(runtime_format.Data(), runtime_format.Length());
+		EL_ERROR(!parsed_format.IsValid(), TException, "invalid format string or formatter/argument mismatch");
+		return Format(parsed_format, args...);
 	}
 }
 
