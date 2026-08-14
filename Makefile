@@ -68,7 +68,7 @@ LIFETIME_CHECK_CXXFLAGS := \
 # -----------------------------------------------------------------------------
 
 PROJECT_CPPFLAGS :=
-PACKAGE_NAMES := krb5 zlib openssl
+PACKAGE_NAMES := krb5 krb5-gssapi zlib openssl
 
 ifeq ($(WITH_POSTGRES),1)
 PROJECT_CPPFLAGS += -DEL1_WITH_POSTGRES

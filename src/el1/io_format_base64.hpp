@@ -10,6 +10,9 @@ namespace el1::io::format::base64
 	using namespace text::encoding;
 	using namespace text::string;
 
+	TString EncodeBase64Url(collection::list::array_t<const byte_t> data);
+	collection::list::TList<byte_t> DecodeBase64Url(TString text);
+
 	class TBase64Decoder
 	{
 		protected:

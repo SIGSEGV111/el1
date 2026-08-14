@@ -33,6 +33,18 @@ namespace
 		EXPECT_EQ(encoded, expected);
 	}
 
+	TEST(io_format_base64, Base64Url)
+	{
+		const byte_t bytes[] = { 0xfb, 0xff, 0xef };
+		const TString encoded = EncodeBase64Url(array_t<const byte_t>::FromUnsafePointer(bytes, 3));
+		EXPECT_EQ(encoded, U"-__v");
+		const TList<byte_t> decoded = DecodeBase64Url(encoded);
+		ASSERT_EQ(decoded.Count(), 3U);
+		EXPECT_EQ(decoded[0], 0xfb);
+		EXPECT_EQ(decoded[1], 0xff);
+		EXPECT_EQ(decoded[2], 0xef);
+	}
+
 	TEST(io_format_base64, TBase64Decoder_DecodeBlock)
 	{
 		{

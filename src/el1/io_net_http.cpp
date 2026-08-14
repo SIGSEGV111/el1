@@ -80,11 +80,16 @@ namespace el1::io::net::http
 		{
 			case EStatus::OK: return "OK";
 			case EStatus::CREATED: return "Created";
+			case EStatus::ACCEPTED: return "Accepted";
+			case EStatus::NO_CONTENT: return "No Content";
+			case EStatus::PARTIAL_CONTENT: return "Partial Content";
 			case EStatus::BAD_REQUEST: return "Bad Request";
 			case EStatus::UNAUTHORIZED: return "Unauthorized";
 			case EStatus::FORBIDDEN: return "Forbidden";
 			case EStatus::NOT_FOUND: return "Not Found";
 			case EStatus::METHOD_NOT_ALLOWED: return "Method Not Allowed";
+			case EStatus::CONFLICT: return "Conflict";
+			case EStatus::RANGE_NOT_SATISFIABLE: return "Range Not Satisfiable";
 			case EStatus::REQUEST_HEADER_FIELDS_TOO_LARGE: return "Request Header Fields Too Large";
 			case EStatus::INTERNAL_SERVER_ERROR: return "Internal Server Error";
 			case EStatus::EOF: break;
