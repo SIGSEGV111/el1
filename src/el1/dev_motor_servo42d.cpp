@@ -2,6 +2,7 @@
 #include "system_task.hpp"
 #include <cmath>
 #include <exception>
+#include <stdint.h>
 
 namespace el1::dev::motor::servo42d
 {

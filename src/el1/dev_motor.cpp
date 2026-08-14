@@ -1,6 +1,7 @@
 #include "dev_motor.hpp"
 #include "system_task.hpp"
 #include <cmath>
+#include <stdint.h>
 
 namespace el1::dev::motor
 {
