@@ -731,6 +731,28 @@ namespace
 		ExpectValue(long_value, "123456789012345678901234567890.12345678901234567890");
 	}
 
+	TEST(io_bcd, FromStringMSDAndFixedIntegerConversion)
+	{
+		ExpectValue(TBCD::FromStringMSD(U"+17.28", DECIMAL_SYMBOLS), "17.28");
+		ExpectValue(TBCD::FromStringMSD(U"-17.28", (digit_t)10), "-17.28");
+		EXPECT_EQ(TBCD::FromStringMSD(U"fF", (digit_t)16), 255);
+
+		TFixedBCD<20, 20, 0, 10> maximum((u64_t)std::numeric_limits<s64_t>::max());
+		s64_t signed_value = 0;
+		EXPECT_TRUE(maximum.TryToInteger(signed_value));
+		EXPECT_EQ(signed_value, std::numeric_limits<s64_t>::max());
+
+		TFixedBCD<20, 20, 0, 10> too_large((u64_t)std::numeric_limits<s64_t>::max() + 1U);
+		EXPECT_FALSE(too_large.TryToInteger(signed_value));
+
+		TFixedBCD<1, 1, 0, 10> boolean(1);
+		bool bool_value = false;
+		EXPECT_TRUE(boolean.TryToInteger(bool_value));
+		EXPECT_TRUE(bool_value);
+		boolean.Digit(0, 2);
+		EXPECT_FALSE(boolean.TryToInteger(bool_value));
+	}
+
 	TEST(io_bcd, FromStringRejectsMalformedInput)
 	{
 		EXPECT_TRUE(TBCD::FromString(TString(), DECIMAL_SYMBOLS).IsInvalid());

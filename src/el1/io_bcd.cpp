@@ -1567,6 +1567,127 @@ namespace el1::io::bcd
 		return result;
 	}
 
+	TBCD TBCD::FromStringMSD(const text::string::TStringView str, const text::string::TStringView symbols, const char32_t decimal_seperator, const char32_t negative_symbol, const char32_t positive_symbol, const bool default_negative)
+	{
+		if(str.Length() == 0)
+			return INVALID;
+
+		EL_ERROR(symbols.Length() < 2 || symbols.Length() > 256, TInvalidArgumentException, "symbols", "between 2 and 256 numeric symbols are required");
+		EL_ERROR(symbols.Contains(decimal_seperator), TInvalidArgumentException, "symbols", "symbols must not include the decimal separator");
+		EL_ERROR(symbols.Contains(negative_symbol), TInvalidArgumentException, "symbols", "symbols must not include the negative sign");
+		EL_ERROR(symbols.Contains(positive_symbol), TInvalidArgumentException, "symbols", "symbols must not include the positive sign");
+		EL_ERROR(decimal_seperator == negative_symbol || decimal_seperator == positive_symbol || negative_symbol == positive_symbol, TInvalidArgumentException, "symbols", "separator and sign characters must be distinct");
+
+		for(usys_t i = 0; i < symbols.Length(); i++)
+			for(usys_t j = i + 1U; j < symbols.Length(); j++)
+				EL_ERROR(symbols[i] == symbols[j], TInvalidArgumentException, "symbols", "numeric symbols must be unique");
+
+		usys_t begin = 0;
+		bool negative = default_negative;
+		if(str[0] == negative_symbol || str[0] == positive_symbol)
+		{
+			negative = str[0] == negative_symbol;
+			begin = 1;
+		}
+		EL_ERROR(begin == str.Length(), TInvalidArgumentException, "str", "numeric string contains no digits");
+
+		usys_t decimal = NEG1;
+		usys_t n_digits = 0;
+		for(usys_t i = begin; i < str.Length(); i++)
+		{
+			if(str[i] == decimal_seperator)
+			{
+				EL_ERROR(decimal != NEG1, TInvalidArgumentException, "str", "numeric string contains multiple decimal separators");
+				decimal = i;
+			}
+			else
+			{
+				n_digits++;
+			}
+		}
+		EL_ERROR(n_digits == 0, TInvalidArgumentException, "str", "numeric string contains no digits");
+
+		const usys_t n_decimal_digits = decimal == NEG1 ? 0U : str.Length() - decimal - 1U;
+		const usys_t n_integer_digits = n_digits - n_decimal_digits;
+		const digit_t base = symbols.Length() == 256U ? 0 : (digit_t)symbols.Length();
+		TBCD result(0, base, n_integer_digits, n_decimal_digits);
+		result.EnsureDigits();
+		usys_t output = 0;
+		for(usys_t i = str.Length(); i > begin; i--)
+		{
+			const char32_t chr = str[i - 1U];
+			if(chr == decimal_seperator)
+				continue;
+			const usys_t value = symbols.Find(chr);
+			EL_ERROR(value == NEG1, TInvalidArgumentException, "str", "numeric string contains a character not present in symbols");
+			result.DigitsPointer()[output++] = (digit_t)value;
+			if(value != 0)
+				result.is_zero = 0;
+		}
+		result.is_negative = negative;
+		return result;
+	}
+
+	TBCD TBCD::FromStringMSD(const text::string::TStringView str, const digit_t base, const char32_t decimal_seperator, const char32_t negative_symbol, const char32_t positive_symbol, const bool default_negative)
+	{
+		const unsigned radix = base == 0 ? 256U : (unsigned)base;
+		EL_ERROR(radix < 2 || radix > 36, TInvalidArgumentException, "base", "standard string parsing supports bases 2 through 36");
+		EL_ERROR(str.Length() == 0, TInvalidArgumentException, "str", "numeric string contains no digits");
+		EL_ERROR(decimal_seperator == negative_symbol || decimal_seperator == positive_symbol || negative_symbol == positive_symbol, TInvalidArgumentException, "str", "separator and sign characters must be distinct");
+
+		auto digit_value = [](const char32_t chr) -> int
+		{
+			if(chr >= U'0' && chr <= U'9') return (int)(chr - U'0');
+			if(chr >= U'a' && chr <= U'z') return 10 + (int)(chr - U'a');
+			if(chr >= U'A' && chr <= U'Z') return 10 + (int)(chr - U'A');
+			return -1;
+		};
+
+		usys_t begin = 0;
+		bool negative = default_negative;
+		if(str[0] == negative_symbol || str[0] == positive_symbol)
+		{
+			negative = str[0] == negative_symbol;
+			begin = 1;
+		}
+		EL_ERROR(begin == str.Length(), TInvalidArgumentException, "str", "numeric string contains no digits");
+
+		usys_t decimal = NEG1;
+		usys_t n_digits = 0;
+		for(usys_t i = begin; i < str.Length(); i++)
+		{
+			if(str[i] == decimal_seperator)
+			{
+				EL_ERROR(decimal != NEG1, TInvalidArgumentException, "str", "numeric string contains multiple decimal separators");
+				decimal = i;
+				continue;
+			}
+
+			const int value = digit_value(str[i]);
+			EL_ERROR(value < 0 || (unsigned)value >= radix, TInvalidArgumentException, "str", "numeric string contains a digit outside the numeric base");
+			n_digits++;
+		}
+		EL_ERROR(n_digits == 0, TInvalidArgumentException, "str", "numeric string contains no digits");
+
+		const usys_t n_decimal_digits = decimal == NEG1 ? 0U : str.Length() - decimal - 1U;
+		const usys_t n_integer_digits = n_digits - n_decimal_digits;
+		TBCD result(0, base, n_integer_digits, n_decimal_digits);
+		result.EnsureDigits();
+		usys_t output = 0;
+		for(usys_t i = str.Length(); i > begin; i--)
+		{
+			const char32_t chr = str[i - 1U];
+			if(chr == decimal_seperator)
+				continue;
+			const digit_t value = (digit_t)digit_value(chr);
+			result.DigitsPointer()[output++] = value;
+			if(value != 0)
+				result.is_zero = 0;
+		}
+		result.is_negative = negative;
+		return result;
+	}
+
 	TBCD TBCD::Random(const digit_t base, const usys_t n_integer, const usys_t n_decimal)
 	{
 		EL_ERROR(base == 1, TInvalidArgumentException, "base", "base 1 is reserved for invalid values");

@@ -266,6 +266,22 @@ namespace
 		EXPECT_EQ(hex_overflow.CharacterIndex(), (iosize_t)0);
 	}
 
+	TEST(io_text, ParseNumberUsesScannerConversionBackend)
+	{
+		const auto decimal = scan::ParseNumber<s64_t>(U"-9223372036854775808", 10);
+		ASSERT_TRUE(decimal);
+		EXPECT_EQ(*decimal, std::numeric_limits<s64_t>::min());
+		EXPECT_FALSE(scan::ParseNumber<s64_t>(U"9223372036854775808", 10));
+
+		const auto hexadecimal = scan::ParseNumber<u16_t>(U"fFfF", 16);
+		ASSERT_TRUE(hexadecimal);
+		EXPECT_EQ(*hexadecimal, 0xffffu);
+
+		const auto floating = scan::ParseNumber<double>(U"-2.5E-2", 10);
+		ASSERT_TRUE(floating);
+		EXPECT_DOUBLE_EQ(*floating, -0.025);
+	}
+
 	TEST(io_text, TTextReaderScanFloatingExponent)
 	{
 		TStringTextReader reader(TString(U"1e3 -2.5E-2 +.5 1e"));

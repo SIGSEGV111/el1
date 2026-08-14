@@ -206,6 +206,7 @@ namespace el1::io::format::json
 		static u16_t ConvertCodeUnit(TStringView token);
 		static std::optional<TJsonValue> ConvertInteger(TStringView token);
 		static std::optional<TJsonValue> ConvertNumber(TStringView token);
+		static std::optional<TJsonValue> ConvertNumeric(TStringView token);
 
 	public:
 		static constexpr auto Parser(const bool tolerant = false)
@@ -226,17 +227,25 @@ namespace el1::io::format::json
 					return std::move(parser) + boundary;
 				};
 
-				// JSON string grammar. Capture a complete UTF-16 code unit and use
-				// the generic text number scanner for hexadecimal conversion.
+				// JSON string grammar. Escapes dispatch on the character following '\\'
+				// so common escapes and Unicode escapes do not re-run unrelated branches.
 				auto hex = CharRange(U'0', U'9') || CharRange(U'A', U'F') || CharRange(U'a', U'f');
 				auto code_unit = Translate(ConvertCodeUnit, Capture(Repeat(hex, 4, 4)));
+				auto first_unicode_unit = Discard(U'u'_P) + Expect(code_unit);
 				auto unicode_unit = Discard(U"\\u"_P) + Expect(code_unit);
+				auto unicode_scalar = Translate(
+					[](const u16_t v) { return (char32_t)v; },
+					Where(
+						[](const u16_t v) { return v < 0xd800 || v > 0xdfff; },
+						first_unicode_unit
+					)
+				);
 				auto high_surrogate = Where(
-					[](const u16_t value) { return value >= 0xd800 && value <= 0xdbff; },
-					unicode_unit
+					[](const u16_t v) { return v >= 0xd800 && v <= 0xdbff; },
+					first_unicode_unit
 				);
 				auto low_surrogate = Expect(Validate(
-					[](const u16_t value) { return value >= 0xdc00 && value <= 0xdfff; },
+					[](const u16_t v) { return v >= 0xdc00 && v <= 0xdfff; },
 					unicode_unit
 				));
 				auto surrogate_pair = Translate(
@@ -246,37 +255,48 @@ namespace el1::io::format::json
 					},
 					high_surrogate, low_surrogate
 				);
-				auto unicode_scalar = Translate(
-					[](const u16_t value) { return (char32_t)value; },
-					Validate(
-						[](const u16_t value) { return value < 0xd800 || value > 0xdfff; },
-						unicode_unit
-					)
+				auto invalid_surrogate = Translate(
+					[](const u16_t) -> char32_t { EL_THROW(TLogicException); },
+					Validate([](const u16_t) { return false; }, first_unicode_unit)
 				);
+				auto unicode_escape = unicode_scalar || surrogate_pair || invalid_surrogate;
 
-				auto simple_escape = Discard(U'\\'_P) + (
-					Translate([](char32_t) { return U'"'; }, U'"'_P) ||
-					Translate([](char32_t) { return U'\\'; }, U'\\'_P) ||
-					Translate([](char32_t) { return U'/'; }, U'/'_P) ||
-					Translate([](char32_t) { return U'\b'; }, U'b'_P) ||
-					Translate([](char32_t) { return U'\f'; }, U'f'_P) ||
-					Translate([](char32_t) { return U'\n'; }, U'n'_P) ||
-					Translate([](char32_t) { return U'\r'; }, U'r'_P) ||
-					Translate([](char32_t) { return U'\t'; }, U't'_P)
+				auto simple_escape_code = CharList(U'"', U'\\', U'/', U'b', U'f', U'n', U'r', U't');
+				auto simple_escape = Translate(
+					[](const char32_t code)
+					{
+						switch(code)
+						{
+							case U'"': return U'"';
+							case U'\\': return U'\\';
+							case U'/': return U'/';
+							case U'b': return U'\b';
+							case U'f': return U'\f';
+							case U'n': return U'\n';
+							case U'r': return U'\r';
+							case U't': return U'\t';
+							default: EL_THROW(TLogicException);
+						}
+					},
+					simple_escape_code
 				);
 				constexpr char32_t unicode_max = (char32_t)0x10ffff;
 				auto non_unicode_escape = CharRange((char32_t)0, U't') || CharRange(U'v', unicode_max);
-				auto tolerant_escape = If(tolerant, Discard(U'\\'_P) + non_unicode_escape);
-				auto escaped = surrogate_pair || unicode_scalar || simple_escape || tolerant_escape;
+				auto escaped = Discard(U'\\'_P) + Dispatch(
+					Case(simple_escape_code, simple_escape),
+					Case(U'u'_P, unicode_escape),
+					Case(non_unicode_escape, If(tolerant, non_unicode_escape))
+				);
 				auto plain = ~(
 					CharList(U'"', U'\\') ||
 					If(!tolerant, CharRange((char32_t)0, (char32_t)0x1f))
 				);
-				auto string = token(Translate(
+				auto raw_string = Translate(
 					[](TList<char32_t> chars) { return TString(std::move(chars)); },
-					Between(U'"'_P, Repeat(escaped || plain, 0, NEG1), U'"'_P)
-				));
-				auto string_value = value(Translate([](TString value) { return TJsonValue(std::move(value)); }, string));
+					Between(U'"'_P, Repeat(plain || escaped, 0, NEG1), U'"'_P)
+				);
+				auto string = token(raw_string);
+				auto string_value = Translate([](TString text) { return TJsonValue(std::move(text)); }, raw_string);
 
 				// RFC 8259 number grammar:
 				// -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
@@ -285,42 +305,45 @@ namespace el1::io::format::json
 				auto nonzero_integer = CharRange(U'1', U'9') + Repeat(digit, 0, NEG1);
 				auto integer_part = zero || nonzero_integer;
 				auto sign = Optional(U'-'_P);
-				auto integer_syntax = sign + integer_part;
-				auto integer_token = Capture(integer_syntax);
 				auto fraction = Repeat(U'.'_P, 1, 1) + OneOrMore(digit);
 				auto exponent = Repeat(CharList(U'e', U'E'), 1, 1) + Optional(CharList(U'+', U'-')) + OneOrMore(digit);
-				auto fractional_or_exponent = (fraction + exponent) || fraction || exponent;
-				auto number_token = Capture(integer_syntax + fractional_or_exponent);
-				auto number = value(token(
-					TryTranslate(ConvertNumber, number_token) ||
-					TryTranslate(ConvertInteger, integer_token)
-				));
+				auto number_token = Capture(sign + integer_part + Optional(fraction) + Optional(exponent));
+				auto number = TryTranslate(ConvertNumeric, number_token);
 
-				auto true_value = value(Translate([](TString) { return TJsonValue(true); }, token(U"true"_P)));
-				auto false_value = value(Translate([](TString) { return TJsonValue(false); }, token(U"false"_P)));
-				auto null_value = value(Translate([](TString) { return TJsonValue(); }, token(U"null"_P)));
+				auto true_value = Translate([](TStringView) { return TJsonValue(true); }, Capture(U"true"_P));
+				auto false_value = Translate([](TStringView) { return TJsonValue(false); }, Capture(U"false"_P));
+				auto null_value = Translate([](TStringView) { return TJsonValue(); }, Capture(U"null"_P));
 
-				auto array = value(Translate(
+				auto array = Translate(
 					[](TJsonArray values) { return TJsonValue(std::move(values)); },
 					Between(token(U'['_P), SeparatedBy(self, token(U','_P)), token(U']'_P))
-				));
+				);
 
 				auto member = Translate(
-					[](TString key, TJsonValue value)
+					[](TString key, TJsonValue member_value)
 					{
-						return TJsonMap::kv_pair_t{std::move(key), std::move(value)};
+						return TJsonMap::kv_pair_t{std::move(key), std::move(member_value)};
 					},
 					string + Discard(token(U':'_P)), self
 				);
-				auto map = value(Translate(
+				auto map = Translate(
 					[](TList<TJsonMap::kv_pair_t> members)
 					{
 						return TJsonValue(TJsonMap(std::move(members)));
 					},
 					Between(token(U'{'_P), SeparatedBy(member, token(U','_P)), token(U'}'_P))
-				));
+				);
 
-				return null_value || true_value || false_value || number || string_value || array || map;
+				auto raw_value = Dispatch(
+					Case(U'n'_P, null_value),
+					Case(U't'_P, true_value),
+					Case(U'f'_P, false_value),
+					Case(U'-'_P || CharRange(U'0', U'9'), number),
+					Case(U'"'_P, string_value),
+					Case(U'['_P, array),
+					Case(U'{'_P, map)
+				);
+				return value(token(raw_value));
 			});
 		}
 	};

@@ -878,6 +878,11 @@ namespace el1::io::bcd
 			// First digit in str is considered least significant value, while last position is most significant value (reversed to what humans do).
 			static TBCD FromString(text::string::TStringView str, text::string::TStringView symbols, const char32_t decimal_seperator = '.', const char32_t negative_symbol = '-', const char32_t positive_symbol = '+', const bool default_negative = false);
 
+			// Parses the conventional most-significant-digit-first spelling without reversing or copying the input.
+			static TBCD FromStringMSD(text::string::TStringView str, text::string::TStringView symbols, const char32_t decimal_seperator = '.', const char32_t negative_symbol = '-', const char32_t positive_symbol = '+', const bool default_negative = false);
+			// Fast path for conventional 2..36 digit alphabets (0-9, a-z/A-Z).
+			static TBCD FromStringMSD(text::string::TStringView str, digit_t base, const char32_t decimal_seperator = '.', const char32_t negative_symbol = '-', const char32_t positive_symbol = '+', const bool default_negative = false);
+
 			static TBCD Random(const digit_t base, const usys_t n_integer, const usys_t n_decimal);
 	};
 
@@ -1664,6 +1669,74 @@ namespace el1::io::bcd
 				for(usys_t i = n_integer; i > 0; i--)
 					value = value * radix + Digit((ssys_t)i - 1);
 				return value;
+			}
+
+			template<typename T>
+			requires std::is_integral_v<T>
+			bool TryToInteger(T& out) const noexcept
+			{
+				if(!IsFinite())
+					return false;
+				for(usys_t i = 0; i < n_decimal; i++)
+					if(digits[i] != 0)
+						return false;
+
+				if constexpr(std::same_as<std::remove_cv_t<T>, bool>)
+				{
+					if(IsNegative())
+						return false;
+					unsigned magnitude = 0;
+					for(usys_t i = n_integer; i > 0; i--)
+					{
+						const unsigned digit = (unsigned)Digit((ssys_t)i - 1);
+						if(digit > 1U || magnitude != 0U)
+							return false;
+						magnitude = digit;
+					}
+					out = magnitude != 0U;
+					return true;
+				}
+				else
+				{
+					using unsigned_t = std::make_unsigned_t<T>;
+					if constexpr(!std::is_signed_v<T>)
+						if(IsNegative())
+							return false;
+
+					const bool negative = std::is_signed_v<T> && IsNegative();
+					const unsigned_t limit = [&]() -> unsigned_t
+					{
+						if constexpr(std::is_signed_v<T>)
+							return negative
+								? (unsigned_t)0 - (unsigned_t)std::numeric_limits<T>::min()
+								: (unsigned_t)std::numeric_limits<T>::max();
+						else
+							return std::numeric_limits<T>::max();
+					}();
+
+					unsigned_t magnitude = 0;
+					const unsigned_t radix = (unsigned_t)Radix();
+					for(usys_t i = n_integer; i > 0; i--)
+					{
+						const unsigned_t digit = (unsigned_t)Digit((ssys_t)i - 1);
+						if(digit > limit || magnitude > (limit - digit) / radix)
+							return false;
+						magnitude = magnitude * radix + digit;
+					}
+
+					if constexpr(std::is_signed_v<T>)
+					{
+						if(negative)
+							out = magnitude == limit ? std::numeric_limits<T>::min() : (T)-(T)magnitude;
+						else
+							out = (T)magnitude;
+					}
+					else
+					{
+						out = (T)magnitude;
+					}
+					return true;
+				}
 			}
 
 			TFixedBCD& operator+=(const TFixedBCD& rhs) { Add(*this, *this, rhs); return *this; }

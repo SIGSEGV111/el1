@@ -122,6 +122,21 @@ namespace
 		EXPECT_THROW((void)tolerant.Parse(U"\\"), TException);
 	}
 
+	TEST(io_text_parser, DispatchSelectsOneCharacterBranch)
+	{
+		auto parser = Dispatch(
+			Case(U'a'_P, Translate([](TString) { return 1; }, U"alpha"_P)),
+			Case(CharList(U'b', U'c'), Translate([](TString) { return 2; }, U"beta"_P))
+		);
+
+		EXPECT_EQ(parser.Parse(U"alpha"), 1);
+		EXPECT_EQ(parser.Parse(U"beta"), 2);
+		TStringSource input(U"delta");
+		usys_t pos = 0;
+		EXPECT_FALSE(parser.TryParse(input, pos));
+		EXPECT_EQ(pos, 0U);
+	}
+
 	TEST(io_text_parser, WhereValidateAndExpect)
 	{
 		auto even = Where(

@@ -39,9 +39,19 @@ namespace el1::io::text::parser
 	class TParseContext
 	{
 		stream::IBufferedSource<char32_t>& input;
+		io::collection::array::array_t<const char32_t> buffer;
 		TParseLimits limits;
 		usys_t recursion_depth = 0;
 		usys_t farthest_position = 0;
+
+		struct TRecursiveParserBinding
+		{
+			const TRecursiveParserBinding* previous;
+			const void* rule;
+			const void* parser;
+		};
+
+		const TRecursiveParserBinding* active_recursive_parser = nullptr;
 
 	public:
 		class TRecursionGuard
@@ -79,30 +89,67 @@ namespace el1::io::text::parser
 		const TRecursionGuard* active_recursion = nullptr;
 
 	public:
-		explicit TParseContext(stream::IBufferedSource<char32_t>& input EL_LIFETIME_BOUND, const TParseLimits limits = {}) : input(input), limits(limits) {}
+		template<typename P>
+		class TRecursiveParserGuard
+		{
+			TParseContext& context;
+			const TRecursiveParserBinding binding;
+
+		public:
+			TRecursiveParserGuard(TParseContext& context, const void* const rule, const P& parser)
+				: context(context), binding{context.active_recursive_parser, rule, &parser}
+			{
+				context.active_recursive_parser = &binding;
+			}
+
+			TRecursiveParserGuard(const TRecursiveParserGuard&) = delete;
+			TRecursiveParserGuard& operator=(const TRecursiveParserGuard&) = delete;
+			~TRecursiveParserGuard() { context.active_recursive_parser = binding.previous; }
+		};
+
+		explicit TParseContext(stream::IBufferedSource<char32_t>& input EL_LIFETIME_BOUND, const TParseLimits limits = {})
+			: input(input), buffer(input.Head()), limits(limits) {}
 		TParseContext(const TParseContext&) = delete;
 		TParseContext& operator=(const TParseContext&) = delete;
 		TParseContext(TParseContext&&) = delete;
 		TParseContext& operator=(TParseContext&&) = delete;
 
+		bool Ensure(const usys_t count)
+		{
+			if(buffer.Count() >= count)
+				return true;
+			const bool available = input.Ensure(count);
+			buffer = input.Head();
+			EL_ERROR(available && buffer.Count() < count, TLogicException);
+			return available;
+		}
+
 		bool At(const usys_t offset, char32_t& out)
 		{
 			if(offset > farthest_position)
 				farthest_position = offset;
-			if(!input.Ensure(offset + 1))
+			if(!Ensure(offset + 1))
 				return false;
-			out = input[offset];
+			out = buffer[offset];
 			return true;
 		}
 
 		TStringView Capture(const usys_t begin, const usys_t end)
 		{
 			EL_ERROR(end < begin, TLogicException);
-			EL_ERROR(end != 0 && !input.Ensure(end), TLogicException);
+			EL_ERROR(end != 0 && !Ensure(end), TLogicException);
 			if(begin == end)
 				return {};
-			EL_ERROR(input.Head().Count() < end, TLogicException);
-			return TStringView::FromUnsafePointer(input.ItemPtr(begin), end - begin);
+			return TStringView::FromUnsafePointer(buffer.ItemPtr(begin), end - begin);
+		}
+
+		template<typename P>
+		const P* RecursiveParser(const void* const rule) const noexcept
+		{
+			for(const TRecursiveParserBinding* binding = active_recursive_parser; binding != nullptr; binding = binding->previous)
+				if(binding->rule == rule)
+					return static_cast<const P*>(binding->parser);
+			return nullptr;
 		}
 
 		const TParseLimits& Limits() const noexcept { return limits; }
@@ -161,6 +208,12 @@ namespace el1::io::text::parser
 			bool Match(TParseContext& input, usys_t& pos) const
 			{
 				return condition && node.Match(input, pos);
+			}
+
+			constexpr bool Matches(const char32_t chr) const noexcept
+				requires requires { { node.Matches(chr) } -> std::convertible_to<bool>; }
+			{
+				return condition && node.Matches(chr);
 			}
 		};
 
@@ -276,7 +329,7 @@ namespace el1::io::text::parser
 			auto Parse(TParseContext& input, usys_t& pos) const -> std::optional<return_t>
 			{
 				char32_t chr;
-				if(!input.At(pos, chr) || chr < from || chr > to)
+				if(!input.At(pos, chr) || !Matches(chr))
 					return std::nullopt;
 				pos++;
 				return chr;
@@ -285,11 +338,13 @@ namespace el1::io::text::parser
 			bool Match(TParseContext& input, usys_t& pos) const
 			{
 				char32_t chr;
-				if(!input.At(pos, chr) || chr < from || chr > to)
+				if(!input.At(pos, chr) || !Matches(chr))
 					return false;
 				pos++;
 				return true;
 			}
+
+			constexpr bool Matches(const char32_t chr) const noexcept { return chr >= from && chr <= to; }
 		};
 
 		template<usys_t N>
@@ -300,32 +355,30 @@ namespace el1::io::text::parser
 			template<typename... A>
 			constexpr TCharListNode(A... a) : list{static_cast<char32_t>(a)...} {}
 
+			constexpr bool Matches(const char32_t chr) const noexcept
+			{
+				for(const char32_t item : list)
+					if(item == chr)
+						return true;
+				return false;
+			}
+
 			auto Parse(TParseContext& input, usys_t& pos) const -> std::optional<return_t>
 			{
 				char32_t chr;
-				if(!input.At(pos, chr))
+				if(!input.At(pos, chr) || !Matches(chr))
 					return std::nullopt;
-				for(const char32_t item : list)
-					if(item == chr)
-					{
-						pos++;
-						return chr;
-					}
-				return std::nullopt;
+				pos++;
+				return chr;
 			}
 
 			bool Match(TParseContext& input, usys_t& pos) const
 			{
 				char32_t chr;
-				if(!input.At(pos, chr))
+				if(!input.At(pos, chr) || !Matches(chr))
 					return false;
-				for(const char32_t item : list)
-					if(item == chr)
-					{
-						pos++;
-						return true;
-					}
-				return false;
+				pos++;
+				return true;
 			}
 		};
 
@@ -633,6 +686,16 @@ namespace el1::io::text::parser
 
 			auto Parse(TParseContext& input, usys_t& pos) const -> std::optional<return_t>
 			{
+				if constexpr(requires(char32_t chr) { { lhs.Matches(chr) } -> std::convertible_to<bool>; { rhs.Matches(chr) } -> std::convertible_to<bool>; })
+				{
+					static_assert(std::same_as<return_t, char32_t>);
+					char32_t chr;
+					if(!input.At(pos, chr) || !Matches(chr))
+						return std::nullopt;
+					pos++;
+					return chr;
+				}
+
 				usys_t p = pos;
 				if(auto value = lhs.Parse(input, p))
 				{
@@ -650,6 +713,15 @@ namespace el1::io::text::parser
 
 			bool Match(TParseContext& input, usys_t& pos) const
 			{
+				if constexpr(requires(char32_t chr) { { lhs.Matches(chr) } -> std::convertible_to<bool>; { rhs.Matches(chr) } -> std::convertible_to<bool>; })
+				{
+					char32_t chr;
+					if(!input.At(pos, chr) || !Matches(chr))
+						return false;
+					pos++;
+					return true;
+				}
+
 				usys_t p = pos;
 				if(lhs.Match(input, p))
 				{
@@ -664,6 +736,12 @@ namespace el1::io::text::parser
 				}
 				return false;
 			}
+
+			constexpr bool Matches(const char32_t chr) const noexcept
+				requires requires { { lhs.Matches(chr) } -> std::convertible_to<bool>; { rhs.Matches(chr) } -> std::convertible_to<bool>; }
+			{
+				return lhs.Matches(chr) || rhs.Matches(chr);
+			}
 		};
 
 		template<typename N>
@@ -672,16 +750,13 @@ namespace el1::io::text::parser
 			using return_t = char32_t;
 			N node;
 
+			constexpr bool Matches(const char32_t chr) const noexcept { return !node.Matches(chr); }
+
 			auto Parse(TParseContext& input, usys_t& pos) const -> std::optional<return_t>
 			{
 				char32_t chr;
-				if(!input.At(pos, chr))
+				if(!input.At(pos, chr) || !Matches(chr))
 					return std::nullopt;
-
-				usys_t p = pos;
-				if(node.Match(input, p))
-					return std::nullopt;
-
 				pos++;
 				return chr;
 			}
@@ -689,13 +764,8 @@ namespace el1::io::text::parser
 			bool Match(TParseContext& input, usys_t& pos) const
 			{
 				char32_t chr;
-				if(!input.At(pos, chr))
+				if(!input.At(pos, chr) || !Matches(chr))
 					return false;
-
-				usys_t p = pos;
-				if(node.Match(input, p))
-					return false;
-
 				pos++;
 				return true;
 			}
@@ -709,6 +779,72 @@ namespace el1::io::text::parser
 			: std::bool_constant<is_char_matcher_t<N1>::value && is_char_matcher_t<N2>::value> {};
 		template<typename N> struct is_char_matcher_t<TCharNotNode<N>> : is_char_matcher_t<N> {};
 		template<typename N> inline constexpr bool is_char_matcher_v = is_char_matcher_t<N>::value;
+
+		template<typename M, typename N>
+		struct TDispatchCase
+		{
+			using return_t = typename N::return_t;
+			M matcher;
+			N node;
+		};
+
+		template<typename... C>
+		struct TDispatchNode
+		{
+			static_assert(sizeof...(C) > 0);
+			using first_case_t = std::tuple_element_t<0, std::tuple<C...>>;
+			using return_t = typename first_case_t::return_t;
+			static_assert((std::same_as<return_t, typename C::return_t> && ...), "all Dispatch cases must return the same type");
+			std::tuple<C...> cases;
+
+		private:
+			template<usys_t I = 0>
+			auto ParseCase(const char32_t chr, TParseContext& context, usys_t& pos) const -> std::optional<return_t>
+			{
+				if constexpr(I == sizeof...(C))
+				{
+					return std::nullopt;
+				}
+				else
+				{
+					const auto& entry = std::get<I>(cases);
+					if(entry.matcher.Matches(chr))
+						return entry.node.Parse(context, pos);
+					return ParseCase<I + 1>(chr, context, pos);
+				}
+			}
+
+			template<usys_t I = 0>
+			bool MatchCase(const char32_t chr, TParseContext& context, usys_t& pos) const
+			{
+				if constexpr(I == sizeof...(C))
+				{
+					return false;
+				}
+				else
+				{
+					const auto& entry = std::get<I>(cases);
+					if(entry.matcher.Matches(chr))
+						return entry.node.Match(context, pos);
+					return MatchCase<I + 1>(chr, context, pos);
+				}
+			}
+
+		public:
+			auto Parse(TParseContext& context, usys_t& pos) const -> std::optional<return_t>
+			{
+				char32_t chr;
+				if(!context.At(pos, chr))
+					return std::nullopt;
+				return ParseCase(chr, context, pos);
+			}
+
+			bool Match(TParseContext& context, usys_t& pos) const
+			{
+				char32_t chr;
+				return context.At(pos, chr) && MatchCase(chr, context, pos);
+			}
+		};
 
 		template<typename T, typename F>
 		struct TRecursiveNode;
@@ -736,6 +872,13 @@ namespace el1::io::text::parser
 			using return_t = T;
 			[[no_unique_address]] F factory;
 
+		private:
+			// Keep construction of the potentially large recursive grammar out of the
+			// recursive hot path. It is needed only once per parse context.
+			__attribute__((noinline)) auto ParseUnbound(TParseContext& context, usys_t& pos) const -> std::optional<return_t>;
+			__attribute__((noinline)) bool MatchUnbound(TParseContext& context, usys_t& pos) const;
+
+		public:
 			auto Parse(TParseContext& context, usys_t& pos) const -> std::optional<return_t>;
 			bool Match(TParseContext& context, usys_t& pos) const;
 		};
@@ -898,13 +1041,38 @@ namespace el1::io::text::parser
 	};
 
 	template<typename T, typename F>
+	__attribute__((noinline)) auto ast::TRecursiveNode<T, F>::ParseUnbound(TParseContext& context, usys_t& pos) const -> std::optional<return_t>
+	{
+		const TParser<ast::TRecursiveCallNode<T, F>> self(ast::TRecursiveCallNode<T, F>{this});
+		using parser_t = decltype(factory(self));
+		static_assert(std::same_as<typename parser_t::return_t, T>, "recursive parser factory must return TParser<T>");
+		const parser_t parser = factory(self);
+		[[maybe_unused]] typename TParseContext::template TRecursiveParserGuard<parser_t> parser_guard(context, this, parser);
+		return parser.TryParse(context, pos);
+	}
+
+	template<typename T, typename F>
+	__attribute__((noinline)) bool ast::TRecursiveNode<T, F>::MatchUnbound(TParseContext& context, usys_t& pos) const
+	{
+		const TParser<ast::TRecursiveCallNode<T, F>> self(ast::TRecursiveCallNode<T, F>{this});
+		using parser_t = decltype(factory(self));
+		static_assert(std::same_as<typename parser_t::return_t, T>, "recursive parser factory must return TParser<T>");
+		const parser_t parser = factory(self);
+		[[maybe_unused]] typename TParseContext::template TRecursiveParserGuard<parser_t> parser_guard(context, this, parser);
+		return parser.root.Match(context, pos);
+	}
+
+	template<typename T, typename F>
 	auto ast::TRecursiveNode<T, F>::Parse(TParseContext& context, usys_t& pos) const -> std::optional<return_t>
 	{
 		[[maybe_unused]] TParseContext::TRecursionGuard recursion(context, this, pos);
 		const TParser<ast::TRecursiveCallNode<T, F>> self(ast::TRecursiveCallNode<T, F>{this});
-		auto parser = factory(self);
-		static_assert(std::same_as<typename decltype(parser)::return_t, T>, "recursive parser factory must return TParser<T>");
-		return parser.TryParse(context, pos);
+		using parser_t = decltype(factory(self));
+		static_assert(std::same_as<typename parser_t::return_t, T>, "recursive parser factory must return TParser<T>");
+
+		if(const parser_t* const parser = context.RecursiveParser<parser_t>(this))
+			return parser->TryParse(context, pos);
+		return ParseUnbound(context, pos);
 	}
 
 	template<typename T, typename F>
@@ -912,9 +1080,12 @@ namespace el1::io::text::parser
 	{
 		[[maybe_unused]] TParseContext::TRecursionGuard recursion(context, this, pos);
 		const TParser<ast::TRecursiveCallNode<T, F>> self(ast::TRecursiveCallNode<T, F>{this});
-		auto parser = factory(self);
-		static_assert(std::same_as<typename decltype(parser)::return_t, T>, "recursive parser factory must return TParser<T>");
-		return parser.root.Match(context, pos);
+		using parser_t = decltype(factory(self));
+		static_assert(std::same_as<typename parser_t::return_t, T>, "recursive parser factory must return TParser<T>");
+
+		if(const parser_t* const parser = context.RecursiveParser<parser_t>(this))
+			return parser->root.Match(context, pos);
+		return MatchUnbound(context, pos);
 	}
 
 	constexpr TParser<ast::TCharListNode<1>> operator""_P(const char32_t chr)
@@ -934,6 +1105,8 @@ namespace el1::io::text::parser
 	template<typename... A> constexpr auto CharList(A... a) { return TParser(ast::TCharListNode<sizeof...(a)>(a...)); }
 	template<typename N> constexpr auto If(const bool condition, TParser<N> parser) { return TParser(ast::TIfNode<N>{condition, std::move(parser.root)}); }
 	template<typename N> requires ast::is_char_matcher_v<N> constexpr auto operator~(TParser<N> parser) { return TParser(ast::TCharNotNode<N>{std::move(parser.root)}); }
+	template<typename M, typename N> requires ast::is_char_matcher_v<M> constexpr auto Case(TParser<M> matcher, TParser<N> parser) { return ast::TDispatchCase<M,N>{std::move(matcher.root), std::move(parser.root)}; }
+	template<typename... C> constexpr auto Dispatch(C... cases) { return TParser(ast::TDispatchNode<C...>{std::tuple<C...>(std::move(cases)...)}); }
 	template<typename P, typename N> constexpr auto Where(P predicate, TParser<N> parser) { return TParser(ast::TWhereNode<P,N>{std::move(predicate), std::move(parser.root)}); }
 	template<typename P, typename N> constexpr auto Validate(P predicate, TParser<N> parser) { return TParser(ast::TValidateNode<P,N>{std::move(predicate), std::move(parser.root)}); }
 	template<typename N> constexpr auto Expect(TParser<N> parser) { return TParser(ast::TExpectNode<N>{std::move(parser.root)}); }

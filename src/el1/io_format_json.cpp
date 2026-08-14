@@ -620,25 +620,24 @@ namespace el1::io::format::json
 
 	std::optional<TJsonValue> TJsonParser::ConvertInteger(const TStringView token)
 	{
-		TStringViewTextReader reader(token);
-		s64_t value = 0;
-		if(!reader.TryScan(U"%d", value) || reader.Ensure(1))
-			return std::nullopt;
-		return TJsonValue(value);
+		const auto value = text::scan::ParseNumber<s64_t>(token, 10);
+		return value ? std::optional<TJsonValue>(TJsonValue(*value)) : std::nullopt;
 	}
 
 	std::optional<TJsonValue> TJsonParser::ConvertNumber(const TStringView token)
 	{
-		TStringViewTextReader reader(token);
-		double value = 0;
-		if(!reader.TryScan(U"%f", value) || reader.Ensure(1))
-			return std::nullopt;
-		return TJsonValue(value);
+		const auto value = text::scan::ParseNumber<double>(token, 10);
+		return value ? std::optional<TJsonValue>(TJsonValue(*value)) : std::nullopt;
+	}
+
+	std::optional<TJsonValue> TJsonParser::ConvertNumeric(const TStringView token)
+	{
+		return token.Contains(U'.') || token.Contains(U'e') || token.Contains(U'E') ? ConvertNumber(token) : ConvertInteger(token);
 	}
 
 	TJsonValue TJsonValue::Parse(const TString& str, const bool tolerant)
 	{
-		TStringTextReader reader(str.View());
+		TStringViewTextReader reader(str.View());
 		TJsonValue value = Parse(reader, tolerant);
 		if(reader.Ensure(1))
 			ThrowSyntaxError(reader, 0);
