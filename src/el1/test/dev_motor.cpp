@@ -7,7 +7,6 @@ namespace
 {
 	using namespace el1::dev::motor;
 	using namespace el1::io::types;
-	using namespace el1::system::task;
 
 	class TTestStallDetector : public IStallDetector
 	{
@@ -271,13 +270,10 @@ namespace
 		EXPECT_EQ(stepper.Microsteps(16), 16U);
 
 		Pulse(stepper, 200U * 16U);
-		EXPECT_EQ(servo.TargetPosition(), 0);
-		TFiber::Yield();
 		EXPECT_EQ(servo.TargetPosition(), 16384);
 
 		stepper.Direction(EMotorDirection::REVERSE);
 		Pulse(stepper, 200U * 16U);
-		TFiber::Yield();
 		EXPECT_EQ(servo.TargetPosition(), 0);
 	}
 
@@ -292,7 +288,6 @@ namespace
 		stepper.Step(true);
 		stepper.Step(true);
 		stepper.Step(false);
-		TFiber::Yield();
 
 		EXPECT_EQ(servo.TargetPosition(), 1);
 	}
@@ -319,7 +314,6 @@ namespace
 		Pulse(stepper, 1);
 		ASSERT_EQ(stepper.Microsteps(32), 32U);
 		Pulse(stepper, 2);
-		TFiber::Yield();
 
 		// 1/3200 + 2/6400 turns = 1/1600 turn exactly.
 		EXPECT_EQ(servo.TargetPosition(), 10);
@@ -342,7 +336,7 @@ namespace
 		EXPECT_FLOAT_EQ(stepper.Amperage().hold_max, 8.0f);
 	}
 
-	TEST(TStepperEmulation, DisableCancelsQueuedTargetAndReanchors)
+	TEST(TStepperEmulation, DisableReanchorsTarget)
 	{
 		TTestMotorDriver driver;
 		TTestServo servo(driver, 200);
@@ -350,7 +344,7 @@ namespace
 		ASSERT_TRUE(stepper.Enabled(true));
 
 		Pulse(stepper, 10);
-		EXPECT_EQ(servo.TargetPosition(), 0);
+		EXPECT_EQ(servo.TargetPosition(), 10);
 		EXPECT_FALSE(stepper.Enabled(false));
 		EXPECT_EQ(servo.TargetPosition(), 0);
 

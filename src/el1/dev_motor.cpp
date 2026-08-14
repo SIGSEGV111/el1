@@ -386,46 +386,9 @@ namespace el1::dev::motor
 		step_state(false),
 		enabled(false),
 		target_position(servo->TargetPosition()),
-		step_remainder(0),
-		fib_control_loop()
+		step_remainder(0)
 	{
 		enabled = driver->Enabled() && servo->Enabled();
-	}
-
-	void TStepperEmulation::ControlLoop()
-	{
-		while(true)
-		{
-			const s64_t new_target = target_position;
-			servo->TargetPosition(new_target);
-
-			if(new_target == target_position)
-				fib_control_loop.Stop();
-		}
-	}
-
-	void TStepperEmulation::WakeControlLoop()
-	{
-		switch(fib_control_loop.State())
-		{
-			case EFiberState::CONSTRUCTED:
-				fib_control_loop.Start(TFunction<void>(this, &TStepperEmulation::ControlLoop));
-				break;
-
-			case EFiberState::STOPPED:
-				fib_control_loop.Resume();
-				break;
-
-			case EFiberState::READY:
-			case EFiberState::ACTIVE:
-			case EFiberState::BLOCKED:
-				break;
-
-			case EFiberState::FINISHED:
-			case EFiberState::CRASHED:
-			case EFiberState::KILLED:
-				EL_THROW(TLogicException);
-		}
 	}
 
 	bool TStepperEmulation::Enabled(const bool state)
@@ -437,17 +400,6 @@ namespace el1::dev::motor
 		{
 			enabled = false;
 			step_state = false;
-
-			switch(fib_control_loop.State())
-			{
-				case EFiberState::READY:
-				case EFiberState::BLOCKED:
-					fib_control_loop.Stop();
-					break;
-
-				default:
-					break;
-			}
 
 			(void)servo->Enabled(false);
 			(void)driver->Enabled(false);
@@ -507,7 +459,7 @@ namespace el1::dev::motor
 
 	EDriverState TStepperEmulation::State() const
 	{
-		if(fib_control_loop.State() == EFiberState::CRASHED)
+		if(servo->State() == EServoState::ERROR)
 			return EDriverState::IO_ERROR;
 		return Enabled() ? driver->State() : EDriverState::DISABLED;
 	}
@@ -552,7 +504,7 @@ namespace el1::dev::motor
 
 		step_remainder = accumulator % step_denominator;
 		target_position += delta;
-		WakeControlLoop();
+		servo->TargetPosition(target_position);
 	}
 
 	void TStepperEmulation::Direction(const EMotorDirection dir)

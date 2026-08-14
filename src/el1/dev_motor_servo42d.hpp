@@ -54,6 +54,13 @@ namespace el1::dev::motor::servo42d
 			bool vfoc_enabled : 1;
 			bool inverted : 1;
 			bool stall_detection_enabled : 1;
+			system::task::TFiber fib_servo_control;
+
+			s32_t ComputeServoAxisPosition(const s64_t absolute_target) const;
+			void SendServoTarget(const s64_t absolute_target);
+			void ProcessServoTargets();
+			void RunServoControlLoop();
+			void WakeServoControlLoop();
 
 			// Change underlying firmware work mode (SD_*/MC_* + open/closed/vFOC).
 			void WorkMode(const EWorkMode new_mode);

@@ -82,6 +82,7 @@ namespace el1::dev::motor::servo42d
 		vfoc_enabled(true),
 		inverted(true),
 		stall_detection_enabled(false),
+		fib_servo_control(TFunction<void>(this, &TServo42D::RunServoControlLoop), false),
 		encoder(this),
 		stall_detector(this),
 		driver(this),
@@ -138,6 +139,7 @@ namespace el1::dev::motor::servo42d
 		(void)stall_detector.Enabled(false);
 
 		servo.SetHome();
+		servo_target = servo_offset;
 
 		if(en)
 			en->State(false);
@@ -149,10 +151,128 @@ namespace el1::dev::motor::servo42d
 	{
 		try
 		{
+			if(fib_servo_control.State() != EFiberState::CONSTRUCTED)
+			{
+				(void)fib_servo_control.Shutdown();
+				const std::unique_ptr<const IException> exception = fib_servo_control.Join();
+				if(exception != nullptr)
+					exception->Print("Servo42D control fiber terminated with exception");
+			}
+		}
+		catch(...) {}
+
+		try
+		{
 			if(en && !leave_enabled)
 				driver.Enabled(false);
 		}
 		catch(...) {}
+	}
+
+	s32_t TServo42D::ComputeServoAxisPosition(const s64_t absolute_target) const
+	{
+		if(absolute_target >= servo_offset)
+		{
+			const u64_t distance = (u64_t)absolute_target - (u64_t)servo_offset;
+			EL_ERROR(distance > (u64_t)INT32_MAX, TInvalidArgumentException, "absolute_target", "target position exceeds Servo42D 32-bit motion-controller range");
+			return (s32_t)distance;
+		}
+
+		const u64_t distance = (u64_t)servo_offset - (u64_t)absolute_target;
+		const u64_t max_negative_distance = (u64_t)INT32_MAX + 1U;
+		EL_ERROR(distance > max_negative_distance, TInvalidArgumentException, "absolute_target", "target position exceeds Servo42D 32-bit motion-controller range");
+		return distance == max_negative_distance ? INT32_MIN : -(s32_t)distance;
+	}
+
+	void TServo42D::SendServoTarget(const s64_t absolute_target)
+	{
+		const s32_t axis_position = ComputeServoAxisPosition(absolute_target);
+		const u16_t acceleration = 255;
+		const u16_t rpm = 3000;
+		const u32_t raw_axis_position = (u32_t)axis_position;
+		u16_t regs[4] =
+		{
+			acceleration,
+			rpm,
+			(u16_t)((raw_axis_position >> 16) & 0xFFFF),
+			(u16_t)(raw_axis_position & 0xFFFF)
+		};
+
+		WriteDebug(U"sending servo target via motion-controller command 0x00F5: acc=%d; rpm=%d; axis=%d ...", acceleration, rpm, axis_position);
+		mbdev->WriteHoldingRegisters(0x00F5, 4, regs);
+	}
+
+	void TServo42D::ProcessServoTargets()
+	{
+		const bool mc_prev = mc_enabled;
+		TScopeExit restore_motion_controller([&]() { motion.Enabled(mc_prev); });
+		motion.Enabled(true);
+
+		while(servo_enabled)
+		{
+			const s64_t target = servo_target;
+			const EMotionControllerState state_before_command = motion.State();
+			EL_ERROR(state_before_command == EMotionControllerState::ERROR, TException, "Servo42D motion controller reported an error before applying servo target");
+			if(state_before_command == EMotionControllerState::ACTIVE)
+				motion.Stop(-1.0f);
+
+			SendServoTarget(target);
+
+			while(servo_enabled && target == servo_target)
+			{
+				const EMotionControllerState state = motion.State();
+				if(state == EMotionControllerState::IDLE)
+					return;
+				EL_ERROR(state == EMotionControllerState::ERROR, TException, "Servo42D motion controller reported an error while applying servo target");
+				EL_ERROR(state == EMotionControllerState::DISABLED, TException, "Servo42D motion controller became disabled while applying servo target");
+				TFiber::Sleep(0.01);
+			}
+
+			if(!servo_enabled)
+			{
+				if(motion.State() == EMotionControllerState::ACTIVE)
+					motion.Stop(-1.0f);
+				return;
+			}
+		}
+	}
+
+	void TServo42D::RunServoControlLoop()
+	{
+		while(true)
+		{
+			if(servo_enabled)
+				ProcessServoTargets();
+
+			fib_servo_control.Stop();
+		}
+	}
+
+	void TServo42D::WakeServoControlLoop()
+	{
+		if(!servo_enabled)
+			return;
+
+		switch(fib_servo_control.State())
+		{
+			case EFiberState::CONSTRUCTED:
+				fib_servo_control.Start();
+				break;
+
+			case EFiberState::STOPPED:
+				fib_servo_control.Resume();
+				break;
+
+			case EFiberState::READY:
+			case EFiberState::ACTIVE:
+			case EFiberState::BLOCKED:
+				break;
+
+			case EFiberState::FINISHED:
+			case EFiberState::CRASHED:
+			case EFiberState::KILLED:
+				EL_THROW(TException, "Servo42D control fiber is no longer operational");
+		}
 	}
 
 	void TServo42D::UpdateWorkMode()
@@ -419,11 +539,8 @@ namespace el1::dev::motor::servo42d
 			parent.servo_enabled = state;
 			parent.UpdateWorkMode();
 
-			// if(state)
-			// {
-			// 	WriteDebug("setting stored target position %d", parent.servo_target);
-			// 	TargetPosition(parent.servo_target);
-			// }
+			if(state)
+				parent.WakeServoControlLoop();
 		}
 		return state;
 	}
@@ -435,7 +552,19 @@ namespace el1::dev::motor::servo42d
 
 	EServoState TServo42D::TServo::State() const
 	{
-		return parent.servo_enabled ? EServoState::UNKNOWN : EServoState::DISABLED;
+		if(!parent.servo_enabled)
+			return EServoState::DISABLED;
+		switch(parent.fib_servo_control.State())
+		{
+			case EFiberState::FINISHED:
+			case EFiberState::CRASHED:
+			case EFiberState::KILLED:
+				return EServoState::ERROR;
+
+			default:
+				break;
+		}
+		return EServoState::UNKNOWN;
 	}
 
 	const ILimitSwitch* TServo42D::TServo::LimitSwitch(const EMotorDirection dir) const
@@ -445,50 +574,11 @@ namespace el1::dev::motor::servo42d
 
 	void TServo42D::TServo::TargetPosition(const s64_t abs_target)
 	{
-		WriteDebug(U"TServo42D::TServo::TargetPosition(abs_target=%d)", abs_target);
-
+		// Validate synchronously so the non-blocking setter never accepts a target
+		// which the asynchronous Servo42D motion controller cannot represent.
+		(void)parent.ComputeServoAxisPosition(abs_target);
 		parent.servo_target = abs_target;
-		if(!parent.servo_enabled)
-		{
-			WriteDebug(U"Servo is currently disabled; only setting target value");
-			return;
-		}
-
-		const bool mc_prev = parent.mc_enabled;
-		TScopeExit reset_mc(
-			[&]()
-			{
-				parent.motion.Enabled(mc_prev);
-			}
-		);
-
-		WriteDebug(U"setting up motion-controller ...");
-		parent.motion.Enabled(true);
-
-		WriteDebug(U"waiting for motion-controller to go idle ...");
-		if(parent.motion.State() == EMotionControllerState::ACTIVE)
-			parent.motion.Stop(-1.0f);
-
-		const __int128 abs_axis_wide = (__int128)abs_target - (__int128)parent.servo_offset;
-		EL_ERROR(abs_axis_wide < INT32_MIN || abs_axis_wide > INT32_MAX, TInvalidArgumentException, "abs_target", "target position exceeds Servo42D 32-bit motion-controller range");
-		const s32_t abs_axis = (s32_t)abs_axis_wide;
-		const u16_t acc = 255;
-		const u16_t rpm = 3000;
-		u16_t regs[4] =
-		{
-			acc,
-			rpm,
-			(u16_t)(((u32_t)abs_axis >> 16) & 0xFFFF),
-			(u16_t)((u32_t)abs_axis & 0xFFFF)
-		};
-		WriteDebug(U"sending motion-controller command 0x00F5: acc=%d; rpm=%d; abs_axis=%d ...", acc, rpm, abs_axis);
-		parent.mbdev->WriteHoldingRegisters(0x00F5, 4, regs);
-
-		WriteDebug(U"waiting for motion-controller to go idle ...");
-		while(parent.motion.State() == EMotionControllerState::ACTIVE)
-			TFiber::Sleep(0.01);
-
-		WriteDebug(U"TServo42D::TServo::TargetPosition(...): DONE");
+		parent.WakeServoControlLoop();
 	}
 
 	void TServo42D::TServo::SetHome()

@@ -281,10 +281,6 @@ namespace el1::dev::motor
 			bool enabled;
 			s64_t target_position;
 			s64_t step_remainder;
-			system::task::TFiber fib_control_loop;
-
-			void ControlLoop();
-			void WakeControlLoop();
 
 		public:
 			// The first overload derives the servo coordinate scale from IRotaryEncoder.
