@@ -11,12 +11,15 @@ namespace el1::io::net::url
 
 	struct TUrl
 	{
-		TString scheme;
-		TString user_info;
-		TString host;
-		u16_t port = 0;
-		bool port_explicit = false;
-		bool has_authority = false;
+		struct TAuthority
+		{
+			TString scheme;
+			TString username;
+			TString host;
+			u16_t port = 0;
+		};
+
+		TAuthority authority;
 		TString path;
 		TString query;
 		TString fragment;
