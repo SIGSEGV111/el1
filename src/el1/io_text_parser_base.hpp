@@ -188,7 +188,7 @@ namespace el1::io::text::parser
 		usys_t FarthestPosition() const noexcept { return farthest_position; }
 	};
 
-	/** Internal result of one completion traversal. A node can be both matched and incomplete, e.g. Optional()/Repeat() at the cursor. */
+	/** Internal result of one completion traversal. A node can be both matched and incomplete, e.g. Maybe()/Repeat() at the cursor. */
 	struct TCompletionState
 	{
 		bool matched;

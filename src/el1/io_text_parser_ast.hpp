@@ -43,6 +43,44 @@ namespace el1::io::text::parser::ast
 		}
 	};
 
+	template<typename N>
+	struct TMaybeNode
+	{
+		using value_t = typename N::return_t;
+		using return_t = std::optional<value_t>;
+		N node;
+
+		auto Parse(TParseContext& input, usys_t& pos) const -> std::optional<return_t>
+		{
+			usys_t p = pos;
+			auto value = node.Parse(input, p);
+			if(!value)
+				return return_t();
+			EL_ERROR(p == pos, TLogicException);
+			pos = p;
+			return return_t(std::move(*value));
+		}
+
+		bool Match(TParseContext& input, usys_t& pos) const
+		{
+			usys_t p = pos;
+			if(node.Match(input, p))
+			{
+				EL_ERROR(p == pos, TLogicException);
+				pos = p;
+			}
+			return true;
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			auto state = node.Complete(input, pos);
+			if(state.matched)
+				EL_ERROR(state.position == pos, TLogicException);
+			return state.matched ? state : TCompletionState::Matched(pos, state.incomplete);
+		}
+	};
+
 	template<typename P, typename N>
 	struct TWhereNode
 	{

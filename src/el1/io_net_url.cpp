@@ -10,91 +10,106 @@ namespace el1::io::net::url
 	{
 		constexpr char32_t UNICODE_MAX = (char32_t)0x10ffff;
 
-		struct syntax_t
+		static std::optional<u16_t> ParsePort(const TStringView text)
 		{
-			TString scheme;
-			TString authority;
-			TString path;
-			TString query;
-			TString fragment;
-			bool has_authority = false;
-		};
-
-		struct authority_t
-		{
-			TString user_info;
-			TString host;
-			TString port;
-			bool port_explicit = false;
-		};
-
-		static TString OptionalText(const TList<TStringView>& values)
-		{
-			return values.Count() == 0 ? TString() : TString(values[0]);
+			u32_t value = 0;
+			for(const char32_t chr : text)
+			{
+				const u32_t digit = (u32_t)(chr - U'0');
+				if(value > (65535U - digit) / 10U)
+					return std::nullopt;
+				value = value * 10U + digit;
+			}
+			return value > 0 ? std::optional<u16_t>((u16_t)value) : std::nullopt;
 		}
 
-		static syntax_t ParseSyntax(const TString& url)
+		static auto MakeParser()
 		{
+			auto any = CharRange((char32_t)0, UNICODE_MAX);
+			auto url_char = ~CharList(U'?', U'#');
 			auto scheme_first = CharRange(U'A', U'Z') || CharRange(U'a', U'z');
 			auto scheme_next = scheme_first || CharRange(U'0', U'9') || CharList(U'+', U'-', U'.');
-			auto scheme = Optional(Capture(scheme_first + Repeat(scheme_next, 0, NEG1)) + Discard(U':'_P));
-			auto authority = Optional(Discard(U"//"_P) + Capture(Repeat(~CharList(U'/', U'?', U'#'), 0, NEG1)));
-			auto path = Capture(Repeat(~CharList(U'?', U'#'), 0, NEG1));
-			auto query = Optional(Discard(U'?'_P) + Capture(Repeat(~CharList(U'#'), 0, NEG1)));
-			auto fragment = Optional(Discard(U'#'_P) + Capture(Repeat(CharRange((char32_t)0, UNICODE_MAX), 0, NEG1)));
+			auto scheme = Capture(scheme_first + Repeat(0, NEG1, scheme_next)) + Discard(U':'_P);
 
-			auto parser = Translate(
-				[](TList<TStringView> scheme_value, TList<TStringView> authority_value, TStringView path_value, TList<TStringView> query_value, TList<TStringView> fragment_value)
+			auto user_info = Maybe(Capture(Repeat(0, NEG1, ~CharList(U'@', U'/', U'?', U'#'))) + Discard(U'@'_P));
+			auto bracketed_host = Between(U'['_P, Capture(OneOrMore(~CharList(U']', U'/', U'?', U'#'))), U']'_P);
+			auto plain_host = Capture(OneOrMore(~CharList(U':', U'@', U'/', U'?', U'#')));
+			auto host = bracketed_host || plain_host;
+			auto port = Maybe(Discard(U':'_P) + TryTranslate(ParsePort, Capture(OneOrMore(CharRange(U'0', U'9')))));
+
+			auto authority = Translate(
+				[](std::optional<TStringView> user_info, const TStringView host, std::optional<u16_t> port)
 				{
-					syntax_t result;
-					result.scheme = OptionalText(scheme_value);
-					result.authority = OptionalText(authority_value);
-					result.path = TString(path_value);
-					result.query = OptionalText(query_value);
-					result.fragment = OptionalText(fragment_value);
-					result.has_authority = authority_value.Count() != 0;
-					return result;
-				},
-				scheme, authority, path, query, fragment
-			);
-
-			return parser.Parse(url);
-		}
-
-		static authority_t ParseAuthority(const TString& authority)
-		{
-			auto user_info = Optional(Capture(Repeat(~CharList(U'@'), 0, NEG1)) + Discard(U'@'_P));
-			auto bracketed_host = Between(U'['_P, Capture(OneOrMore(~CharList(U']'))), U']'_P);
-			auto plain_host = Capture(OneOrMore(~CharList(U':')));
-			auto host = Dispatch(
-				Case(U'['_P, bracketed_host),
-				Case(~CharList(U'['), plain_host)
-			);
-			auto port = Optional(Discard(U':'_P) + Capture(OneOrMore(CharRange(U'0', U'9'))));
-
-			auto parser = Translate(
-				[](TList<TStringView> user_info_value, TStringView host_value, TList<TStringView> port_value)
-				{
-					authority_t result;
-					result.user_info = OptionalText(user_info_value);
-					result.host = TString(host_value);
-					result.port = OptionalText(port_value);
-					result.port_explicit = port_value.Count() != 0;
+					TUrl result;
+					result.user_info = user_info ? TString(*user_info) : TString();
+					result.host = TString(host);
+					result.port = port.value_or(0);
+					result.port_explicit = port.has_value();
+					result.has_authority = true;
 					return result;
 				},
 				user_info, host, port
 			);
 
-			return parser.Parse(authority);
-		}
-	}
+			auto path_abempty = Capture(Maybe(U'/'_P + Repeat(0, NEG1, url_char)));
+			auto authority_path = Translate(
+				[](TUrl result, const TStringView path)
+				{
+					result.path = path.Length() > 0 ? TString(path) : TString(U"/");
+					return result;
+				},
+				Discard(U"//"_P) + Expect(authority), path_abempty
+			);
 
-	static u16_t ParsePort(const TString& value)
-	{
-		EL_ERROR(value.Length() == 0, TInvalidArgumentException, "url", "empty port");
-		const u64_t port = value.ToInteger();
-		EL_ERROR(port == 0 || port > 65535U, TInvalidArgumentException, "url", "port must be between 1 and 65535");
-		return (u16_t)port;
+			auto path_any = Translate(
+				[](const TStringView path)
+				{
+					TUrl result;
+					result.path = TString(path);
+					return result;
+				},
+				Capture(Repeat(0, NEG1, url_char))
+			);
+
+			auto absolute = Translate(
+				[](const TStringView scheme, TUrl result)
+				{
+					result.scheme = TString(scheme);
+					result.scheme.ToLower();
+					return result;
+				},
+				scheme, authority_path || path_any
+			);
+
+			auto path_absolute = Capture(U'/'_P + Repeat(0, NEG1, url_char));
+			auto path_noscheme = Capture(OneOrMore(~CharList(U':', U'/', U'?', U'#')) + Maybe(U'/'_P + Repeat(0, NEG1, url_char)));
+			auto path_empty = Capture(Repeat(0, 0, any));
+			auto relative_path = Translate(
+				[](const TStringView path)
+				{
+					TUrl result;
+					result.path = TString(path);
+					return result;
+				},
+				path_absolute || path_noscheme || path_empty
+			);
+			auto relative = authority_path || relative_path;
+
+			auto query = Maybe(Discard(U'?'_P) + Capture(Repeat(0, NEG1, ~CharList(U'#'))));
+			auto fragment = Maybe(Discard(U'#'_P) + Capture(Repeat(0, NEG1, any)));
+
+			return Translate(
+				[](TUrl result, std::optional<TStringView> query, std::optional<TStringView> fragment)
+				{
+					result.query = query ? TString(*query) : TString();
+					result.fragment = fragment ? TString(*fragment) : TString();
+					if(!result.port_explicit)
+						result.port = TUrl::DefaultPort(result.scheme);
+					return result;
+				},
+				absolute || relative, query, fragment
+			);
+		}
 	}
 
 	u16_t TUrl::DefaultPort(const TString& scheme)
@@ -106,78 +121,16 @@ namespace el1::io::net::url
 		return 0;
 	}
 
-	TUrl::parsed_t TUrl::Parse(const TString& url)
+	TUrl TUrl::FromString(const TStringView text)
 	{
-		parsed_t result;
-		syntax_t syntax;
 		try
 		{
-			syntax = ParseSyntax(url);
+			return MakeParser().Parse(text);
 		}
 		catch(const TException&)
 		{
-			EL_THROW(TInvalidArgumentException, "url", "invalid URL syntax");
+			EL_THROW(TInvalidArgumentException, "text", "invalid URL");
 		}
-
-		if(syntax.scheme.Length() == 0)
-		{
-			const usys_t colon = syntax.path.Find(U':');
-			const usys_t slash = syntax.path.Find(U'/');
-			EL_ERROR(colon != NEG1 && (slash == NEG1 || colon < slash), TInvalidArgumentException, "url", "invalid URL scheme");
-		}
-		else
-		{
-			result.scheme = syntax.scheme;
-			result.scheme.ToLower();
-		}
-
-		result.has_authority = syntax.has_authority;
-		if(result.has_authority)
-		{
-			EL_ERROR(syntax.authority.Length() == 0, TInvalidArgumentException, "url", "missing authority");
-			authority_t authority;
-			try
-			{
-				authority = ParseAuthority(syntax.authority);
-			}
-			catch(const TException&)
-			{
-				EL_THROW(TInvalidArgumentException, "url", "invalid URL authority");
-			}
-
-			result.user_info = authority.user_info;
-			result.host = authority.host;
-			result.port_explicit = authority.port_explicit;
-			if(authority.port_explicit)
-				result.port = ParsePort(authority.port);
-		}
-
-		result.path = syntax.path;
-		result.query = syntax.query;
-		result.fragment = syntax.fragment;
-		if(result.has_authority && result.path.Length() == 0)
-			result.path = TString(U"/");
-		if(result.port == 0)
-			result.port = DefaultPort(result.scheme);
-
-		return result;
-	}
-
-	TUrl::TUrl(const parsed_t& parsed) :
-		scheme(parsed.scheme),
-		user_info(parsed.user_info),
-		host(parsed.host),
-		port(parsed.port),
-		port_explicit(parsed.port_explicit),
-		has_authority(parsed.has_authority),
-		path(parsed.path),
-		query(parsed.query),
-		fragment(parsed.fragment)
-	{
-	}
-
-	TUrl::TUrl(const TString& url) : TUrl(Parse(url))
-	{
 	}
 
 	TString TUrl::RequestTarget() const

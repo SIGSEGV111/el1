@@ -215,7 +215,7 @@ namespace el1::io::format::json
 
 			return Recursive<TJsonValue>([tolerant](auto self)
 			{
-				auto whitespace = Discard(Repeat(CharList(U' ', U'\t', U'\n', U'\r'), 0, NEG1));
+				auto whitespace = Discard(Repeat(0, NEG1, CharList(U' ', U'\t', U'\n', U'\r')));
 				auto token = [whitespace](auto parser)
 				{
 					return whitespace + std::move(parser) + whitespace;
@@ -230,7 +230,7 @@ namespace el1::io::format::json
 				// JSON string grammar. Escapes dispatch on the character following '\\'
 				// so common escapes and Unicode escapes do not re-run unrelated branches.
 				auto hex = CharRange(U'0', U'9') || CharRange(U'A', U'F') || CharRange(U'a', U'f');
-				auto code_unit = Translate(ConvertCodeUnit, Capture(Repeat(hex, 4, 4)));
+				auto code_unit = Translate(ConvertCodeUnit, Capture(Repeat(4, 4, hex)));
 				auto first_unicode_unit = Discard(U'u'_P) + Expect(code_unit);
 				auto unicode_unit = Discard(U"\\u"_P) + Expect(code_unit);
 				auto unicode_scalar = Translate(
@@ -293,7 +293,7 @@ namespace el1::io::format::json
 				);
 				auto raw_string = Translate(
 					[](TList<char32_t> chars) { return TString(std::move(chars)); },
-					Between(U'"'_P, Repeat(plain || escaped, 0, NEG1), U'"'_P)
+					Between(U'"'_P, Repeat(0, NEG1, plain || escaped), U'"'_P)
 				);
 				auto string = token(raw_string);
 				auto string_value = Translate([](TString text) { return TJsonValue(std::move(text)); }, raw_string);
@@ -301,13 +301,13 @@ namespace el1::io::format::json
 				// RFC 8259 number grammar:
 				// -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?
 				auto digit = CharRange(U'0', U'9');
-				auto zero = Repeat(U'0'_P, 1, 1);
-				auto nonzero_integer = CharRange(U'1', U'9') + Repeat(digit, 0, NEG1);
+				auto zero = Repeat(1, 1, U'0'_P);
+				auto nonzero_integer = CharRange(U'1', U'9') + Repeat(0, NEG1, digit);
 				auto integer_part = zero || nonzero_integer;
-				auto sign = Optional(U'-'_P);
-				auto fraction = Repeat(U'.'_P, 1, 1) + OneOrMore(digit);
-				auto exponent = Repeat(CharList(U'e', U'E'), 1, 1) + Optional(CharList(U'+', U'-')) + OneOrMore(digit);
-				auto number_token = Capture(sign + integer_part + Optional(fraction) + Optional(exponent));
+				auto sign = Maybe(U'-'_P);
+				auto fraction = Repeat(1, 1, U'.'_P) + OneOrMore(digit);
+				auto exponent = Repeat(1, 1, CharList(U'e', U'E')) + Maybe(CharList(U'+', U'-')) + OneOrMore(digit);
+				auto number_token = Capture(sign + integer_part + Maybe(fraction) + Maybe(exponent));
 				auto number = TryTranslate(ConvertNumeric, number_token);
 
 				auto true_value = Translate([](TStringView) { return TJsonValue(true); }, Capture(U"true"_P));

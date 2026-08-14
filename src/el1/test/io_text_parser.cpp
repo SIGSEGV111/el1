@@ -16,15 +16,31 @@ namespace
 
 	TEST(io_text_parser, Basics)
 	{
-		auto digits_str = Repeat(CharRange('0','9'), 1, 16);
-		auto integer_str = (CharRange('1','9') + Optional(digits_str)) || U'0'_P;
+		auto digits_str = Repeat(1, 16, CharRange('0','9'));
+		auto integer_str = (CharRange('1','9') + Maybe(digits_str)) || U'0'_P;
 		auto sign_str = CharList('+','-');
-		auto decimal_str = Optional(sign_str) + integer_str + Optional(U'.'_P + digits_str);
+		auto decimal_str = Capture(Maybe(sign_str) + integer_str + Maybe(U'.'_P + digits_str));
 		auto to_double = Translate([](TString str){return str.ToDouble();}, decimal_str);
 		auto double_foobar = to_double + Discard(U" foobar!"_P);
 		EXPECT_EQ(to_double.Parse("-17.54"), -17.54);
 		EXPECT_THROW(to_double.Parse("-17.54 foobar!"), TException);
 		EXPECT_EQ(double_foobar.Parse("-17.54 foobar!"), -17.54);
+	}
+
+	TEST(io_text_parser, MaybeReturnsOptionalValue)
+	{
+		auto parser = Maybe(U"foo"_P) + U"bar"_P;
+		const auto present = parser.Parse(U"foobar");
+		ASSERT_TRUE(std::get<0>(present).has_value());
+		EXPECT_EQ(*std::get<0>(present), U"foo");
+		EXPECT_EQ(std::get<1>(present), U"bar");
+
+		const auto absent = parser.Parse(U"bar");
+		EXPECT_FALSE(std::get<0>(absent).has_value());
+		EXPECT_EQ(std::get<1>(absent), U"bar");
+
+		auto empty = Maybe(Discard(Repeat(0, 0, U'x'_P)));
+		EXPECT_THROW(empty.Parse(U""), TLogicException);
 	}
 
 	TEST(io_text_parser, AlternativesBacktrackAndOffsetParsing)
@@ -81,7 +97,7 @@ namespace
 	{
 		TStringSource input(TString(U"xx1234yy"));
 		usys_t pos = 2;
-		auto digits = Capture(Repeat(CharRange(U'0', U'9'), 1, 4));
+		auto digits = Capture(Repeat(1, 4, CharRange(U'0', U'9')));
 		auto captured = digits.TryParse(input, pos);
 		ASSERT_TRUE(captured);
 		EXPECT_EQ(*captured, U"1234");
@@ -218,7 +234,7 @@ namespace
 		ASSERT_EQ(sho.Count(), 1U);
 		EXPECT_EQ(sho[0].replacement, U"show");
 
-		auto repetition = Repeat(U'a'_P, 0, NEG1) + U'b'_P;
+		auto repetition = Repeat(0, NEG1, U'a'_P) + U'b'_P;
 		auto repeated = repetition.Complete(U"aaa");
 		ASSERT_EQ(repeated.Count(), 2U);
 		EXPECT_EQ(repeated[0].replacement, U"a");
@@ -254,7 +270,7 @@ namespace
 
 		auto minimum_two = Validate(
 			[](const TStringView value) { return value.Length() >= 2; },
-			Capture(Repeat(U'a'_P, 1, 2))
+			Capture(Repeat(1, 2, U'a'_P))
 		);
 		auto extend_invalid_but_incomplete = minimum_two.Complete(U"a");
 		ASSERT_EQ(extend_invalid_but_incomplete.Count(), 1U);

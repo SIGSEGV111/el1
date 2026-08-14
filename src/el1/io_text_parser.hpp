@@ -165,11 +165,11 @@ namespace el1::io::text::parser
 		return TParser(ast::TLiteralNode(TStringView::FromUnsafePointer(str, len)));
 	}
 
-	/** Match zero or one occurrence. The parser always succeeds unless the wrapped parser raises a committed error. */
-	template<typename N> constexpr auto Optional(TParser<N> parser) { return TParser(ast::TRepeatNode<N>{parser.root, 0, 1}); }
+	/** Match zero or one occurrence and return it as std::optional<T>. The parser always succeeds unless the wrapped parser raises a committed error. */
+	template<typename N> constexpr auto Maybe(TParser<N> parser) { return TParser(ast::TMaybeNode<N>{std::move(parser.root)}); }
 
 	/** Match between n_min and n_max occurrences and return their results as a TList. Each successful occurrence must consume input. */
-	template<typename N> constexpr auto Repeat(TParser<N> parser, const usys_t n_min, const usys_t n_max) { return TParser(ast::TRepeatNode<N>{parser.root, n_min, n_max}); }
+	template<typename N> constexpr auto Repeat(const usys_t n_min, const usys_t n_max, TParser<N> parser) { return TParser(ast::TRepeatNode<N>{std::move(parser.root), n_min, n_max}); }
 
 	/** Match one or more occurrences and return their results as a TList. */
 	template<typename N> constexpr auto OneOrMore(TParser<N> parser) { return TParser(ast::TRepeatNode<N>{parser.root, 1, NEG1}); }
