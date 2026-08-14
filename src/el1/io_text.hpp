@@ -19,6 +19,9 @@ namespace el1::io::text
 {
 	using namespace io::types;
 
+	/** Default binary cache size used by stream-backed text readers and writers. */
+	inline constexpr usys_t DEFAULT_STREAM_TEXT_BUFFER_SIZE = 4096U;
+
 	/** Text output target. Print() is the streaming equivalent of TString::Format(). */
 	struct ITextWriter : format::IFormatSink
 	{
@@ -42,11 +45,33 @@ namespace el1::io::text
 
 	class EL_LIFETIME_POINTER TStreamTextWriter final : public ITextWriter
 	{
+		struct TCharInput
+		{
+			const char32_t* data = nullptr;
+			usys_t count = 0;
+			usys_t pos = 0;
+
+			const char32_t* NextItem() noexcept { return pos < count ? data + pos++ : nullptr; }
+		};
+
 		stream::IBinarySink* const sink;
+		const usys_t buffer_size;
+		io::collection::list::TList<byte_t> buffer;
+		usys_t n_buffered = 0;
+		encoding::utf8::TUTF8Encoder encoder;
+
+		void FlushBuffer();
+
 	public:
-		explicit TStreamTextWriter(stream::IBinarySink* sink EL_LIFETIME_BOUND);
+		/**
+		 * Buffered UTF-8 writer. buffer_size is the binary output cache size in bytes.
+		 * Call Flush() before writing directly to sink so buffered text cannot be overtaken.
+		 */
+		explicit TStreamTextWriter(stream::IBinarySink* sink EL_LIFETIME_BOUND, usys_t buffer_size = DEFAULT_STREAM_TEXT_BUFFER_SIZE);
+		~TStreamTextWriter() final;
 		void Append(const char32_t* data, usys_t length) final;
-		void Flush() { sink->Flush(); }
+		void Flush();
+		usys_t BufferSize() const noexcept { return buffer_size; }
 	};
 
 	struct text_position_t
@@ -218,10 +243,16 @@ namespace el1::io::text
 		struct TByteInput
 		{
 			stream::IBinarySource* source;
-			byte_t value = 0;
+			io::collection::list::TList<byte_t> buffer;
+			usys_t pos = 0;
+			usys_t count = 0;
+
+			TByteInput(stream::IBinarySource* source, usys_t buffer_size);
 			const byte_t* NextItem();
 		};
 
+		const usys_t buffer_size;
+		const usys_t decode_ahead;
 		TByteInput byte_input;
 		encoding::utf8::TUTF8Decoder decoder;
 		io::collection::list::TList<char32_t> buffer;
@@ -233,9 +264,15 @@ namespace el1::io::text
 		void DoShift(usys_t count) final;
 
 	public:
-		explicit TStreamTextReader(stream::IBinarySource* source EL_LIFETIME_BOUND);
+		/**
+		 * Buffered UTF-8 reader. buffer_size is the binary input cache size in bytes;
+		 * decoded text is read ahead by roughly the same amount of memory. Read-ahead
+		 * advances source, so do not read source directly while this reader is active.
+		 */
+		explicit TStreamTextReader(stream::IBinarySource* source EL_LIFETIME_BOUND, usys_t buffer_size = DEFAULT_STREAM_TEXT_BUFFER_SIZE);
 		usys_t Count() const noexcept final { return buffer.Count() - pos; }
 		const char32_t& operator[](usys_t index) const final;
 		io::collection::array::array_t<const char32_t> Head() const noexcept EL_LIFETIME_BOUND final;
+		usys_t BufferSize() const noexcept { return buffer_size; }
 	};
 }

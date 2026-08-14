@@ -11,6 +11,9 @@ namespace el1::io::graphics::image::format::pnm
 		EL_ERROR(max_value == 0, TInvalidArgumentException, "max_value", "max_value must be greater than 0");
 		io::text::TStreamTextWriter writer(&stream);
 		writer.Print(U"P6 %d %d %d\n", img.Width(), img.Height(), max_value);
+		// The text writer buffers encoded bytes; flush before writing the binary raster
+		// directly to the same sink so the PNM header remains in front of the payload.
+		writer.Flush();
 
 		const float f_max_value = max_value;
 

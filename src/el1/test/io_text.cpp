@@ -49,6 +49,45 @@ namespace
 		return bytes.Pipe().Transform(TCharDecoder()).Collect();
 	}
 
+	struct TCountingBinarySource : el1::io::stream::IBinarySource
+	{
+		TList<byte_t> bytes;
+		usys_t pos = 0;
+		usys_t n_reads = 0;
+		usys_t max_request = 0;
+
+		explicit TCountingBinarySource(TList<byte_t> bytes) : bytes(std::move(bytes)) {}
+
+		usys_t Read(byte_t* const output, const usys_t n_max) final
+		{
+			n_reads++;
+			max_request = el1::util::Max(max_request, n_max);
+			const usys_t n = el1::util::Min(n_max, bytes.Count() - pos);
+			if(n != 0)
+				memcpy(output, bytes.ItemPtr(pos), n);
+			pos += n;
+			return n;
+		}
+	};
+
+	struct TCountingBinarySink : el1::io::stream::IBinarySink
+	{
+		TList<byte_t> bytes;
+		usys_t n_writes = 0;
+		usys_t max_write = 0;
+		usys_t n_flushes = 0;
+
+		usys_t Write(const byte_t* const input, const usys_t count) final
+		{
+			n_writes++;
+			max_write = el1::util::Max(max_write, count);
+			bytes.Append(input, count);
+			return count;
+		}
+
+		void Flush() final { n_flushes++; }
+	};
+
 	TEST(io_text, TLineReader)
 	{
 		// LF only
@@ -123,6 +162,72 @@ namespace
 			EXPECT_EQ(lines[3], "last line");
 			EXPECT_EQ(lr.buffer.chars.Count(), 0U);	// ensure that the TString is moved into the collection in the Collect() step and that lr was taken by reference and not copied in the Transform(lr) call - again this is only for testing and not supposed to be used this way
 		}
+	}
+
+	TEST(io_text, TStreamTextReaderBuffersBinaryInputAndDecodesAhead)
+	{
+		TString input;
+		for(usys_t i = 0; i < 64; i++)
+			input += U'a';
+
+		TCountingBinarySource source(Encode(input.View()));
+		TStreamTextReader reader(&source, 16);
+		EXPECT_EQ(reader.BufferSize(), 16U);
+		ASSERT_TRUE(reader.Ensure(1));
+		EXPECT_EQ(source.n_reads, 1U);
+		EXPECT_EQ(source.max_request, 16U);
+		EXPECT_GE(reader.Head().Count(), 4U);
+
+		reader.Shift(4);
+		ASSERT_TRUE(reader.Ensure(1));
+		// Four more ASCII characters are decoded from the already buffered 16 bytes.
+		EXPECT_EQ(source.n_reads, 1U);
+		EXPECT_EQ(reader[0], U'a');
+
+		TCountingBinarySource tiny_source(Encode(U"😀ä"));
+		TStreamTextReader tiny_reader(&tiny_source, 1);
+		ASSERT_TRUE(tiny_reader.Ensure(2));
+		EXPECT_EQ(tiny_reader[0], U'😀');
+		EXPECT_EQ(tiny_reader[1], U'ä');
+
+		EXPECT_THROW(TStreamTextReader(&tiny_source, 0), el1::error::TInvalidArgumentException);
+	}
+
+	TEST(io_text, TStreamTextWriterBuffersAcrossAppends)
+	{
+		TCountingBinarySink sink;
+		{
+			TStreamTextWriter writer(&sink, 8);
+			EXPECT_EQ(writer.BufferSize(), 8U);
+			writer.Write(U"ab");
+			EXPECT_EQ(sink.n_writes, 0U);
+			writer.Write(U"cdefgh");
+			EXPECT_EQ(sink.n_writes, 1U);
+			EXPECT_EQ(sink.max_write, 8U);
+			writer.Write(U"ij");
+			EXPECT_EQ(sink.n_writes, 1U);
+			writer.Flush();
+			EXPECT_EQ(sink.n_writes, 2U);
+			EXPECT_EQ(sink.n_flushes, 1U);
+		}
+		EXPECT_EQ(Decode(sink.bytes), U"abcdefghij");
+
+		TCountingBinarySink destructor_sink;
+		{
+			TStreamTextWriter writer(&destructor_sink, 16);
+			writer.Write(U"tail");
+			EXPECT_EQ(destructor_sink.n_writes, 0U);
+		}
+		EXPECT_EQ(destructor_sink.n_writes, 1U);
+		EXPECT_EQ(Decode(destructor_sink.bytes), U"tail");
+
+		TCountingBinarySink unicode_sink;
+		TStreamTextWriter unicode_writer(&unicode_sink, 3);
+		unicode_writer.Write(U"😀ä");
+		unicode_writer.Flush();
+		EXPECT_EQ(Decode(unicode_sink.bytes), U"😀ä");
+
+		EXPECT_THROW(TStreamTextWriter(&unicode_sink, 0), el1::error::TInvalidArgumentException);
 	}
 
 	TEST(io_text, TStreamTextWriterPrintUsesFormatRegistry)
