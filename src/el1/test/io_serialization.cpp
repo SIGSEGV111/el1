@@ -40,19 +40,19 @@ namespace serialization_test
 }
 
 EL_SERIALIZABLE(serialization_test::TChild, 1,
-	EL_SERIALIZATION_MEMBER(serialization_test::TChild, id),
-	EL_SERIALIZATION_MEMBER(serialization_test::TChild, name));
+	EL_SERIALIZATION_MEMBER(id),
+	EL_SERIALIZATION_MEMBER(name));
 
 EL_SERIALIZABLE(serialization_test::TRoot, 2,
-	EL_SERIALIZATION_MEMBER(serialization_test::TRoot, big),
-	EL_SERIALIZATION_MEMBER(serialization_test::TRoot, count),
-	EL_SERIALIZATION_MEMBER(serialization_test::TRoot, ratio),
-	EL_SERIALIZATION_MEMBER(serialization_test::TRoot, title),
-	EL_SERIALIZATION_MEMBER(serialization_test::TRoot, children),
-	EL_SERIALIZATION_MEMBER(serialization_test::TRoot, scores),
-	EL_SERIALIZATION_MEMBER(serialization_test::TRoot, note),
-	EL_SERIALIZATION_MEMBER(serialization_test::TRoot, mode),
-	::el1::io::serialization::Member(U"added_in_v2", &serialization_test::TRoot::added_in_v2, 2));
+	EL_SERIALIZATION_MEMBER(big),
+	EL_SERIALIZATION_MEMBER(count),
+	EL_SERIALIZATION_MEMBER(ratio),
+	EL_SERIALIZATION_MEMBER(title),
+	EL_SERIALIZATION_MEMBER(children),
+	EL_SERIALIZATION_MEMBER(scores),
+	EL_SERIALIZATION_MEMBER(note),
+	EL_SERIALIZATION_MEMBER(mode),
+	EL_SERIALIZATION_MEMBER(added_in_v2, 2));
 
 namespace el1::io::serialization
 {
@@ -92,6 +92,16 @@ namespace
 		value.mode = serialization_test::EMode::ON;
 		value.added_in_v2 = 99;
 		return value;
+	}
+
+	TEST(io_serialization, SchemaMemberMacroUsesEnclosingTypeAndForwardsMetadata)
+	{
+		constexpr auto members = TSchema<serialization_test::TRoot>::Members();
+		EXPECT_EQ(std::get<0>(members).info.name, TStringView(U"big"));
+		EXPECT_EQ(std::get<0>(members).pointer, &serialization_test::TRoot::big);
+		EXPECT_EQ(std::get<8>(members).info.name, TStringView(U"added_in_v2"));
+		EXPECT_EQ(std::get<8>(members).info.since_version, 2U);
+		EXPECT_EQ(std::get<8>(members).pointer, &serialization_test::TRoot::added_in_v2);
 	}
 
 	TEST(io_serialization, JsonSchemaMetadataAndRoundTrip)

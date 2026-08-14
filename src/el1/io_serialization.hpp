@@ -358,12 +358,16 @@ namespace el1::io::serialization
 #define EL_SERIALIZATION_U32(x) EL_SERIALIZATION_U32_IMPL(x)
 #define EL_SERIALIZATION_USTRING(x) EL_SERIALIZATION_U32(EL_SERIALIZATION_STRINGIFY(x))
 
-#define EL_SERIALIZATION_MEMBER(TYPE, MEMBER) \
-	::el1::io::serialization::Member(EL_SERIALIZATION_USTRING(MEMBER), &TYPE::MEMBER)
+// Declare a member of the TObject bound by the surrounding EL_SERIALIZABLE().
+// Optional arguments are forwarded to Member() as since_version, until_version and id.
+#define EL_SERIALIZATION_MEMBER(MEMBER, ...) \
+	::el1::io::serialization::Member(EL_SERIALIZATION_USTRING(MEMBER), &TObject::MEMBER __VA_OPT__(,) __VA_ARGS__)
 
+// Define the schema and bind TYPE once as TObject for all member declarations below.
 #define EL_SERIALIZABLE(TYPE, VERSION, ...) \
 	template<> struct el1::io::serialization::TSchema<TYPE> \
 	{ \
+		using TObject = TYPE; \
 		static constexpr ::el1::io::serialization::TTypeInfo Info() \
 		{ \
 			constexpr ::el1::io::text::string::TStringView name = EL_SERIALIZATION_USTRING(TYPE); \
