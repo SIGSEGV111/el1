@@ -398,6 +398,10 @@ namespace el1::io::text::format
 	template<typename... TArgs>
 	class TFormatString
 	{
+		public:
+			const char32_t* const literal;
+			const usys_t length;
+
 		private:
 			template<typename T>
 			struct TVariable
@@ -411,11 +415,7 @@ namespace el1::io::text::format
 
 			struct TUncheckedTag {};
 
-			const char32_t* literal = nullptr;
-			usys_t length = 0;
 			std::tuple<TVariable<TArgs>...> variables = {};
-
-			constexpr char32_t Character(const usys_t index) const noexcept { return literal[index]; }
 
 			constexpr TFormatSpecView SpecView(const usys_t begin, const usys_t end, const bool braced) const noexcept
 			{
@@ -428,11 +428,11 @@ namespace el1::io::text::format
 				TVariable<T> result;
 				for(usys_t i = start; i < length; i++)
 				{
-					if(Character(i) != '%')
+					if(literal[i] != '%')
 						continue;
 					if(i + 1 >= length)
 						return result;
-					if(Character(i + 1) == '%')
+					if(literal[i + 1] == '%')
 					{
 						i++;
 						continue;
@@ -444,11 +444,11 @@ namespace el1::io::text::format
 					usys_t spec_end = p;
 					bool braced = false;
 
-					if(Character(p) == '{')
+					if(literal[p] == '{')
 					{
 						braced = true;
 						spec_begin = ++p;
-						while(p < length && Character(p) != '}')
+						while(p < length && literal[p] != '}')
 							p++;
 						if(p >= length)
 							return result;
@@ -456,15 +456,15 @@ namespace el1::io::text::format
 					}
 					else
 					{
-						while(p < length && !detail::IsAsciiLetter(Character(p)))
+						while(p < length && !detail::IsAsciiLetter(literal[p]))
 							p++;
 						spec_end = p;
 					}
 
-					if(p >= length || !detail::IsAsciiLetter(Character(p)))
+					if(p >= length || !detail::IsAsciiLetter(literal[p]))
 						return result;
 
-					result.code = Character(p);
+					result.code = literal[p];
 					result.end = p + 1;
 					if constexpr(detail::CFormatter<T>)
 					{
@@ -485,9 +485,9 @@ namespace el1::io::text::format
 			{
 				for(usys_t i = start; i < length; i++)
 				{
-					if(Character(i) != '%')
+					if(literal[i] != '%')
 						continue;
-					if(i + 1 < length && Character(i + 1) == '%')
+					if(i + 1 < length && literal[i + 1] == '%')
 					{
 						i++;
 						continue;
@@ -546,7 +546,7 @@ namespace el1::io::text::format
 				usys_t chunk = begin;
 				for(usys_t i = begin; i + 1 < end; i++)
 				{
-					if(Character(i) == '%' && Character(i + 1) == '%')
+					if(literal[i] == '%' && literal[i + 1] == '%')
 					{
 						AppendRaw(out, chunk, i);
 						detail::FormatCharacter(out, U'%', U'c', TDefaultFormatSpec{});
