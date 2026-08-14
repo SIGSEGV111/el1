@@ -31,6 +31,11 @@ namespace el1::io::text::parser::ast
 			return condition && node.Match(input, pos);
 		}
 
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			return condition ? node.Complete(input, pos) : TCompletionState::Mismatch(pos);
+		}
+
 		constexpr bool Matches(const char32_t chr) const noexcept
 			requires requires { { node.Matches(chr) } -> std::convertible_to<bool>; }
 		{
@@ -59,6 +64,20 @@ namespace el1::io::text::parser::ast
 		{
 			return Parse(input, pos).has_value();
 		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			auto state = node.Complete(input, pos);
+			if(!state.matched)
+				return state;
+
+			usys_t p = pos;
+			auto value = node.Parse(input.ParseContext(), p);
+			EL_ERROR(!value || p != state.position, TLogicException);
+			if(!predicate(*value))
+				return {false, state.incomplete, pos};
+			return state;
+		}
 	};
 
 	template<typename P, typename N>
@@ -84,6 +103,24 @@ namespace el1::io::text::parser::ast
 		bool Match(TParseContext& input, usys_t& pos) const
 		{
 			return Parse(input, pos).has_value();
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			auto state = node.Complete(input, pos);
+			if(!state.matched)
+				return state;
+
+			usys_t p = pos;
+			auto value = node.Parse(input.ParseContext(), p);
+			EL_ERROR(!value || p != state.position, TLogicException);
+			if(!predicate(*value))
+			{
+				if(state.incomplete)
+					return {false, true, pos};
+				EL_THROW(TParseException, pos);
+			}
+			return state;
 		}
 	};
 
@@ -121,6 +158,14 @@ namespace el1::io::text::parser::ast
 			pos = p;
 			return true;
 		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			auto state = node.Complete(input, pos);
+			if(state.matched || state.incomplete)
+				return state;
+			EL_THROW(TParseException, pos);
+		}
 	};
 
 	struct TEndNode
@@ -137,6 +182,12 @@ namespace el1::io::text::parser::ast
 		{
 			char32_t chr;
 			return !input.At(pos, chr);
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			char32_t chr;
+			return input.At(pos, chr) ? TCompletionState::Mismatch(pos) : TCompletionState::Matched(pos);
 		}
 	};
 
@@ -163,6 +214,14 @@ namespace el1::io::text::parser::ast
 				return false;
 			pos++;
 			return true;
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			char32_t chr;
+			if(!input.At(pos, chr))
+				return TCompletionState::Incomplete(pos);
+			return Matches(chr) ? TCompletionState::Matched(pos + 1) : TCompletionState::Mismatch(pos);
 		}
 
 		constexpr bool Matches(const char32_t chr) const noexcept { return chr >= from && chr <= to; }
@@ -201,6 +260,20 @@ namespace el1::io::text::parser::ast
 			pos++;
 			return true;
 		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			char32_t chr;
+			if(input.At(pos, chr))
+				return Matches(chr) ? TCompletionState::Matched(pos + 1) : TCompletionState::Mismatch(pos);
+
+			for(const char32_t item : list)
+			{
+				const char32_t replacement[] = {item};
+				input.Suggest(pos, pos, TStringView::FromUnsafePointer(replacement, 1));
+			}
+			return TCompletionState::Incomplete(pos);
+		}
 	};
 
 	struct TLiteralNode
@@ -225,6 +298,24 @@ namespace el1::io::text::parser::ast
 				return false;
 			pos = p;
 			return true;
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			usys_t p = pos;
+			for(const char32_t expected : literal)
+			{
+				char32_t actual;
+				if(!input.At(p, actual))
+				{
+					input.Suggest(pos, p, literal);
+					return TCompletionState::Incomplete(pos);
+				}
+				if(actual != expected)
+					return TCompletionState::Mismatch(pos);
+				p++;
+			}
+			return TCompletionState::Matched(p);
 		}
 	};
 
@@ -266,6 +357,25 @@ namespace el1::io::text::parser::ast
 		bool Match(TParseContext& input, usys_t& pos) const
 		{
 			return Parse(input, pos).has_value();
+		}
+
+		template<usys_t I = 0>
+		auto CompleteNodes(TCompletionContext& input, const usys_t pos, const bool incomplete = false) const -> TCompletionState
+		{
+			if constexpr(I == sizeof...(N))
+				return TCompletionState::Matched(pos, incomplete);
+			else
+			{
+				auto state = std::get<I>(nodes).Complete(input, pos);
+				if(!state.matched)
+					return {false, incomplete || state.incomplete, pos};
+				return CompleteNodes<I + 1>(input, state.position, incomplete || state.incomplete);
+			}
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			return CompleteNodes(input, pos);
 		}
 	};
 
@@ -310,6 +420,33 @@ namespace el1::io::text::parser::ast
 		{
 			return Parse(input, pos).has_value();
 		}
+
+		template<usys_t I = 0>
+		auto CompleteNodes(TCompletionContext& input, const usys_t pos, const bool incomplete = false) const -> TCompletionState
+		{
+			if constexpr(I == sizeof...(N))
+				return TCompletionState::Matched(pos, incomplete);
+			else
+			{
+				auto state = std::get<I>(nodes).Complete(input, pos);
+				if(!state.matched)
+					return {false, incomplete || state.incomplete, pos};
+				return CompleteNodes<I + 1>(input, state.position, incomplete || state.incomplete);
+			}
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			auto state = CompleteNodes(input, pos);
+			if(!state.matched)
+				return state;
+
+			usys_t p = pos;
+			if(!Parse(input.ParseContext(), p))
+				return {false, state.incomplete, pos};
+			EL_ERROR(p != state.position, TLogicException);
+			return state;
+		}
 	};
 
 	template<typename N>
@@ -332,6 +469,11 @@ namespace el1::io::text::parser::ast
 		bool Match(TParseContext& input, usys_t& pos) const
 		{
 			return node.Match(input, pos);
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			return node.Complete(input, pos);
 		}
 	};
 
@@ -384,6 +526,23 @@ namespace el1::io::text::parser::ast
 			pos = p;
 			return true;
 		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			usys_t p = pos;
+			bool incomplete = false;
+			usys_t count = 0;
+			for(; count < n_max; count++)
+			{
+				auto state = node.Complete(input, p);
+				incomplete = incomplete || state.incomplete;
+				if(!state.matched)
+					return count >= n_min ? TCompletionState::Matched(p, incomplete) : TCompletionState{false, incomplete, pos};
+				EL_ERROR(state.position == p, TLogicException);
+				p = state.position;
+			}
+			return count >= n_min ? TCompletionState::Matched(p, incomplete) : TCompletionState{false, incomplete, pos};
+		}
 	};
 
 	template<typename N>
@@ -404,6 +563,11 @@ namespace el1::io::text::parser::ast
 		{
 			return node.Match(input, pos);
 		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			return node.Complete(input, pos);
+		}
 	};
 
 	template<typename N>
@@ -422,6 +586,14 @@ namespace el1::io::text::parser::ast
 		{
 			usys_t p = pos;
 			return node.Match(input, p);
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			auto state = node.Complete(input, pos);
+			if(state.matched)
+				state.position = pos;
+			return state;
 		}
 	};
 
@@ -489,6 +661,15 @@ namespace el1::io::text::parser::ast
 				return false;
 			pos = p;
 			return true;
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			auto lhs_state = lhs.Complete(input, pos);
+			if(!lhs_state.matched)
+				return lhs_state;
+			auto rhs_state = rhs.Complete(input, lhs_state.position);
+			return {rhs_state.matched, lhs_state.incomplete || rhs_state.incomplete, rhs_state.matched ? rhs_state.position : pos};
 		}
 	};
 
@@ -558,6 +739,18 @@ namespace el1::io::text::parser::ast
 			return false;
 		}
 
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			auto lhs_state = lhs.Complete(input, pos);
+			if(lhs_state.matched)
+				return lhs_state;
+
+			auto rhs_state = rhs.Complete(input, pos);
+			if(rhs_state.matched)
+				return {true, lhs_state.incomplete || rhs_state.incomplete, rhs_state.position};
+			return {false, lhs_state.incomplete || rhs_state.incomplete, pos};
+		}
+
 		constexpr bool Matches(const char32_t chr) const noexcept
 			requires requires { { lhs.Matches(chr) } -> std::convertible_to<bool>; { rhs.Matches(chr) } -> std::convertible_to<bool>; }
 		{
@@ -589,6 +782,14 @@ namespace el1::io::text::parser::ast
 				return false;
 			pos++;
 			return true;
+		}
+
+		auto Complete(TCompletionContext& input, const usys_t pos) const -> TCompletionState
+		{
+			char32_t chr;
+			if(!input.At(pos, chr))
+				return TCompletionState::Incomplete(pos);
+			return Matches(chr) ? TCompletionState::Matched(pos + 1) : TCompletionState::Mismatch(pos);
 		}
 	};
 
@@ -651,6 +852,36 @@ namespace el1::io::text::parser::ast
 			}
 		}
 
+		template<usys_t I = 0>
+		auto CompleteCase(const char32_t chr, TCompletionContext& context, const usys_t pos) const -> TCompletionState
+		{
+			if constexpr(I == sizeof...(C))
+			{
+				return TCompletionState::Mismatch(pos);
+			}
+			else
+			{
+				const auto& entry = std::get<I>(cases);
+				if(entry.matcher.Matches(chr))
+					return entry.node.Complete(context, pos);
+				return CompleteCase<I + 1>(chr, context, pos);
+			}
+		}
+
+		template<usys_t I = 0>
+		bool CompleteAll(TCompletionContext& context, const usys_t pos) const
+		{
+			if constexpr(I == sizeof...(C))
+				return false;
+			else
+			{
+				const auto& entry = std::get<I>(cases);
+				const auto state = entry.node.Complete(context, pos);
+				const bool rest = CompleteAll<I + 1>(context, pos);
+				return state.matched || state.incomplete || rest;
+			}
+		}
+
 	public:
 		auto Parse(TParseContext& context, usys_t& pos) const -> std::optional<return_t>
 		{
@@ -664,6 +895,47 @@ namespace el1::io::text::parser::ast
 		{
 			char32_t chr;
 			return context.At(pos, chr) && MatchCase(chr, context, pos);
+		}
+
+		auto Complete(TCompletionContext& context, const usys_t pos) const -> TCompletionState
+		{
+			char32_t chr;
+			if(context.At(pos, chr))
+				return CompleteCase(chr, context, pos);
+			return CompleteAll(context, pos) ? TCompletionState::Incomplete(pos) : TCompletionState::Mismatch(pos);
+		}
+	};
+
+	template<typename P, typename N>
+	struct TWithCompletionNode
+	{
+		using return_t = typename N::return_t;
+		[[no_unique_address]] P provider;
+		N node;
+
+		auto Parse(TParseContext& context, usys_t& pos) const -> std::optional<return_t>
+		{
+			return node.Parse(context, pos);
+		}
+
+		bool Match(TParseContext& context, usys_t& pos) const
+		{
+			return node.Match(context, pos);
+		}
+
+		auto Complete(TCompletionContext& context, const usys_t pos) const -> TCompletionState
+		{
+			auto state = node.Complete(context, pos);
+			const usys_t cursor = context.Cursor();
+			if(cursor < pos || !(state.incomplete || (state.matched && state.position == cursor)))
+				return state;
+
+			const usys_t before = context.Count();
+			auto sink = context.Sink(pos, cursor);
+			provider(context.Capture(pos, cursor), sink);
+			if(context.Count() != before)
+				state.incomplete = true;
+			return state;
 		}
 	};
 
@@ -685,6 +957,11 @@ namespace el1::io::text::parser::ast
 		{
 			return owner->Match(context, pos);
 		}
+
+		auto Complete(TCompletionContext& context, const usys_t pos) const -> TCompletionState
+		{
+			return owner->Complete(context, pos);
+		}
 	};
 
 	template<typename T, typename F>
@@ -698,10 +975,12 @@ namespace el1::io::text::parser::ast
 		// recursive hot path. It is needed only once per parse context.
 		__attribute__((noinline)) auto ParseUnbound(TParseContext& context, usys_t& pos) const -> std::optional<return_t>;
 		__attribute__((noinline)) bool MatchUnbound(TParseContext& context, usys_t& pos) const;
+		__attribute__((noinline)) auto CompleteUnbound(TCompletionContext& context, usys_t pos) const -> TCompletionState;
 
 	public:
 		auto Parse(TParseContext& context, usys_t& pos) const -> std::optional<return_t>;
 		bool Match(TParseContext& context, usys_t& pos) const;
+		auto Complete(TCompletionContext& context, usys_t pos) const -> TCompletionState;
 	};
 
 	template<typename N, typename S>
@@ -800,6 +1079,43 @@ namespace el1::io::text::parser::ast
 				return false;
 			pos = p;
 			return true;
+		}
+
+		auto Complete(TCompletionContext& context, const usys_t pos) const -> TCompletionState
+		{
+			if(n_max == 0)
+				return n_min == 0 ? TCompletionState::Matched(pos) : TCompletionState::Mismatch(pos);
+
+			usys_t p = pos;
+			usys_t count = 0;
+			bool incomplete = false;
+
+			auto first = node.Complete(context, p);
+			incomplete = incomplete || first.incomplete;
+			if(!first.matched)
+				return n_min == 0 ? TCompletionState::Matched(pos, incomplete) : TCompletionState{false, incomplete, pos};
+			EL_ERROR(first.position == p, TLogicException);
+			p = first.position;
+			count = 1;
+
+			while(count < n_max)
+			{
+				auto separator_state = separator.Complete(context, p);
+				incomplete = incomplete || separator_state.incomplete;
+				if(!separator_state.matched)
+					return count >= n_min ? TCompletionState::Matched(p, incomplete) : TCompletionState{false, incomplete, pos};
+				EL_ERROR(separator_state.position == p, TLogicException);
+
+				auto value_state = node.Complete(context, separator_state.position);
+				incomplete = incomplete || value_state.incomplete;
+				if(!value_state.matched)
+					return {false, incomplete, pos};
+				EL_ERROR(value_state.position == separator_state.position, TLogicException);
+				p = value_state.position;
+				count++;
+			}
+
+			return count >= n_min ? TCompletionState::Matched(p, incomplete) : TCompletionState{false, incomplete, pos};
 		}
 	};
 }

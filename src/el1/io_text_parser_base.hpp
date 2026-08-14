@@ -35,6 +35,38 @@ namespace el1::io::text::parser
 		usys_t max_recursion_depth = 256;
 	};
 
+	/** One completion candidate. replacement replaces the half-open source range [replace_begin, replace_end). */
+	struct completion_t
+	{
+		usys_t replace_begin;
+		usys_t replace_end;
+		TString replacement;
+	};
+
+	/** A range-bound sink passed to dynamic completion providers. Add() accepts complete replacement text, not only a suffix. */
+	class TCompletionSink
+	{
+		TList<completion_t>& completions;
+		const usys_t replace_begin;
+		const usys_t replace_end;
+
+		friend class TCompletionContext;
+		TCompletionSink(TList<completion_t>& completions, const usys_t replace_begin, const usys_t replace_end)
+			: completions(completions), replace_begin(replace_begin), replace_end(replace_end) {}
+
+	public:
+		bool Add(TString replacement)
+		{
+			for(const auto& completion : completions)
+				if(completion.replace_begin == replace_begin && completion.replace_end == replace_end && completion.replacement == replacement)
+					return false;
+			completions.Append(completion_t{replace_begin, replace_end, std::move(replacement)});
+			return true;
+		}
+
+		bool Add(const TStringView replacement) { return Add(TString(replacement)); }
+	};
+
 	/** Shared state for one parse operation. */
 	class TParseContext
 	{
@@ -154,6 +186,70 @@ namespace el1::io::text::parser
 
 		const TParseLimits& Limits() const noexcept { return limits; }
 		usys_t FarthestPosition() const noexcept { return farthest_position; }
+	};
+
+	/** Internal result of one completion traversal. A node can be both matched and incomplete, e.g. Optional()/Repeat() at the cursor. */
+	struct TCompletionState
+	{
+		bool matched;
+		bool incomplete;
+		usys_t position;
+
+		static constexpr TCompletionState Mismatch(const usys_t position) noexcept { return {false, false, position}; }
+		static constexpr TCompletionState Incomplete(const usys_t position) noexcept { return {false, true, position}; }
+		static constexpr TCompletionState Matched(const usys_t position, const bool incomplete = false) noexcept { return {true, incomplete, position}; }
+	};
+
+	/** Completion-specific state layered over TParseContext. The cursor acts as an artificial EOF even if the source contains a suffix. */
+	class TCompletionContext
+	{
+		TParseContext parse_context;
+		TList<completion_t> completions;
+		const usys_t cursor;
+
+	public:
+		TCompletionContext(stream::IBufferedSource<char32_t>& input EL_LIFETIME_BOUND, const usys_t cursor, const TParseLimits limits = {})
+			: parse_context(input, limits), cursor(cursor) {}
+		TCompletionContext(const TCompletionContext&) = delete;
+		TCompletionContext& operator=(const TCompletionContext&) = delete;
+
+		bool At(const usys_t offset, char32_t& out)
+		{
+			return offset < cursor && parse_context.At(offset, out);
+		}
+
+		bool Ensure(const usys_t count)
+		{
+			return count <= cursor && parse_context.Ensure(count);
+		}
+
+		TStringView Capture(const usys_t begin, const usys_t end)
+		{
+			EL_ERROR(begin > end || end > cursor, TLogicException);
+			return parse_context.Capture(begin, end);
+		}
+
+		TCompletionSink Sink(const usys_t replace_begin, const usys_t replace_end)
+		{
+			EL_ERROR(replace_begin > replace_end || replace_end > cursor, TLogicException);
+			return TCompletionSink(completions, replace_begin, replace_end);
+		}
+
+		bool Suggest(const usys_t replace_begin, const usys_t replace_end, TString replacement)
+		{
+			return Sink(replace_begin, replace_end).Add(std::move(replacement));
+		}
+
+		bool Suggest(const usys_t replace_begin, const usys_t replace_end, const TStringView replacement)
+		{
+			return Sink(replace_begin, replace_end).Add(replacement);
+		}
+
+		TParseContext& ParseContext() noexcept { return parse_context; }
+		const TParseContext& ParseContext() const noexcept { return parse_context; }
+		usys_t Cursor() const noexcept { return cursor; }
+		usys_t Count() const noexcept { return completions.Count(); }
+		TList<completion_t> Take() { return std::move(completions); }
 	};
 
 	inline bool MatchLiteral(TParseContext& input, usys_t& pos, const TStringView literal)

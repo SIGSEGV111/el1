@@ -201,4 +201,131 @@ namespace
 		EXPECT_NO_THROW((void)discarded.Parse(U"()"));
 	}
 
+	TEST(io_text_parser, StaticCompletionFollowsGrammar)
+	{
+		auto command = U"git "_P + (U"status"_P || U"stash"_P || U"show"_P);
+
+		auto sta = command.Complete(U"git sta");
+		ASSERT_EQ(sta.Count(), 2U);
+		EXPECT_EQ(sta[0].replace_begin, 4U);
+		EXPECT_EQ(sta[0].replace_end, 7U);
+		EXPECT_EQ(sta[0].replacement, U"status");
+		EXPECT_EQ(sta[1].replace_begin, 4U);
+		EXPECT_EQ(sta[1].replace_end, 7U);
+		EXPECT_EQ(sta[1].replacement, U"stash");
+
+		auto sho = command.Complete(U"git sho");
+		ASSERT_EQ(sho.Count(), 1U);
+		EXPECT_EQ(sho[0].replacement, U"show");
+
+		auto repetition = Repeat(U'a'_P, 0, NEG1) + U'b'_P;
+		auto repeated = repetition.Complete(U"aaa");
+		ASSERT_EQ(repeated.Count(), 2U);
+		EXPECT_EQ(repeated[0].replacement, U"a");
+		EXPECT_EQ(repeated[1].replacement, U"b");
+	}
+
+	TEST(io_text_parser, CompletionRespectsExpectSeparatedByAndRecursion)
+	{
+		auto expected = U"foo"_P + Expect(U"bar"_P);
+		auto partial = expected.Complete(U"foob");
+		ASSERT_EQ(partial.Count(), 1U);
+		EXPECT_EQ(partial[0].replace_begin, 3U);
+		EXPECT_EQ(partial[0].replace_end, 4U);
+		EXPECT_EQ(partial[0].replacement, U"bar");
+		EXPECT_THROW((void)expected.Complete(U"foox"), TParseException);
+
+		auto separated = SeparatedBy(U"foo"_P, U','_P, 1);
+		auto after_value = separated.Complete(U"foo");
+		ASSERT_EQ(after_value.Count(), 1U);
+		EXPECT_EQ(after_value[0].replacement, U",");
+		auto after_separator = separated.Complete(U"foo,");
+		ASSERT_EQ(after_separator.Count(), 1U);
+		EXPECT_EQ(after_separator[0].replace_begin, 4U);
+		EXPECT_EQ(after_separator[0].replacement, U"foo");
+
+		auto nested = Recursive<TString>([](auto self)
+		{
+			return U"x"_P || Between(U'('_P, self, U')'_P);
+		});
+		auto recursive = nested.Complete(U"((x");
+		ASSERT_EQ(recursive.Count(), 1U);
+		EXPECT_EQ(recursive[0].replacement, U")");
+
+		auto minimum_two = Validate(
+			[](const TStringView value) { return value.Length() >= 2; },
+			Capture(Repeat(U'a'_P, 1, 2))
+		);
+		auto extend_invalid_but_incomplete = minimum_two.Complete(U"a");
+		ASSERT_EQ(extend_invalid_but_incomplete.Count(), 1U);
+		EXPECT_EQ(extend_invalid_but_incomplete[0].replacement, U"a");
+		EXPECT_THROW((void)Validate([](const TString&) { return false; }, U"a"_P).Complete(U"a"), TParseException);
+	}
+
+	TEST(io_text_parser, DynamicCompletionUsesSourcePrefixAndCursor)
+	{
+		TString seen_prefix;
+		auto token = WithCompletion(
+			Capture(OneOrMore(~CharList(U' ', U'\t'))),
+			[&](const TStringView prefix, TCompletionSink& sink)
+			{
+				seen_prefix = TString(prefix);
+				if(prefix == U"sta")
+				{
+					sink.Add(U"status");
+					sink.Add(U"stash");
+					sink.Add(U"status"); // duplicate candidates are suppressed
+				}
+			}
+		);
+
+		const TString line(U"sta --ignored-suffix");
+		auto completions = token.Complete(line, 3);
+		EXPECT_EQ(seen_prefix, U"sta");
+		ASSERT_EQ(completions.Count(), 2U);
+		EXPECT_EQ(completions[0].replace_begin, 0U);
+		EXPECT_EQ(completions[0].replace_end, 3U);
+		EXPECT_EQ(completions[0].replacement, U"status");
+		EXPECT_EQ(completions[1].replacement, U"stash");
+	}
+
+	TEST(io_text_parser, CompletionTraversesSemanticAndDispatchNodes)
+	{
+		auto translated = Translate([](TString value) { return value.Length(); }, U"alpha"_P);
+		auto translated_completion = translated.Complete(U"al");
+		ASSERT_EQ(translated_completion.Count(), 1U);
+		EXPECT_EQ(translated_completion[0].replacement, U"alpha");
+
+		auto checked = TryTranslate(
+			[](TString value) -> std::optional<TString>
+			{
+				return value == U"yes" ? std::optional<TString>(std::move(value)) : std::nullopt;
+			},
+			U"yes"_P || U"no"_P
+		);
+		auto checked_completion = checked.Complete(U"y");
+		ASSERT_EQ(checked_completion.Count(), 1U);
+		EXPECT_EQ(checked_completion[0].replacement, U"yes");
+		EXPECT_EQ(checked.Complete(U"no").Count(), 0U);
+
+		auto dispatched = Dispatch(
+			Case(U'a'_P, Translate([](TString value) { return value.Length(); }, U"alpha"_P)),
+			Case(U'b'_P, Translate([](TString value) { return value.Length(); }, U"beta"_P))
+		);
+		auto at_start = dispatched.Complete(U"");
+		ASSERT_EQ(at_start.Count(), 2U);
+		EXPECT_EQ(at_start[0].replacement, U"alpha");
+		EXPECT_EQ(at_start[1].replacement, U"beta");
+		auto in_branch = dispatched.Complete(U"be");
+		ASSERT_EQ(in_branch.Count(), 1U);
+		EXPECT_EQ(in_branch[0].replacement, U"beta");
+
+		auto looked_ahead = LookAhead(U"foo"_P) + U"foo"_P;
+		auto lookahead_completion = looked_ahead.Complete(U"fo");
+		ASSERT_EQ(lookahead_completion.Count(), 1U);
+		EXPECT_EQ(lookahead_completion[0].replacement, U"foo");
+
+		EXPECT_EQ(If(false, U"hidden"_P).Complete(U"").Count(), 0U);
+	}
+
 }

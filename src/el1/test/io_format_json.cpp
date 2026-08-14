@@ -424,4 +424,16 @@ namespace
 		TString str = json.ToString();
 		EXPECT_EQ(str, TString("[\"\\u0005\",null,true,false,\"test\\\\\\n\\t\",\"hello world\",17,12,{\"abc\":123,\"foo\":\"bar\"},7,3,-2,[],[1,2,3]]"));
 	}
+
+	TEST(io_format_json, ParserCompletion)
+	{
+		auto parser = TJsonParser::Parser();
+		auto null_completion = parser.Complete(U"nu");
+		ASSERT_EQ(null_completion.Count(), 1U);
+		EXPECT_EQ(null_completion[0].replacement, U"null");
+
+		auto nested_completion = parser.Complete(U"{\"a\": tru");
+		ASSERT_EQ(nested_completion.Count(), 1U);
+		EXPECT_EQ(nested_completion[0].replacement, U"true");
+	}
 }

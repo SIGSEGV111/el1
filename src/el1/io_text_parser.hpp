@@ -64,6 +64,21 @@ namespace el1::io::text::parser
 		}
 
 		auto Parse(const TString& str, const TParseLimits limits = {}) const -> return_t { return Parse(str.View(), limits); }
+
+		/** Return completion candidates for input up to cursor. Characters after cursor are ignored and replacement ranges refer to str. */
+		auto Complete(const TStringView str, const usys_t cursor, const TParseLimits limits = {}) const -> TList<completion_t>
+		{
+			EL_ERROR(cursor > str.Length(), TInvalidArgumentException, "cursor", "cursor must not exceed input length");
+			auto input = str.Source();
+			TCompletionContext context(input, cursor, limits);
+			root.Complete(context, 0);
+			return context.Take();
+		}
+
+		/** Return completion candidates at the end of str. */
+		auto Complete(const TStringView str, const TParseLimits limits = {}) const -> TList<completion_t> { return Complete(str, str.Length(), limits); }
+		auto Complete(const TString& str, const usys_t cursor, const TParseLimits limits = {}) const -> TList<completion_t> { return Complete(str.View(), cursor, limits); }
+		auto Complete(const TString& str, const TParseLimits limits = {}) const -> TList<completion_t> { return Complete(str.View(), str.Length(), limits); }
 	};
 
 	template<typename T, typename F>
@@ -86,6 +101,17 @@ namespace el1::io::text::parser
 		const parser_t parser = factory(self);
 		[[maybe_unused]] typename TParseContext::template TRecursiveParserGuard<parser_t> parser_guard(context, this, parser);
 		return parser.root.Match(context, pos);
+	}
+
+	template<typename T, typename F>
+	__attribute__((noinline)) auto ast::TRecursiveNode<T, F>::CompleteUnbound(TCompletionContext& context, const usys_t pos) const -> TCompletionState
+	{
+		const TParser<ast::TRecursiveCallNode<T, F>> self(ast::TRecursiveCallNode<T, F>{this});
+		using parser_t = decltype(factory(self));
+		static_assert(std::same_as<typename parser_t::return_t, T>, "recursive parser factory must return TParser<T>");
+		const parser_t parser = factory(self);
+		[[maybe_unused]] typename TParseContext::template TRecursiveParserGuard<parser_t> parser_guard(context.ParseContext(), this, parser);
+		return parser.root.Complete(context, pos);
 	}
 
 	template<typename T, typename F>
@@ -112,6 +138,19 @@ namespace el1::io::text::parser
 		if(const parser_t* const parser = context.RecursiveParser<parser_t>(this))
 			return parser->root.Match(context, pos);
 		return MatchUnbound(context, pos);
+	}
+
+	template<typename T, typename F>
+	auto ast::TRecursiveNode<T, F>::Complete(TCompletionContext& context, const usys_t pos) const -> TCompletionState
+	{
+		[[maybe_unused]] TParseContext::TRecursionGuard recursion(context.ParseContext(), this, pos);
+		const TParser<ast::TRecursiveCallNode<T, F>> self(ast::TRecursiveCallNode<T, F>{this});
+		using parser_t = decltype(factory(self));
+		static_assert(std::same_as<typename parser_t::return_t, T>, "recursive parser factory must return TParser<T>");
+
+		if(const parser_t* const parser = context.ParseContext().RecursiveParser<parser_t>(this))
+			return parser->root.Complete(context, pos);
+		return CompleteUnbound(context, pos);
 	}
 
 	/** Match exactly one UTF-32 character and return that character. */
@@ -176,6 +215,15 @@ namespace el1::io::text::parser
 
 	/** Return the exact matched source text as a borrowed, zero-copy TStringView instead of materializing the wrapped parser result. */
 	template<typename N> constexpr auto Capture(TParser<N> parser) { return TParser(ast::TCaptureNode<N>{std::move(parser.root)}); }
+
+	/** Attach dynamic completion to parser. provider(prefix, sink) receives the source prefix from this node's start to the cursor and adds full replacement candidates through sink. */
+	template<typename N, typename P>
+	requires std::invocable<const std::decay_t<P>&, TStringView, TCompletionSink&>
+	constexpr auto WithCompletion(TParser<N> parser, P&& provider)
+	{
+		using provider_t = std::decay_t<P>;
+		return TParser(ast::TWithCompletionNode<provider_t, N>{std::forward<P>(provider), std::move(parser.root)});
+	}
 
 	/** Translate parser results by allocating concrete T and return it as std::unique_ptr<C> through New<T,C>(). */
 	template<typename T, typename C, typename... N> constexpr auto TranslateCast(TParser<N>... parsers) { return Translate([](auto... a){ return New<T,C>(a...); }, parsers...); }
