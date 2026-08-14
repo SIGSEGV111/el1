@@ -118,7 +118,7 @@ namespace el1::system::task
 
 	};
 
-		class TSimpleMutex : public IMutex
+	class TSimpleMutex : public IMutex
 	{
 		protected:
 			friend class TSimpleSignal;
@@ -137,7 +137,6 @@ namespace el1::system::task
 			TSimpleMutex();
 			~TSimpleMutex();
 	};
-
 
 	class TFiberMutex : public IMutex
 	{
@@ -569,7 +568,6 @@ namespace el1::system::task
 			TFiberStateWaitable(const TFiber* const fiber, const EFiberState current_state) : fiber(fiber), current_state(current_state) {}
 
 			bool IsReady() const final override { return fiber->State() != current_state; }
-
 	};
 
 	class TThread : public IChildTask, public IInterlocked
@@ -775,5 +773,4 @@ namespace el1::system::task
 				const TTime timeout = -1
 			);
 	};
-
 }
