@@ -81,7 +81,9 @@ namespace el1::dev::motor::servo42d
 		dir_inverted(false),
 		vfoc_enabled(true),
 		inverted(true),
+		stall_detection_enabled(false),
 		encoder(this),
+		stall_detector(this),
 		driver(this),
 		servo(this),
 		motion(this)
@@ -132,10 +134,8 @@ namespace el1::dev::motor::servo42d
 		// disable screen auto-off
 		mbdev->WriteHoldingRegister(0x0087, 0);
 
-		// disabled "stall protection" (aka. "shutdown the motor instead of stalling")
-		mbdev->WriteHoldingRegister(0x0088, 0);
-		if(mbdev->ReadInputRegister(0x003E) & 0x00FF)
-			mbdev->WriteHoldingRegister(0x003D, 1);
+		// Keep locked-rotor protection opt-in; enabling it releases the motor on a detected stall.
+		(void)stall_detector.Enabled(false);
 
 		servo.SetHome();
 
@@ -275,6 +275,33 @@ namespace el1::dev::motor::servo42d
 		if(angle_steps < 0)
 			angle_steps += steps_per_turn;
 		return (float)angle_steps / (float)steps_per_turn;
+	}
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////
+	// TStallDetector
+
+	bool TServo42D::TStallDetector::Enabled(const bool state)
+	{
+		if(state)
+			Reset();
+		parent.mbdev->WriteHoldingRegister(0x0088, state ? 1 : 0);
+		parent.stall_detection_enabled = state;
+		if(!state)
+			Reset();
+		return parent.stall_detection_enabled;
+	}
+
+	EStallState TServo42D::TStallDetector::State() const
+	{
+		if(!parent.stall_detection_enabled)
+			return EStallState::DISABLED;
+		return (parent.mbdev->ReadInputRegister(0x003E) & 0x00FF) != 0 ? EStallState::STALLED : EStallState::CLEAR;
+	}
+
+	void TServo42D::TStallDetector::Reset() const
+	{
+		if((parent.mbdev->ReadInputRegister(0x003E) & 0x00FF) != 0)
+			parent.mbdev->WriteHoldingRegister(0x003D, 1);
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -33,6 +33,7 @@ namespace el1::dev::motor::servo42d
 		friend class TLimitSwitch;
 		friend class TEncoder;
 		friend class TStepperDriver;
+		friend class TStallDetector;
 		friend class TServo;
 		friend class TMotionController;
 
@@ -52,6 +53,7 @@ namespace el1::dev::motor::servo42d
 			bool dir_inverted : 1;
 			bool vfoc_enabled : 1;
 			bool inverted : 1;
+			bool stall_detection_enabled : 1;
 
 			// Change underlying firmware work mode (SD_*/MC_* + open/closed/vFOC).
 			void WorkMode(const EWorkMode new_mode);
@@ -114,6 +116,22 @@ namespace el1::dev::motor::servo42d
 					float RotorAngle() const final override EL_GETTER;
 			};
 
+
+			// Hardware locked-rotor detector exposed by the Servo42D firmware.
+			class TStallDetector : public IStallDetector, helper_t
+			{
+				friend class TServo42D;
+				TStallDetector(TServo42D* const parent) : helper_t(parent) {}
+
+				public:
+					// The Servo42D couples locked-rotor detection to its protection feature;
+					// enabling this detector therefore also enables firmware stall protection.
+					bool Enabled(const bool state) final override;
+					bool Enabled() const final override { return parent.stall_detection_enabled; }
+					EStallState State() const final override EL_GETTER;
+					void Reset() const final override;
+			};
+
 			// Low-level stepper driver abstraction mapped onto the Servo42D.
 			class TStepperDriver : public IStepperDriver, helper_t
 			{
@@ -143,14 +161,14 @@ namespace el1::dev::motor::servo42d
 					// Read current driver state (enabled/disabled/fault) as seen by the wrapper.
 					EDriverState State() const final override EL_GETTER;
 
-					// Servo42D does not provide classical stall detection in this wrapper.
-					bool HasStallDetection() const final override { return false; }
-					bool StallDetected() const final override { return false; }
-					void ResetStallDetection() const final override {};
+					IStallDetector* StallDetector() final override { return &parent.stall_detector; }
+					const IStallDetector* StallDetector() const final override { return &parent.stall_detector; }
 
 					// Access the high-level servo abstraction associated with this driver.
 					IServo* Servo() final override { return &parent.servo; }
 					const IServo* Servo() const final override  { return &parent.servo; }
+
+					bool StepDirectionAvailable() const final override { return parent.dir != nullptr && parent.step != nullptr; }
 
 					// Generate a logical step signal (edge-driven). Caller toggles state.
 					// Used in SD_* work modes.
@@ -295,8 +313,9 @@ namespace el1::dev::motor::servo42d
 
 			modbus::TDevice& ModbusDevice() EL_GETTER { return *mbdev; }
 
-			// Public access to encoder, driver, servo and motion-controller adapters.
+			// Public access to encoder, stall detector, driver, servo and motion-controller adapters.
 			TEncoder encoder;
+			TStallDetector stall_detector;
 			TStepperDriver driver;
 			TServo servo;
 			TMotionController motion;

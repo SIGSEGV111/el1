@@ -7,6 +7,7 @@ namespace el1::dev::motor
 	#define WriteDebug(...) do {} while(false)
 	#define WriteWarning(...) do {} while(false)
 	using namespace gpio;
+	using namespace io::collection::list;
 	using namespace util;
 	using namespace system::time;
 	using namespace system::task;
@@ -153,29 +154,80 @@ namespace el1::dev::motor
 		return state;
 	}
 
-	bool IStepperGroup::HasStallDetection() const
+	IStallDetector* IStepperGroup::StallDetector()
 	{
-		usys_t i = 0;
-		for(IStepperDriver* m = GroupMotor(0); m != nullptr; m = GroupMotor(++i))
-			if(!m->HasStallDetection())
+		return const_cast<IStallDetector*>(static_cast<const IStepperGroup*>(this)->StallDetector());
+	}
+
+	const IStallDetector* IStepperGroup::StallDetector() const
+	{
+		if(GroupMotor(0) == nullptr)
+			return nullptr;
+
+		for(usys_t i = 0; IStepperDriver* const motor = GroupMotor(i); i++)
+			if(motor->StallDetector() == nullptr)
+				return nullptr;
+		return &group_stall_detector;
+	}
+
+	bool IStepperGroup::TGroupStallDetector::Enabled(const bool state)
+	{
+		for(usys_t i = 0; IStepperDriver* const motor = parent->GroupMotor(i); i++)
+		{
+			IStallDetector* const detector = motor->StallDetector();
+			EL_ERROR(detector == nullptr, TLogicException);
+			(void)detector->Enabled(state);
+		}
+		return Enabled();
+	}
+
+	bool IStepperGroup::TGroupStallDetector::Enabled() const
+	{
+		if(parent->GroupMotor(0) == nullptr)
+			return false;
+
+		for(usys_t i = 0; IStepperDriver* const motor = parent->GroupMotor(i); i++)
+		{
+			const IStallDetector* const detector = motor->StallDetector();
+			if(detector == nullptr || !detector->Enabled())
 				return false;
+		}
 		return true;
 	}
 
-	bool IStepperGroup::StallDetected() const
+	EStallState IStepperGroup::TGroupStallDetector::State() const
 	{
-		usys_t i = 0;
-		for(IStepperDriver* m = GroupMotor(0); m != nullptr; m = GroupMotor(++i))
-			if(m->StallDetected())
-				return true;
-		return false;
+		IStepperDriver* const first_motor = parent->GroupMotor(0);
+		if(first_motor == nullptr)
+			return EStallState::DISABLED;
+
+		const IStallDetector* const first_detector = first_motor->StallDetector();
+		EL_ERROR(first_detector == nullptr, TLogicException);
+		EStallState aggregate = first_detector->State();
+		if(aggregate == EStallState::STALLED)
+			return aggregate;
+
+		for(usys_t i = 1; IStepperDriver* const motor = parent->GroupMotor(i); i++)
+		{
+			const IStallDetector* const detector = motor->StallDetector();
+			EL_ERROR(detector == nullptr, TLogicException);
+			const EStallState state = detector->State();
+			if(state == EStallState::STALLED)
+				return state;
+			if(state != aggregate)
+				aggregate = EStallState::UNKNOWN;
+		}
+		return aggregate;
 	}
 
-	void IStepperGroup::ResetStallDetection() const
+	void IStepperGroup::TGroupStallDetector::Reset() const
 	{
-		usys_t i = 0;
-		for(IStepperDriver* m = GroupMotor(0); m != nullptr; m = GroupMotor(++i))
-			m->ResetStallDetection();
+		for(usys_t i = 0; IStepperDriver* const motor = parent->GroupMotor(i); i++)
+		{
+			const IStallDetector* const detector = motor->StallDetector();
+			EL_ERROR(detector == nullptr, TLogicException);
+			detector->Reset();
+		}
 	}
 
 	IServo* IStepperGroup::Servo()
@@ -186,6 +238,17 @@ namespace el1::dev::motor
 	const IServo* IStepperGroup::Servo() const
 	{
 		return nullptr;
+	}
+
+	bool IStepperGroup::StepDirectionAvailable() const
+	{
+		if(GroupMotor(0) == nullptr)
+			return false;
+
+		for(usys_t i = 0; IStepperDriver* const motor = GroupMotor(i); i++)
+			if(!motor->StepDirectionAvailable())
+				return false;
+		return true;
 	}
 
 	void IStepperGroup::Step(const bool state)
@@ -263,99 +326,274 @@ namespace el1::dev::motor
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	TStepperEmulation::TStepperEmulation(IServo* const servo, const u32_t full_step_resolution)
+	static IServo* ValidateStepperServo(IServo* const servo)
 	{
-		EL_NOT_IMPLEMENTED;
+		EL_ERROR(servo == nullptr, TInvalidArgumentException, "servo", "servo must not be null");
+		return servo;
+	}
+
+	static u64_t GetRotaryEncoderStepsPerTurn(IServo* const servo)
+	{
+		IServo* const validated_servo = ValidateStepperServo(servo);
+		IRotaryEncoder* const encoder = dynamic_cast<IRotaryEncoder*>(validated_servo->Encoder());
+		EL_ERROR(encoder == nullptr, TInvalidArgumentException, "servo", "servo requires an IRotaryEncoder or an explicit encoder_steps_per_turn value");
+		return encoder->StepsPerTurn();
+	}
+
+	static s64_t ValidateEncoderStepsPerTurn(const u64_t encoder_steps_per_turn)
+	{
+		EL_ERROR(encoder_steps_per_turn == 0 || encoder_steps_per_turn > (u64_t)INT64_MAX, TInvalidArgumentException, "encoder_steps_per_turn", "encoder steps per turn must fit into a positive signed 64-bit value");
+		return (s64_t)encoder_steps_per_turn;
+	}
+
+	static u32_t ValidateFullStepResolution(const u32_t full_step_resolution)
+	{
+		EL_ERROR(full_step_resolution == 0, TInvalidArgumentException, "full_step_resolution", "full-step resolution must be greater than zero");
+		return full_step_resolution;
+	}
+
+	static s64_t ValidateStepDenominator(const u32_t full_step_resolution, const u32_t microsteps, const s64_t encoder_steps_per_turn, const char* const argument_name)
+	{
+		EL_ERROR(microsteps == 0, TInvalidArgumentException, argument_name, "microstep divider must be greater than zero");
+
+		// The product of two u32_t values always fits into u64_t. Convert to s64_t
+		// only after checking the signed range used by Step().
+		const u64_t denominator_u = (u64_t)full_step_resolution * (u64_t)microsteps;
+		EL_ERROR(denominator_u > (u64_t)INT64_MAX, TInvalidArgumentException, argument_name, "full-step resolution multiplied by microstep divider exceeds the signed 64-bit range");
+		const s64_t denominator = (s64_t)denominator_u;
+
+		// Step() maintains abs(step_remainder) < denominator. Therefore the
+		// largest possible accumulator magnitude is
+		// encoder_steps_per_turn + denominator - 1. Reject configurations for
+		// which that value would not fit in s64_t.
+		EL_ERROR(encoder_steps_per_turn > INT64_MAX - (denominator - 1), TInvalidArgumentException, argument_name, "step geometry requires more than signed 64-bit intermediate precision");
+		return denominator;
+	}
+
+	TStepperEmulation::TStepperEmulation(IServo* const servo, const u32_t full_step_resolution) :
+		TStepperEmulation(servo, full_step_resolution, GetRotaryEncoderStepsPerTurn(servo))
+	{
+	}
+
+	TStepperEmulation::TStepperEmulation(IServo* const servo_, const u32_t full_step_resolution_, const u64_t encoder_steps_per_turn_) :
+		servo(ValidateStepperServo(servo_)),
+		driver(&servo->Driver()),
+		encoder_steps_per_turn(ValidateEncoderStepsPerTurn(encoder_steps_per_turn_)),
+		full_step_resolution(ValidateFullStepResolution(full_step_resolution_)),
+		microsteps(1),
+		step_denominator(ValidateStepDenominator(full_step_resolution, microsteps, encoder_steps_per_turn, "full_step_resolution")),
+		direction(EMotorDirection::FORWARD),
+		step_state(false),
+		enabled(false),
+		target_position(servo->TargetPosition()),
+		step_remainder(0),
+		fib_control_loop()
+	{
+		enabled = driver->Enabled() && servo->Enabled();
+	}
+
+	void TStepperEmulation::ControlLoop()
+	{
+		while(true)
+		{
+			const s64_t new_target = target_position;
+			servo->TargetPosition(new_target);
+
+			if(new_target == target_position)
+				fib_control_loop.Stop();
+		}
+	}
+
+	void TStepperEmulation::WakeControlLoop()
+	{
+		switch(fib_control_loop.State())
+		{
+			case EFiberState::CONSTRUCTED:
+				fib_control_loop.Start(TFunction<void>(this, &TStepperEmulation::ControlLoop));
+				break;
+
+			case EFiberState::STOPPED:
+				fib_control_loop.Resume();
+				break;
+
+			case EFiberState::READY:
+			case EFiberState::ACTIVE:
+			case EFiberState::BLOCKED:
+				break;
+
+			case EFiberState::FINISHED:
+			case EFiberState::CRASHED:
+			case EFiberState::KILLED:
+				EL_THROW(TLogicException);
+		}
 	}
 
 	bool TStepperEmulation::Enabled(const bool state)
 	{
-		EL_NOT_IMPLEMENTED;
+		if(state == enabled)
+			return Enabled();
+
+		if(!state)
+		{
+			enabled = false;
+			step_state = false;
+
+			switch(fib_control_loop.State())
+			{
+				case EFiberState::READY:
+				case EFiberState::BLOCKED:
+					fib_control_loop.Stop();
+					break;
+
+				default:
+					break;
+			}
+
+			(void)servo->Enabled(false);
+			(void)driver->Enabled(false);
+
+			// Enabling a STEP/DIR driver must not cause a position jump. Forget any
+			// queued emulation target and re-anchor the virtual step position at the
+			// actual servo position whenever an encoder is available.
+			if(servo->Encoder() != nullptr)
+				target_position = servo->Encoder()->Position();
+			else
+				target_position = servo->TargetPosition();
+			step_remainder = 0;
+			servo->TargetPosition(target_position);
+			return false;
+		}
+
+		if(servo->Encoder() != nullptr)
+			target_position = servo->Encoder()->Position();
+		else
+			target_position = servo->TargetPosition();
+		step_remainder = 0;
+		step_state = false;
+		servo->TargetPosition(target_position);
+
+		if(!driver->Enabled(true))
+			return false;
+
+		if(!servo->Enabled(true))
+		{
+			(void)driver->Enabled(false);
+			return false;
+		}
+
+		enabled = true;
+		return Enabled();
 	}
 
 	bool TStepperEmulation::Enabled() const
 	{
-		EL_NOT_IMPLEMENTED;
+		return enabled && driver->Enabled() && servo->Enabled();
 	}
 
-	drive_current_t TStepperEmulation::Amperage(drive_current_t)
+	drive_current_t TStepperEmulation::Amperage(drive_current_t current)
 	{
-		EL_NOT_IMPLEMENTED;
+		return driver->Amperage(current);
 	}
 
 	drive_current_t TStepperEmulation::Amperage() const
 	{
-		EL_NOT_IMPLEMENTED;
+		return driver->Amperage();
 	}
 
 	const IPowerMeter* TStepperEmulation::PowerMeter() const
 	{
-		EL_NOT_IMPLEMENTED;
+		return driver->PowerMeter();
 	}
 
 	EDriverState TStepperEmulation::State() const
 	{
-		EL_NOT_IMPLEMENTED;
+		if(fib_control_loop.State() == EFiberState::CRASHED)
+			return EDriverState::IO_ERROR;
+		return Enabled() ? driver->State() : EDriverState::DISABLED;
 	}
 
-	bool TStepperEmulation::HasStallDetection() const
+	IStallDetector* TStepperEmulation::StallDetector()
 	{
-		EL_NOT_IMPLEMENTED;
+		return driver->StallDetector();
 	}
 
-	bool TStepperEmulation::StallDetected() const
+	const IStallDetector* TStepperEmulation::StallDetector() const
 	{
-		EL_NOT_IMPLEMENTED;
-	}
-
-	void TStepperEmulation::ResetStallDetection() const
-	{
-		EL_NOT_IMPLEMENTED;
+		return driver->StallDetector();
 	}
 
 	IServo* TStepperEmulation::Servo()
 	{
-		EL_NOT_IMPLEMENTED;
+		return servo;
 	}
 
 	const IServo* TStepperEmulation::Servo() const
 	{
-		EL_NOT_IMPLEMENTED;
+		return servo;
 	}
 
 	void TStepperEmulation::Step(const bool state)
 	{
-		EL_NOT_IMPLEMENTED;
+		if(step_state == state)
+			return;
+
+		step_state = state;
+		if(!state || !enabled)
+			return;
+
+		const s64_t step_delta = direction == EMotorDirection::FORWARD ? encoder_steps_per_turn : -encoder_steps_per_turn;
+		const s64_t accumulator = step_remainder + step_delta;
+		const s64_t delta = accumulator / step_denominator;
+
+		if(delta > 0)
+			EL_ERROR(target_position > INT64_MAX - delta, TException, "step target exceeds the signed 64-bit servo coordinate range");
+		else if(delta < 0)
+			EL_ERROR(target_position < INT64_MIN - delta, TException, "step target exceeds the signed 64-bit servo coordinate range");
+
+		step_remainder = accumulator % step_denominator;
+		target_position += delta;
+		WakeControlLoop();
 	}
 
 	void TStepperEmulation::Direction(const EMotorDirection dir)
 	{
-		EL_NOT_IMPLEMENTED;
+		direction = dir;
 	}
 
 	EMotorDirection TStepperEmulation::Direction() const
 	{
-		EL_NOT_IMPLEMENTED;
+		return direction;
 	}
 
 	system::time::TTime TStepperEmulation::MinimumStepPulseLength() const
 	{
-		EL_NOT_IMPLEMENTED;
+		return 0;
 	}
 
 	u32_t TStepperEmulation::FullStepResolution() const
 	{
-		EL_NOT_IMPLEMENTED;
+		return full_step_resolution;
 	}
 
 	u32_t TStepperEmulation::Microsteps(u32_t divider)
 	{
-		EL_NOT_IMPLEMENTED;
+		const s64_t new_denominator = ValidateStepDenominator(full_step_resolution, divider, encoder_steps_per_turn, "divider");
+
+		if(step_remainder != 0 && step_denominator != new_denominator)
+		{
+			const s64_t abs_remainder = step_remainder < 0 ? -step_remainder : step_remainder;
+			EL_ERROR(abs_remainder > INT64_MAX / new_denominator, TInvalidArgumentException, "divider", "preserving the current fractional step phase would require more than signed 64-bit intermediate precision");
+			step_remainder = step_remainder * new_denominator / step_denominator;
+		}
+
+		microsteps = divider;
+		step_denominator = new_denominator;
+		return microsteps;
 	}
 
 	u32_t TStepperEmulation::Microsteps() const
 	{
-		EL_NOT_IMPLEMENTED;
+		return microsteps;
 	}
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -427,7 +665,7 @@ namespace el1::dev::motor
 			.enabled = true
 		});
 
-		if(mi.stepper == nullptr)
+		if(mi.stepper == nullptr || !mi.stepper->StepDirectionAvailable())
 		{
 			mi.stepper = new TStepperEmulation(servo, emulated_fsr);
 			mi.delete_stepper = true;
@@ -486,7 +724,10 @@ namespace el1::dev::motor
 		EL_ERROR(motors.IsEmpty(), TException, "gantry has no motors");
 		EL_ERROR(axis_length == 0, TException, "gantry axis length is zero");
 		for(const motor_info_t& mi : motors)
-			EL_ERROR(mi.encoder == nullptr && !mi.stepper->HasStallDetection(), TException, "each gantry motor requires stall detection or an encoder");
+		{
+			const IStallDetector* const stall_detector = mi.stepper->StallDetector();
+			EL_ERROR(mi.encoder == nullptr && (stall_detector == nullptr || !stall_detector->Enabled()), TException, "each gantry motor requires an enabled stall detector or an encoder");
+		}
 		const TTime t_pulse = motors.Pipe().Aggregate([](TTime& r, const motor_info_t& it) { r = Max(r, it.stepper->MinimumStepPulseLength()); }, TTime());
 		WriteDebug(U"t_pulse=%dµs", t_pulse.ConvertToF(EUnit::MICROSECONDS));
 		const TTime t_delay = TTime(1.0 / Abs(speed)) - t_pulse;
@@ -496,8 +737,14 @@ namespace el1::dev::motor
 		WriteDebug(U"gantry_dir=%d", (int)gantry_dir);
 
 		usys_t n_remaining = motors.Count();
-		s64_t arr_encoder_pos[motors.Count()];
-		bool arr_stalled[motors.Count()];
+		TList<s64_t> arr_encoder_pos(motors.Count());
+		TList<u32_t> arr_encoder_last_motion_step(motors.Count());
+		TList<bool> arr_stalled(motors.Count());
+		arr_encoder_pos.SetCount(motors.Count());
+		arr_encoder_last_motion_step.SetCount(motors.Count());
+		arr_stalled.SetCount(motors.Count());
+		const double encoder_stall_window = Min((double)UINT32_MAX, ceil(Abs(speed) * 0.05));
+		const u32_t encoder_stall_window_steps = Max(8U, (u32_t)encoder_stall_window);
 
 		WriteDebug(U"have %d motors", motors.Count());
 		for(usys_t i = 0; i < motors.Count(); i++)
@@ -506,10 +753,16 @@ namespace el1::dev::motor
 			const EMotorDirection motor_dir = mi.inverted ? InvertDirection(gantry_dir) : gantry_dir;
 			arr_encoder_pos[i] = mi.encoder ? mi.encoder->Position() : 0;
 			WriteDebug(U"setting up motor %d (inverted=%d, motor_dir=%d, @encoder=%d, has-encoder=%B)", i, (int)mi.inverted, (int)motor_dir, arr_encoder_pos[i], mi.encoder != nullptr);
+			arr_encoder_last_motion_step[i] = 0;
 			arr_stalled[i] = false;
+			mi.enabled = true;
 			EL_ERROR(mi.stepper->Enabled(true) != true, TException, "unable to enable stepper");
-			EL_ERROR(mi.servo && mi.servo->Enabled(false) != false, TException, "unable to disable servo");
+			if(mi.servo && !mi.delete_stepper)
+				EL_ERROR(mi.servo->Enabled(false) != false, TException, "unable to disable servo");
 			mi.stepper->Direction(motor_dir);
+			IStallDetector* const stall_detector = mi.stepper->StallDetector();
+			if(stall_detector != nullptr && stall_detector->Enabled())
+				stall_detector->Reset();
 		}
 
 		WriteDebug(U"moving until all motors have stalled ...");
@@ -527,15 +780,20 @@ namespace el1::dev::motor
 					{
 						const s64_t pos_now = mi.encoder ? mi.encoder->Position() : 0;
 						const EMotorDirection motor_dir = mi.inverted ? InvertDirection(gantry_dir) : gantry_dir;
-						const bool emov = mi.encoder ? IsEncoderMoving(pos_now, arr_encoder_pos[i], motor_dir) : true;
+						const bool emov = mi.encoder ? IsEncoderMoving(pos_now, arr_encoder_pos[i], motor_dir) : false;
 						arr_encoder_pos[i] = pos_now;
+						if(emov)
+							arr_encoder_last_motion_step[i] = i_step;
+						const bool encoder_stalled = mi.encoder != nullptr && (i_step - arr_encoder_last_motion_step[i]) >= encoder_stall_window_steps;
 
-						if(mi.stepper->StallDetected() || !emov)
+						const IStallDetector* const stall_detector = mi.stepper->StallDetector();
+						if((stall_detector != nullptr && stall_detector->Enabled() && stall_detector->Detected()) || encoder_stalled)
 						{
 							arr_stalled[i] = true;
 							(void)mi.stepper->Enabled(false);
 							mi.enabled = false;
-							mi.stepper->ResetStallDetection();
+							if(stall_detector != nullptr)
+								stall_detector->Reset();
 							n_remaining--;
 							WriteDebug(U"motor %d stalled, pos_now=%d, n_remaining=%d", i, pos_now, n_remaining);
 						}

@@ -10,6 +10,7 @@ VERSION ?= *DEVELOPMENT SNAPSHOT*
 
 WITH_POSTGRES ?= 1
 WITH_POSTGRES_TESTS ?= $(WITH_POSTGRES)
+WITH_BLUETOOTH ?= 1
 WITH_VALGRIND ?= 1
 WITH_COVERAGE ?= 1
 WITH_PROCESS_TESTS ?= 1
@@ -187,6 +188,10 @@ GTEST_MAIN_LIB := $(GTEST_DIR)/lib/libgtest_main.a
 LIB_SOURCES := $(wildcard src/el1/*.cpp)
 LIB_HEADERS := $(wildcard src/el1/*.hpp)
 TEST_SOURCES := $(wildcard src/el1/test/*.cpp)
+
+ifeq ($(WITH_BLUETOOTH),0)
+LIB_SOURCES := $(filter-out src/el1/io_net_bluetooth.linux.cpp,$(LIB_SOURCES))
+endif
 TEST_HEADERS := $(wildcard src/el1/test/*.hpp)
 
 RELEASE_LIB_OBJECTS := $(patsubst src/el1/%.cpp,$(RELEASE_DIR)/obj/%.o,$(LIB_SOURCES))

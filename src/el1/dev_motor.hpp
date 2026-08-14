@@ -10,6 +10,7 @@ namespace el1::dev::motor
 	using namespace io::types;
 	using namespace system::time;
 	struct IMotorDriver;
+	struct IStallDetector;
 
 	enum class EMotorDirection
 	{
@@ -70,6 +71,14 @@ namespace el1::dev::motor
 		COAST
 	};
 
+	enum class EStallState
+	{
+		DISABLED,
+		UNKNOWN,
+		CLEAR,
+		STALLED
+	};
+
 	struct drive_current_t
 	{
 		float run_min;
@@ -119,6 +128,24 @@ namespace el1::dev::motor
 		virtual const system::waitable::IWaitable* OnTrigger() const EL_GETTER = 0;
 	};
 
+	// Optional motor capability. Hardware may implement this using load measurement,
+	// encoder following error, a DIAG pin, or a controller-internal locked-rotor detector.
+	// Enabled() arms/disarms the detector. On hardware where detection is coupled to
+	// automatic stall protection, arming may also enable that protection.
+	struct IStallDetector
+	{
+		virtual ~IStallDetector() {}
+
+		virtual bool Enabled(const bool state) EL_WARN_UNUSED_RESULT = 0;
+		virtual bool Enabled() const EL_GETTER = 0;
+		virtual EStallState State() const EL_GETTER = 0;
+		inline bool Detected() const EL_GETTER { return State() == EStallState::STALLED; }
+		virtual void Reset() const = 0;
+
+		// Optional event source. Polling-only implementations return nullptr.
+		virtual const system::waitable::IWaitable* OnStall() const EL_GETTER { return nullptr; }
+	};
+
 	struct IServo
 	{
 		virtual ~IServo() {}
@@ -163,9 +190,13 @@ namespace el1::dev::motor
 
 		virtual EDriverState State() const EL_GETTER = 0;
 
-		virtual bool HasStallDetection() const EL_GETTER = 0;
-		virtual bool StallDetected() const EL_GETTER = 0;
-		virtual void ResetStallDetection() const = 0;
+		virtual IStallDetector* StallDetector() { return nullptr; }
+		virtual const IStallDetector* StallDetector() const EL_GETTER { return nullptr; }
+
+		// Compatibility helpers for older users of the motor API.
+		inline bool HasStallDetection() const EL_GETTER { return StallDetector() != nullptr; }
+		inline bool StallDetected() const EL_GETTER { const IStallDetector* const detector = StallDetector(); return detector != nullptr && detector->Detected(); }
+		inline void ResetStallDetection() const { const IStallDetector* const detector = StallDetector(); if(detector != nullptr) detector->Reset(); }
 
 		virtual IServo* Servo() = 0;
 		virtual const IServo* Servo() const EL_GETTER = 0;
@@ -174,6 +205,11 @@ namespace el1::dev::motor
 	struct IStepperDriver : IMotorDriver
 	{
 		virtual ~IStepperDriver() {}
+
+		// Some combined servo/stepper devices expose an IStepperDriver object even when
+		// no physical STEP/DIR interface is connected. Callers which can fall back to
+		// another control path should check this capability first.
+		virtual bool StepDirectionAvailable() const EL_GETTER { return true; }
 
 		virtual void Step(const bool state) = 0;
 		virtual void Direction(const EMotorDirection dir) = 0;
@@ -184,7 +220,7 @@ namespace el1::dev::motor
 		virtual u32_t Microsteps(u32_t divider) EL_WARN_UNUSED_RESULT = 0;
 		virtual u32_t Microsteps() const EL_GETTER = 0;
 
-		inline u64_t StepsPerTurn() const { return FullStepResolution() * Microsteps(); }
+		inline u64_t StepsPerTurn() const { return (u64_t)FullStepResolution() * (u64_t)Microsteps(); }
 
 		void Steps(const u32_t n_step, system::time::TTime t_step, const bool quick = false);
 		inline void Step() { Steps(1, 0, false); }
@@ -234,10 +270,26 @@ namespace el1::dev::motor
 	class TStepperEmulation : public IStepperDriver
 	{
 		protected:
+			IServo* const servo;
+			IMotorDriver* const driver;
+			const s64_t encoder_steps_per_turn;
+			const u32_t full_step_resolution;
+			u32_t microsteps;
+			s64_t step_denominator;
+			EMotorDirection direction;
+			bool step_state;
+			bool enabled;
+			s64_t target_position;
+			s64_t step_remainder;
 			system::task::TFiber fib_control_loop;
 
+			void ControlLoop();
+			void WakeControlLoop();
+
 		public:
+			// The first overload derives the servo coordinate scale from IRotaryEncoder.
 			TStepperEmulation(IServo* const servo, const u32_t full_step_resolution);
+			TStepperEmulation(IServo* const servo, const u32_t full_step_resolution, const u64_t encoder_steps_per_turn);
 
 			bool Enabled(const bool state) final override;
 			bool Enabled() const final override EL_GETTER;
@@ -245,9 +297,8 @@ namespace el1::dev::motor
 			drive_current_t Amperage() const final override EL_GETTER;
 			const IPowerMeter* PowerMeter() const final override EL_GETTER;
 			EDriverState State() const final override EL_GETTER;
-			bool HasStallDetection() const final override EL_GETTER;
-			bool StallDetected() const final override EL_GETTER;
-			void ResetStallDetection() const final override;
+			IStallDetector* StallDetector() final override;
+			const IStallDetector* StallDetector() const final override EL_GETTER;
 			IServo* Servo() final override;
 			const IServo* Servo() const final override EL_GETTER;
 			void Step(const bool state) final override;
@@ -262,20 +313,35 @@ namespace el1::dev::motor
 	class IStepperGroup : public IStepperDriver
 	{
 		protected:
+			class TGroupStallDetector : public IStallDetector
+			{
+				protected:
+					IStepperGroup* const parent;
+
+				public:
+					constexpr explicit TGroupStallDetector(IStepperGroup* const parent) : parent(parent) {}
+					bool Enabled(const bool state) final override;
+					bool Enabled() const final override EL_GETTER;
+					EStallState State() const final override EL_GETTER;
+					void Reset() const final override;
+			};
+
+			TGroupStallDetector group_stall_detector;
 			virtual IStepperDriver* GroupMotor(const usys_t index) const = 0;
 
 		public:
+			constexpr IStepperGroup() : group_stall_detector(this) {}
 			bool Enabled(const bool state) override EL_WARN_UNUSED_RESULT;
 			bool Enabled() const override EL_GETTER;
 			drive_current_t Amperage(drive_current_t) override;
 			drive_current_t Amperage() const override EL_GETTER;
 			const IPowerMeter* PowerMeter() const override EL_GETTER;
 			EDriverState State() const override EL_GETTER;
-			bool HasStallDetection() const override EL_GETTER;
-			bool StallDetected() const override EL_GETTER;
-			void ResetStallDetection() const override;
+			IStallDetector* StallDetector() override;
+			const IStallDetector* StallDetector() const override EL_GETTER;
 			IServo* Servo() override;
 			const IServo* Servo() const override EL_GETTER;
+			bool StepDirectionAvailable() const override EL_GETTER;
 			void Step(const bool state) override;
 			void Direction(const EMotorDirection dir) override;
 			EMotorDirection Direction() const override EL_GETTER;
@@ -334,8 +400,9 @@ namespace el1::dev::motor
 			* This procedure removes the relative offset so the bridge becomes orthogonal to the linear guides again.
 			*
 			* @par How it works
-			* All drives are commanded synchronously toward a rigid hard stop in open-loop mode
-			* (servo correction disabled; stepper-like behavior can be emulated for servos via @c TStepperEmulation).
+			* All drives are commanded synchronously toward a rigid hard stop through a STEP/DIR abstraction.
+			* Native steppers are driven directly; servos without a usable STEP/DIR interface are adapted through
+			* @c TStepperEmulation and therefore remain closed-loop while following the emulated step position.
 			* When a drive reaches the stop it stalls; on stall detection that drive is disabled so it no longer pushes
 			* and cannot further twist the gantry. Remaining drives continue until they also contact the stop and stall.
 			* Once all drives have stalled, all sides are physically constrained to the same reference line and the gantry
