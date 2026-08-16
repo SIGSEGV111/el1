@@ -188,7 +188,7 @@ namespace el1::io::net::http
 			EL_ERROR(!IsHeaderNameChar(chr), TInvalidArgumentException, "header name", "HTTP header name contains an invalid character");
 
 		for(const char32_t chr : value)
-			EL_ERROR(chr == '\r' || chr == '\n' || chr == 0, TInvalidArgumentException, "header value", "HTTP header value contains CR, LF or NUU");
+			EL_ERROR(chr == '\r' || chr == '\n' || chr == 0, TInvalidArgumentException, "header value", "HTTP header value contains CR, LF or NUL");
 	}
 
 	static void ValidateRequestTarget(const TStringView target)
@@ -196,6 +196,12 @@ namespace el1::io::net::http
 		EL_ERROR(target.Length() == 0, TInvalidArgumentException, "url", "request URL must not be empty");
 		for(const char32_t chr : target)
 			EL_ERROR(chr <= 0x20 || chr == 0x7f, TInvalidArgumentException, "url", "HTTP request target contains whitespace or a control character");
+	}
+
+	static void ValidateDecodedRequestPath(const TStringView path)
+	{
+		for(const char32_t chr : path)
+			EL_ERROR(chr < 0x20 || chr == 0x7f, TInvalidArgumentException, "url", "decoded HTTP request path contains a control character");
 	}
 
 	static bool HeaderHasToken(const TStringView value, const TStringView token)
@@ -443,6 +449,11 @@ namespace el1::io::net::http
 				}
 			}
 
+			bool Complete() const EL_GETTER
+			{
+				return state == EState::DONE;
+			}
+
 			const IWaitable* OnInputReady() const final override
 			{
 				return state == EState::DONE ? nullptr : source.OnInputReady();
@@ -459,6 +470,9 @@ namespace el1::io::net::http
 			response.header_fields.ContentLength(0);
 		else if(response.header_fields.ContentLength() == NEG1 && response.version != EVersion::HTTP10)
 			response.header_fields.Set(U"Connection", U"close");
+
+		for(const auto& field : response.header_fields.Items())
+			ValidateHeaderField(field.key, field.value);
 
 		sink.WriteAll((const byte_t*)str_version, strlen(str_version));
 		sink.WriteAll((const byte_t*)" ", 1);
@@ -543,6 +557,14 @@ namespace el1::io::net::http
 			request.remote_address = remote_address;
 			request.method = MethodFromString(arr_req[0]);
 			request.version = VersionFromString(arr_req[2]);
+			try
+			{
+				ValidateRequestTarget(arr_req[1]);
+			}
+			catch(const IException&)
+			{
+				EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid request target");
+			}
 			request.url = std::move(arr_req[1]);
 
 			const usys_t pos_args = request.url.Find('?');
@@ -567,6 +589,14 @@ namespace el1::io::net::http
 			}
 
 			request.url = UrlDecode(std::move(request.url));
+			try
+			{
+				ValidateDecodedRequestPath(request.url);
+			}
+			catch(const IException&)
+			{
+				EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid decoded request path");
+			}
 
 			arr_req.Clear();
 
@@ -578,7 +608,14 @@ namespace el1::io::net::http
 
 				arr_req = request_line->Split(':', 2U);
 				EL_ERROR(arr_req.Count() != 2U, THttpProcessingException, EStatus::BAD_REQUEST, U"invalid header field encountered");
-				arr_req[0].Trim();
+				try
+				{
+					ValidateHeaderField(arr_req[0], arr_req[1]);
+				}
+				catch(const IException&)
+				{
+					EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid header field encountered");
+				}
 				arr_req[0].ToLower();
 				EL_ERROR(request.header_fields.Get(arr_req[0]) != nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"duplicate header field encountered");
 				arr_req[1].Trim();
@@ -587,12 +624,20 @@ namespace el1::io::net::http
 			arr_req.Clear();
 			EL_ERROR(request_line == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"header not correctly terminated by empty line");
 
-			const usys_t content_length = request.header_fields.ContentLength();
+			usys_t content_length;
+			try
+			{
+				content_length = request.header_fields.ContentLength();
+			}
+			catch(const IException&)
+			{
+				EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid Content-Length header");
+			}
 			const TString* const transfer_encoding = request.header_fields.Get(U"transfer-encoding");
 			IF_DEBUG_PRINTF("got Content-Length %zu%s\n", (size_t)content_length, transfer_encoding != nullptr ? " with Transfer-Encoding" : "");
 			EL_ERROR(transfer_encoding != nullptr && content_length != NEG1, THttpProcessingException, EStatus::BAD_REQUEST, U"request contains both Content-Length and Transfer-Encoding");
 
-			auto lp = ss.Limit(content_length);
+			TLimitSource<byte_t> limited_body(&ss, content_length);
 			TChunkedRequestSource chunked(ss);
 			if(transfer_encoding != nullptr)
 			{
@@ -604,7 +649,7 @@ namespace el1::io::net::http
 			}
 			else
 			{
-				request.body = content_length == NEG1 ? nullptr : &lp;
+				request.body = content_length == NEG1 ? nullptr : &limited_body;
 			}
 
 			EL_ERROR(request.method == EMethod::TRACE, THttpProcessingException, EStatus::METHOD_NOT_ALLOWED, U"TRACE is not supported");
@@ -618,6 +663,12 @@ namespace el1::io::net::http
 			handler(request, response);
 			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): returned from handler\n");
 
+			const bool request_body_consumed = transfer_encoding != nullptr ? chunked.Complete() : (content_length == NEG1 || limited_body.Remaining() == 0);
+			const TString* const connection = request.header_fields.Get(U"connection");
+			const bool request_close = connection != nullptr && HeaderHasToken(*connection, U"close");
+			if(!request_body_consumed || request_close)
+				response.header_fields.Set(U"Connection", U"close");
+
 			if(request.method == EMethod::HEAD)
 				response.body.reset(nullptr);
 
@@ -625,8 +676,8 @@ namespace el1::io::net::http
 			if(response.body != nullptr && response.header_fields.ContentLength() == NEG1 && (file = dynamic_cast<TFile*>(response.body.get())) != nullptr)
 				response.header_fields.ContentLength(file->Size() - file->Offset());
 
-			// Responses without a declared length are delimited by closing the connection.
-			const bool close_after_response = response.body != nullptr && response.header_fields.ContentLength() == NEG1;
+			// Responses without a declared length and requests with an unread body are delimited by closing the connection.
+			const bool close_after_response = !request_body_consumed || request_close || (response.body != nullptr && response.header_fields.ContentLength() == NEG1);
 
 			// send response
 			response_in_progress = true;
@@ -665,6 +716,7 @@ namespace el1::io::net::http
 						response.status = http_error->status;
 						response.version = EVersion::HTTP11;
 						response.body = nullptr;
+						response.header_fields.Set(U"Connection", U"close");
 						response_in_progress = true;
 						SendResponse(sink, response);
 					}
@@ -674,9 +726,13 @@ namespace el1::io::net::http
 						response_t response;
 						response.status = EStatus::INTERNAL_SERVER_ERROR;
 						response.version = EVersion::HTTP11;
+						response.header_fields.Set(U"Connection", U"close");
 						response_in_progress = true;
 						SendResponse(sink, response);
 					}
+
+					source.Close();
+					sink.Close();
 				}
 				catch(const IException&)
 				{

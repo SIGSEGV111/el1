@@ -150,6 +150,92 @@ namespace
 		EXPECT_FALSE(handler_called);
 	}
 
+	TEST(io_net_http, HandleSingleRequest_rejects_request_target_controls)
+	{
+		const char str_src[] = "GET /\x01 HTTP/1.1\r\nContent-Length: 0\r\n\r\n";
+		TFifo<byte_t> fifo_c2s;
+		TFifo<byte_t> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), sizeof(str_src) - 1);
+		fifo_c2s.CloseOutput();
+
+		bool handler_called = false;
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t&, THttpServer::response_t&)
+		{
+			handler_called = true;
+		});
+		EXPECT_EQ(status, EStatus::BAD_REQUEST);
+		EXPECT_FALSE(handler_called);
+	}
+
+	TEST(io_net_http, HandleSingleRequest_rejects_percent_encoded_path_controls)
+	{
+		const char* str_src = "GET /safe%0ainjected HTTP/1.1\r\nContent-Length: 0\r\n\r\n";
+		TFifo<byte_t> fifo_c2s;
+		TFifo<byte_t> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		bool handler_called = false;
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t&, THttpServer::response_t&)
+		{
+			handler_called = true;
+		});
+		EXPECT_EQ(status, EStatus::BAD_REQUEST);
+		EXPECT_FALSE(handler_called);
+	}
+
+	TEST(io_net_http, HandleSingleRequest_rejects_whitespace_before_header_colon)
+	{
+		const char* str_src = "GET / HTTP/1.1\r\nContent-Length : 0\r\n\r\n";
+		TFifo<byte_t> fifo_c2s;
+		TFifo<byte_t> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		bool handler_called = false;
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t&, THttpServer::response_t&)
+		{
+			handler_called = true;
+		});
+		EXPECT_EQ(status, EStatus::BAD_REQUEST);
+		EXPECT_FALSE(handler_called);
+	}
+
+	TEST(io_net_http, HandleSingleRequest_closes_connection_for_unread_request_body)
+	{
+		const char* str_src = "POST /ignore HTTP/1.1\r\nContent-Length: 4\r\n\r\ntest";
+		TFifo<byte_t> fifo_c2s;
+		TFifo<byte_t> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [](const THttpServer::request_t&, THttpServer::response_t& response)
+		{
+			response.status = EStatus::OK;
+		});
+		EXPECT_EQ(status, EStatus::OK);
+		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
+		EXPECT_EQ(str_response, U"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: 0\r\n\r\n");
+	}
+
+	TEST(io_net_http, HandleSingleRequest_rejects_response_header_injection)
+	{
+		const char* str_src = "GET / HTTP/1.1\r\nContent-Length: 0\r\n\r\n";
+		TFifo<byte_t> fifo_c2s;
+		TFifo<byte_t> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [](const THttpServer::request_t&, THttpServer::response_t& response)
+		{
+			response.status = EStatus::OK;
+			response.header_fields.Set(U"X-Test", U"safe\r\nInjected: yes");
+		});
+		EXPECT_EQ(status, EStatus::INTERNAL_SERVER_ERROR);
+		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
+		EXPECT_EQ(str_response, U"");
+	}
+
 	TEST(io_net_http, HandleSingleRequest_unknown_length_response_closes_stream)
 	{
 		const char* str_src = "GET /preview HTTP/1.1\r\nContent-Length: 0\r\n\r\n";

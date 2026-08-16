@@ -301,6 +301,7 @@ namespace el1::io::file
 
 			// opens or creates a file
 			TFile(const TPath& path, const TAccess access = TAccess::RO, const ECreateMode create = ECreateMode::OPEN);
+			TFile(const TPath& path, const TAccess access, const ECreateMode create, const bool follow_symlinks);
 			TFile(const TDirectory& dir, const TStringView filename, const TAccess access = TAccess::RO, const ECreateMode create = ECreateMode::OPEN);
 
 			// takes control over a open file handle

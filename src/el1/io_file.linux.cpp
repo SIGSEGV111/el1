@@ -479,7 +479,12 @@ namespace el1::io::file
 		this->handle = THandle(EL_SYSERR(openat(temp_dir.Handle(), ".", O_RDWR|O_CLOEXEC|O_TMPFILE, 0666)), true);
 	}
 
-	TFile::TFile(const TPath& path, const TAccess access, const ECreateMode create) : access(access)
+	TFile::TFile(const TPath& path, const TAccess access, const ECreateMode create) :
+		TFile(path, access, create, true)
+	{
+	}
+
+	TFile::TFile(const TPath& path, const TAccess access, const ECreateMode create, const bool follow_symlinks) : access(access)
 	{
 		TPath abspath = path;
 		abspath.MakeAbsolute();
@@ -493,7 +498,7 @@ namespace el1::io::file
 					rmdir(path);
 			}
 
-			const int flags = AccessToFlags(access) | CreateModeToFlags(create) | O_NOCTTY | O_CLOEXEC;
+			const int flags = AccessToFlags(access) | CreateModeToFlags(create) | O_NOCTTY | O_CLOEXEC | (follow_symlinks ? 0 : O_NOFOLLOW);
 			this->handle = THandle(EL_SYSERR(open(abspath, flags, 0666)), true);
 		}
 		catch(const error::IException& e)

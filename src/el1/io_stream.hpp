@@ -609,6 +609,8 @@ namespace el1::io::stream
 			iosize_t n_remaining;
 
 		public:
+			iosize_t Remaining() const EL_GETTER { return n_remaining; }
+
 			usys_t Read(T* const arr_items, const usys_t n_items_max) EL_WARN_UNUSED_RESULT
 			{
 				if(n_remaining == 0)
