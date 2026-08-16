@@ -39,7 +39,7 @@ namespace el1::io::net::http
 		return new THttpProcessingException(*this);
 	}
 
-	static EMethod MethodFromString(const TString& str)
+	static EMethod MethodFromString(const TStringView str)
 	{
 		     if(str == U"GET") return EMethod::GET;
 		else if(str == U"POST") return EMethod::POST;
@@ -53,7 +53,7 @@ namespace el1::io::net::http
 		else EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"unknown method");
 	}
 
-	static EVersion VersionFromString(const TString& str)
+	static EVersion VersionFromString(const TStringView str)
 	{
 		     if(str == U"HTTP/1.1") return EVersion::HTTP11;
 		else if(str == U"HTTP/1.0") return EVersion::HTTP10;
@@ -116,16 +116,16 @@ namespace el1::io::net::http
 		EL_THROW(TLogicException);
 	}
 
-	static bool HeaderNameEquals(const TString& a, const TString& b)
+	static bool HeaderNameEquals(const TStringView a, const TStringView b)
 	{
-		TString aa = a;
-		TString bb = b;
+		TString aa(a);
+		TString bb(b);
 		aa.ToLower();
 		bb.ToLower();
 		return aa == bb;
 	}
 
-	static TString* FindHeaderField(THttpHeaderFields& fields, const TString& name)
+	static TString* FindHeaderField(THttpHeaderFields& fields, const TStringView name)
 	{
 		for(auto& field : fields.Items())
 			if(HeaderNameEquals(field.key, name))
@@ -133,7 +133,7 @@ namespace el1::io::net::http
 		return nullptr;
 	}
 
-	static const TString* FindHeaderField(const THttpHeaderFields& fields, const TString& name)
+	static const TString* FindHeaderField(const THttpHeaderFields& fields, const TStringView name)
 	{
 		for(const auto& field : fields.Items())
 			if(HeaderNameEquals(field.key, name))
@@ -153,7 +153,7 @@ namespace el1::io::net::http
 		fields.Add(std::move(name), std::move(value));
 	}
 
-	static bool RemoveHeaderField(THttpHeaderFields& fields, const TString& name)
+	static bool RemoveHeaderField(THttpHeaderFields& fields, const TStringView name)
 	{
 		for(usys_t i = 0; i < fields.Items().Count(); i++)
 			if(HeaderNameEquals(fields.Items()[i].key, name))
@@ -181,37 +181,38 @@ namespace el1::io::net::http
 		return true;
 	}
 
-	static void ValidateHeaderField(const TString& name, const TString& value)
+	static void ValidateHeaderField(const TStringView name, const TStringView value)
 	{
 		EL_ERROR(name.Length() == 0, TInvalidArgumentException, "header name", "HTTP header name must not be empty");
-		for(const char32_t chr : name.chars)
+		for(const char32_t chr : name)
 			EL_ERROR(!IsHeaderNameChar(chr), TInvalidArgumentException, "header name", "HTTP header name contains an invalid character");
 
-		for(const char32_t chr : value.chars)
+		for(const char32_t chr : value)
 			EL_ERROR(chr == '\r' || chr == '\n' || chr == 0, TInvalidArgumentException, "header value", "HTTP header value contains CR, LF or NUU");
 	}
 
-	static void ValidateRequestTarget(const TString& target)
+	static void ValidateRequestTarget(const TStringView target)
 	{
 		EL_ERROR(target.Length() == 0, TInvalidArgumentException, "url", "request URL must not be empty");
-		for(const char32_t chr : target.chars)
+		for(const char32_t chr : target)
 			EL_ERROR(chr <= 0x20 || chr == 0x7f, TInvalidArgumentException, "url", "HTTP request target contains whitespace or a control character");
 	}
 
-	static bool HeaderHasToken(const TString& value, TString token)
+	static bool HeaderHasToken(const TStringView value, const TStringView token)
 	{
-		token.ToLower();
-		for(TString item : value.Split(','))
+		TString token_lower(token);
+		token_lower.ToLower();
+		for(TString item : TString(value).Split(','))
 		{
 			item.Trim();
 			item.ToLower();
-			if(item == token)
+			if(item == token_lower)
 				return true;
 		}
 		return false;
 	}
 
-	static void WriteString(ISink<byte_t>& sink, const TString& str)
+	static void WriteString(ISink<byte_t>& sink, const TStringView str)
 	{
 		auto cstr = str.MakeCStr();
 		sink.WriteAll(reinterpret_cast<const byte_t*>(cstr.get()), strlen(cstr.get()));
@@ -292,7 +293,7 @@ namespace el1::io::net::http
 		}
 	}
 
-	static usys_t ParseHex(const TString& str)
+	static usys_t ParseHex(const TStringView str)
 	{
 		EL_ERROR(str.Length() == 0, TException, U"empty HTTP chunk size");
 		usys_t value = 0;
@@ -358,10 +359,10 @@ namespace el1::io::net::http
 				}
 			}
 
-			void ParseSize(const TString& input)
+			void ParseSize(const TStringView input)
 			{
 				const usys_t pos_extension = input.Find(';');
-				TString str_size = pos_extension == NEG1 ? input : input.SliceBE(0, pos_extension);
+				TString str_size = pos_extension == NEG1 ? TString(input) : TString(input.SliceBE(0, pos_extension));
 				str_size.Trim();
 				try
 				{
@@ -794,18 +795,18 @@ namespace el1::io::net::http
 		}
 		else if(!HeaderNameEquals(name, U"set-cookie"))
 		{
-			*existing += TStringView(U", ");
+			*existing += U", ";
 			*existing += value;
 		}
 	}
 
 
-	static void ParseHeaderLine(const TString& line, TString& name, TString& value)
+	static void ParseHeaderLine(const TStringView line, TString& name, TString& value)
 	{
 		const usys_t pos_colon = line.Find(':');
 		EL_ERROR(pos_colon == NEG1 || pos_colon == 0, TException, U"invalid HTTP header line");
-		name = line.SliceBE(0, pos_colon);
-		value = line.SliceSL(pos_colon + 1);
+		name = TString(line.SliceBE(0, pos_colon));
+		value = TString(line.SliceSL(pos_colon + 1));
 		name.Trim();
 		value.Trim();
 		EL_ERROR(name.Length() == 0, TException, U"empty HTTP header name");
@@ -844,16 +845,16 @@ namespace el1::io::net::http
 		}
 	}
 
-	static TString RequestPath(const TString& url)
+	static TString RequestPath(const TStringView url)
 	{
 		const usys_t pos_query = url.Find('?');
-		TString path = pos_query == NEG1 ? url : url.SliceBE(0, pos_query);
+		TString path = pos_query == NEG1 ? TString(url) : TString(url.SliceBE(0, pos_query));
 		if(path.Length() == 0 || path[0] != '/')
 			return U"/";
 		return path;
 	}
 
-	static TString DefaultCookiePath(const TString& request_path)
+	static TString DefaultCookiePath(const TStringView request_path)
 	{
 		if(request_path.Length() == 0 || request_path[0] != '/')
 			return U"/";
@@ -864,8 +865,10 @@ namespace el1::io::net::http
 		return request_path.SliceBE(0, pos_slash);
 	}
 
-	static bool DomainMatches(TString host, TString domain)
+	static bool DomainMatches(const TStringView host_input, const TStringView domain_input)
 	{
+		TString host(host_input);
+		TString domain(domain_input);
 		host.ToLower();
 		domain.ToLower();
 		while(domain.Length() != 0 && domain[0] == '.')
@@ -907,7 +910,7 @@ namespace el1::io::net::http
 		return *a == *b;
 	}
 
-	static bool ParseCookieExpires(const TString& value, s64_t& unix_time)
+	static bool ParseCookieExpires(const TStringView value, s64_t& unix_time)
 	{
 		auto cstr = value.MakeCStr();
 		char weekday[4] = {};
@@ -937,7 +940,7 @@ namespace el1::io::net::http
 		return true;
 	}
 
-	static bool CookiePathMatches(const TString& request_path, const TString& cookie_path)
+	static bool CookiePathMatches(const TStringView request_path, const TStringView cookie_path)
 	{
 		if(cookie_path == U"/")
 			return true;
@@ -950,7 +953,7 @@ namespace el1::io::net::http
 		return request_path[cookie_path.Length()] == '/';
 	}
 
-	const TString* THttpClient::response_header_t::FindHeader(const TString& name) const
+	const TString* THttpClient::response_header_t::FindHeader(const TStringView name) const
 	{
 		for(const auto& field : header_lines)
 			if(HeaderNameEquals(field.key, name))
@@ -958,7 +961,7 @@ namespace el1::io::net::http
 		return nullptr;
 	}
 
-	TList<TString> THttpClient::response_header_t::FindHeaders(const TString& name) const
+	TList<TString> THttpClient::response_header_t::FindHeaders(const TStringView name) const
 	{
 		TList<TString> values;
 		for(const auto& field : header_lines)
@@ -1003,12 +1006,12 @@ namespace el1::io::net::http
 		SetHeaderField(request_headers, std::move(name), std::move(value));
 	}
 
-	const TString* THttpClient::FindHeader(const TString& name) const
+	const TString* THttpClient::FindHeader(const TStringView name) const
 	{
 		return FindHeaderField(request_headers, name);
 	}
 
-	bool THttpClient::RemoveHeader(const TString& name)
+	bool THttpClient::RemoveHeader(const TStringView name)
 	{
 		return RemoveHeaderField(request_headers, name);
 	}
@@ -1022,9 +1025,9 @@ namespace el1::io::net::http
 		}
 	}
 
-	void THttpClient::ProcessSetCookie(const TString& value, const TString& request_path)
+	void THttpClient::ProcessSetCookie(const TStringView value, const TStringView request_path)
 	{
-		TList<TString> parts = value.Split(';');
+		TList<TString> parts = TString(value).Split(';');
 		if(parts.Count() == 0)
 			return;
 
@@ -1117,7 +1120,7 @@ namespace el1::io::net::http
 			cookies.Append(std::move(cookie));
 	}
 
-	TString THttpClient::BuildCookieHeader(const TString& request_path)
+	TString THttpClient::BuildCookieHeader(const TStringView request_path)
 	{
 		const s64_t now = system::time::TTime::Now().Seconds();
 		TString result;
@@ -1133,9 +1136,9 @@ namespace el1::io::net::http
 				continue;
 
 			if(result.Length() != 0)
-				result += TStringView(U"; ");
+				result += U"; ";
 			result += cookie.name;
-			result += TStringView(U"=");
+			result += U"=";
 			result += cookie.value;
 		}
 
@@ -1204,7 +1207,7 @@ namespace el1::io::net::http
 				TString* const explicit_cookie = FindHeaderField(headers, U"Cookie");
 				if(explicit_cookie != nullptr && explicit_cookie->Length() != 0)
 				{
-					jar_cookie += TStringView(U"; ");
+					jar_cookie += U"; ";
 					jar_cookie += *explicit_cookie;
 				}
 				SetHeaderField(headers, U"Cookie", std::move(jar_cookie));
@@ -1338,8 +1341,9 @@ namespace el1::io::net::http
 	}
 
 
-	TString UrlDecode(TString url)
+	TString UrlDecode(const TStringView input)
 	{
+		TString url(input);
 		if(url.Length() == 0) return url;
 		const TString hex = U"0123456789abcdef";
 		for(usys_t i = 0; i + 2 < url.Length(); i++)
@@ -1352,7 +1356,7 @@ namespace el1::io::net::http
 		return url.chars.Pipe().Map([](char32_t chr){ return (byte_t)chr; }).Transform(TUTF8Decoder()).Collect();
 	}
 
-	TString UrlEncode(TString url)
+	TString UrlEncode(const TStringView url)
 	{
 		EL_NOT_IMPLEMENTED;
 	}

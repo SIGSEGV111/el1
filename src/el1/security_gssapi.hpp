@@ -37,7 +37,7 @@ namespace el1::security::gssapi
 			data_t* data;
 
 		public:
-			explicit TInitiatorContext(const TString& service_name);
+			explicit TInitiatorContext(const TStringView service_name);
 			TInitiatorContext(const TInitiatorContext&) = delete;
 			TInitiatorContext& operator=(const TInitiatorContext&) = delete;
 			~TInitiatorContext();

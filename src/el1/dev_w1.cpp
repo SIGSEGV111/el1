@@ -65,7 +65,7 @@ namespace el1::dev::w1
 		return v;
 	}
 
-	uuid_t uuid_t::FromString(const TString& text)
+	uuid_t uuid_t::FromString(const TStringView text)
 	{
 		static const usys_t OCTET_POSITIONS[8] = { 0, 3, 6, 9, 12, 15, 18, 21 };
 		EL_ERROR(text.Length() != 23 || text[2] != '|' || text[5] != ':' || text[8] != ':'

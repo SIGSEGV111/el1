@@ -2,13 +2,9 @@
 
 #include "io_types.hpp"
 #include "io_stream.hpp"
+#include "io_text_string.hpp"
 #include "system_time.hpp"
 #include "error.hpp"
-
-namespace io::text::string
-{
-	class TString;
-}
 
 namespace el1::dev::w1
 {
@@ -51,7 +47,7 @@ namespace el1::dev::w1
 		static const uuid_t NULL_VALUE;
 
 		static uuid_t FromInt(const u64_t);
-		static uuid_t FromString(const io::text::string::TString&);
+		static uuid_t FromString(const io::text::string::TStringView);
 	};
 
 	struct rom_t

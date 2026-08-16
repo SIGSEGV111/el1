@@ -68,7 +68,7 @@ namespace el1::io::file
 
 	TString TPath::Extension() const
 	{
-		const usys_t pos = components[-1].Find(TStringView(U"."), -1, true);
+		const usys_t pos = components[-1].Find(U".", -1, true);
 		if(pos == NEG1)
 			return U"";
 		else
@@ -77,7 +77,7 @@ namespace el1::io::file
 
 	TString TPath::BareName() const
 	{
-		const usys_t pos = components[-1].Find(TStringView(U"."), -1, true);
+		const usys_t pos = components[-1].Find(U".", -1, true);
 		if(pos == NEG1)
 			return components[-1];
 		else
@@ -187,7 +187,7 @@ namespace el1::io::file
 
 	/************************************************************************/
 
-	bool TDirectory::Contains(const TString& name) const
+	bool TDirectory::Contains(const TStringView name) const
 	{
 		bool result = false;
 		Enum([&](const direntry_t& dent) {

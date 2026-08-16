@@ -104,13 +104,13 @@ namespace el1::db
 	struct IDatabaseConnection
 	{
 		virtual ~IDatabaseConnection() {}
-		virtual std::unique_ptr<IStatement> Prepare(const TString& sql) = 0;
-		virtual std::unique_ptr<IResultStream> Execute(const TString& sql, array_t<query_arg_t> args = array_t<query_arg_t>()) = 0;
+		virtual std::unique_ptr<IStatement> Prepare(const TStringView sql) = 0;
+		virtual std::unique_ptr<IResultStream> Execute(const TStringView sql, array_t<query_arg_t> args = array_t<query_arg_t>()) = 0;
 
-		std::unique_ptr<IResultStream> Execute(const TString& sql, const TList<query_arg_t>& args) { return Execute(sql, (array_t<query_arg_t>)args); }
+		std::unique_ptr<IResultStream> Execute(const TStringView sql, const TList<query_arg_t>& args) { return Execute(sql, (array_t<query_arg_t>)args); }
 
 		template<typename ... A>
-		std::unique_ptr<IResultStream> Execute(const TString& sql, const A& ... a);
+		std::unique_ptr<IResultStream> Execute(const TStringView sql, const A& ... a);
 	};
 
 	/***************************************************************************************************/
@@ -191,7 +191,7 @@ namespace el1::db
 	}
 
 	template<typename ... A>
-	std::unique_ptr<IResultStream> IDatabaseConnection::Execute(const TString& sql, const A& ... a)
+	std::unique_ptr<IResultStream> IDatabaseConnection::Execute(const TStringView sql, const A& ... a)
 	{
 		TList<query_arg_t> args;
 		_AddQueryArg(args, a ...);

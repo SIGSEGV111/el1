@@ -579,11 +579,11 @@ namespace el1::db::postgres
 		return new TPostgresException(*this);
 	}
 
-	TPostgresException::TPostgresException(void* pg_connection, const TString& description) : message(TString::Format(U"%s: %s", description, PQerrorMessage((PGconn*)pg_connection)))
+	TPostgresException::TPostgresException(void* pg_connection, const TStringView description) : message(TString::Format(U"%s: %s", description, PQerrorMessage((PGconn*)pg_connection)))
 	{
 	}
 
-	TPostgresException::TPostgresException(PGresult* pg_result, const TString& description) : message(TString::Format(U"%s: %s", description, PQresultErrorMessage(pg_result)))
+	TPostgresException::TPostgresException(PGresult* pg_result, const TStringView description) : message(TString::Format(U"%s: %s", description, PQresultErrorMessage(pg_result)))
 	{
 	}
 
@@ -830,10 +830,10 @@ namespace el1::db::postgres
 		exec += name;
 		if(args.Count() > 0)
 		{
-			exec += TStringView(U"($1");
+			exec += U"($1";
 			for(usys_t i = 1; i < args.Count(); i++)
 				exec += TString::Format(U",$%d", i);
-			exec += TStringView(U")");
+			exec += U")";
 		}
 		return conn->Execute(exec, args);
 	}
@@ -850,11 +850,12 @@ namespace el1::db::postgres
 
 	/**********************************************************************************/
 
-	static TString QuoteIdentifier(TString identifier)
+	static TString QuoteIdentifier(const TStringView input)
 	{
+		TString identifier(input);
 		EL_ERROR(identifier.Length() == 0, TInvalidArgumentException, "channel_name", "PostgreSQL notification channel names must not be empty");
-		identifier.Replace(TStringView(U"\""), TStringView(U"\"\""));
-		identifier.Insert(0, TStringView(U"\""));
+		identifier.Replace(U"\"", U"\"\"");
+		identifier.Insert(0, U"\"");
 		identifier += '"';
 		return identifier;
 	}
@@ -1145,23 +1146,23 @@ namespace el1::db::postgres
 		Disconnect();
 	}
 
-	void TPostgresConnection::StartNotifyChannel(const TString& channel_name)
+	void TPostgresConnection::StartNotifyChannel(const TStringView channel_name)
 	{
 		Execute(TString::Format(U"LISTEN %s", QuoteIdentifier(channel_name)))->DiscardAllRows();
 	}
 
-	void TPostgresConnection::ShutdownNotifyChannel(const TString& channel_name)
+	void TPostgresConnection::ShutdownNotifyChannel(const TStringView channel_name)
 	{
 		Execute(TString::Format(U"UNLISTEN %s", QuoteIdentifier(channel_name)))->DiscardAllRows();
 		notify_channels.Remove(channel_name);
 	}
 
-	std::unique_ptr<IStatement> TPostgresConnection::Prepare(const TString& sql)
+	std::unique_ptr<IStatement> TPostgresConnection::Prepare(const TStringView sql)
 	{
 		return New<TStatement>(this, sql);
 	}
 
-	std::unique_ptr<IResultStream> TPostgresConnection::Execute(const TString& sql, array_t<query_arg_t> args)
+	std::unique_ptr<IResultStream> TPostgresConnection::Execute(const TStringView sql, array_t<query_arg_t> args)
 	{
 		EL_ERROR(args.Count() > (usys_t)std::numeric_limits<int>::max(), TInvalidArgumentException, "args", "too many query arguments");
 
@@ -1216,7 +1217,7 @@ namespace el1::db::postgres
 		return rs;
 	}
 
-	std::unique_ptr<TChannelListener> TPostgresConnection::SubscribeNotifyChannel(const TString& channel_name)
+	std::unique_ptr<TChannelListener> TPostgresConnection::SubscribeNotifyChannel(const TStringView channel_name)
 	{
 		std::shared_ptr<TNotifyChannel>* channel = notify_channels.Get(channel_name);
 		if(channel == nullptr)

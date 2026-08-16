@@ -55,7 +55,7 @@ namespace el1::io::net::url
 		}
 	}
 
-	u16_t TUrl::DefaultPort(const TString& scheme)
+	u16_t TUrl::DefaultPort(const TStringView scheme)
 	{
 		if(scheme == U"http")
 			return 80;

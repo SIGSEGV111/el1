@@ -24,7 +24,7 @@ namespace el1::security::gssapi
 			if(GSS_ERROR(major))
 				break;
 			if(result.Length() > 0)
-				result += TStringView(U"; ");
+				result += U"; ";
 			if(buffer.length > 0)
 				result += TString((const char*)buffer.value, buffer.length);
 			gss_release_buffer(&minor, &buffer);
@@ -50,7 +50,7 @@ namespace el1::security::gssapi
 	{
 	}
 
-	TInitiatorContext::TInitiatorContext(const TString& service_name) :
+	TInitiatorContext::TInitiatorContext(const TStringView service_name) :
 		data(new data_t())
 	{
 		const auto service_cstr = service_name.MakeCStr();

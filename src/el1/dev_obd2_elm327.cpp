@@ -43,7 +43,7 @@ namespace el1::dev::obd2::elm327
 		}
 	}
 
-	TString TELM327::Command(const TString& command)
+	TString TELM327::Command(const TStringView command)
 	{
 		FlushInput();
 
@@ -85,10 +85,10 @@ namespace el1::dev::obd2::elm327
 		return Command(U"ATZ");
 	}
 
-	void TELM327::ExpectOk(const TString& command)
+	void TELM327::ExpectOk(const TStringView command)
 	{
 		const TString response = Command(command);
-		EL_ERROR(!response.Upper().Contains(TStringView(U"OK")), TException, TString::Format(U"ELM327 adapter rejected %q: %q", command, response));
+		EL_ERROR(!response.Upper().Contains(U"OK"), TException, TString::Format(U"ELM327 adapter rejected %q: %q", command, response));
 	}
 
 	TString TELM327::Initialize(const EProtocol protocol)
@@ -228,7 +228,7 @@ namespace el1::dev::obd2::elm327
 		return static_cast<u8_t>(character - 'A' + 10);
 	}
 
-	void TELM327::AppendHexLine(TString& hex, const TString& line)
+	void TELM327::AppendHexLine(TString& hex, const TStringView line)
 	{
 		usys_t start = 0;
 		while(start < line.Length() && IsAsciiWhitespace(line[start]))
@@ -241,12 +241,13 @@ namespace el1::dev::obd2::elm327
 				hex += line[i];
 	}
 
-	TList<u8_t> TELM327::ParseReadDataByIdentifierResponse(const TString& response, const u16_t did)
+	TList<u8_t> TELM327::ParseReadDataByIdentifierResponse(const TStringView response, const u16_t did)
 	{
-		const TString text = response.Upper();
-		if(text.Contains(TStringView(U"NO DATA")) || text.Contains(TStringView(U"STOPPED")) || text.Contains(TStringView(U"UNABLE TO CONNECT")))
+		TString text(response);
+		text.ToUpper();
+		if(text.Contains(U"NO DATA") || text.Contains(U"STOPPED") || text.Contains(U"UNABLE TO CONNECT"))
 			return {};
-		EL_ERROR(text.Contains(TStringView(U"ERROR")) || text.Contains('?'), TException, TString::Format(U"ELM327 error for DID %04x: %q", static_cast<u32_t>(did), response));
+		EL_ERROR(text.Contains(U"ERROR") || text.Contains('?'), TException, TString::Format(U"ELM327 error for DID %04x: %q", static_cast<u32_t>(did), response));
 
 		TString hex;
 		TString line;

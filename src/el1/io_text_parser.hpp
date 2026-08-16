@@ -63,7 +63,6 @@ namespace el1::io::text::parser
 			return std::move(*value);
 		}
 
-		auto Parse(const TString& str, const TParseLimits limits = {}) const -> return_t { return Parse(str.View(), limits); }
 
 		/** Return completion candidates for input up to cursor. Characters after cursor are ignored and replacement ranges refer to str. */
 		auto Complete(const TStringView str, const usys_t cursor, const TParseLimits limits = {}) const -> TList<completion_t>
@@ -77,8 +76,6 @@ namespace el1::io::text::parser
 
 		/** Return completion candidates at the end of str. */
 		auto Complete(const TStringView str, const TParseLimits limits = {}) const -> TList<completion_t> { return Complete(str, str.Length(), limits); }
-		auto Complete(const TString& str, const usys_t cursor, const TParseLimits limits = {}) const -> TList<completion_t> { return Complete(str.View(), cursor, limits); }
-		auto Complete(const TString& str, const TParseLimits limits = {}) const -> TList<completion_t> { return Complete(str.View(), str.Length(), limits); }
 	};
 
 	template<typename T, typename F>

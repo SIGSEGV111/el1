@@ -266,7 +266,7 @@ namespace el1::io::serialization::json
 	}
 
 	template<typename T>
-	T FromString(const TString& text, const TDeserializeOptions& options = {})
+	T FromString(const TStringView text, const TDeserializeOptions& options = {})
 	{
 		return FromValue<T>(TJsonValue::Parse(text), options);
 	}

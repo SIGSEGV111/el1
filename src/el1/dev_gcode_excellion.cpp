@@ -29,7 +29,7 @@ namespace el1::dev::gcode::excellion
 			if(end) return;
 			if(header)
 			{
-				if(line.BeginsWith(TStringView(U"METRIC")) || line.BeginsWith(TStringView(U"INCH")))
+				if(line.BeginsWith(U"METRIC") || line.BeginsWith(U"INCH"))
 				{
 					auto tokens = line.Split(',');
 					if(tokens[0] == U"METRIC")
@@ -48,7 +48,7 @@ namespace el1::dev::gcode::excellion
 					header = false;
 				else if(line == U"M48")
 					; // start of program
-				else if(line.BeginsWith(TStringView(U"T")))
+				else if(line.BeginsWith(U"T"))
 				{
 					// tool definition
 					auto tokens = line.Split('C', 2);
@@ -67,13 +67,13 @@ namespace el1::dev::gcode::excellion
 					; // pause - ignored
 				else if(line == U"G91")
 					EL_THROW(TException, U"relative position mode not supported");
-				else if(line.BeginsWith(TStringView(U"T")))
+				else if(line.BeginsWith(U"T"))
 				{
 					// tool select
 					active_tool = line.SliceSL(1).ToInteger();
 
 				}
-				else if(line.BeginsWith(TStringView(U"X")))
+				else if(line.BeginsWith(U"X"))
 				{
 					// hole pos
 					auto sposs = line.SliceSL(1).Split('Y');

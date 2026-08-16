@@ -186,14 +186,14 @@ namespace el1::dev::gpio::hd44780
 		dram_new[dram_addr] = TranslateCharToDram(chr);
 	}
 
-	void THD44780::Text(const TString str)
+	void THD44780::Text(const TStringView str)
 	{
 		unsigned x = 0;
 		unsigned y = 0;
 
 		memset(dram_new, TranslateCharToDram(' '), sizeof(dram_new));
 
-		for(char32_t chr : str.chars)
+		for(const char32_t chr : str)
 		{
 			if(chr == '\n')
 			{

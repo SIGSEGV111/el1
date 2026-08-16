@@ -459,41 +459,41 @@ namespace el1::io::format::json
 		return str;
 	}
 
-	TString JsonUnquote(const TString& input)
+	TString JsonUnquote(const TStringView input)
 	{
 		TJsonValue value = TJsonValue::Parse(input);
 		EL_ERROR(!value.IsString(), TInvalidArgumentException, "input", "input must contain one JSON string");
 		return value.String();
 	}
 
-	TString JsonQuote(const TString& input)
+	TString JsonQuote(const TStringView input)
 	{
 		TString output;
 
 		output.chars.Append('\"');
-		for(usys_t i = 0; i < input.chars.Count(); i++)
-			if(input.chars[i] == '\"' || input.chars[i] == '\\')
+		for(usys_t i = 0; i < input.Length(); i++)
+			if(input[i] == '\"' || input[i] == '\\')
 			{
 				output.chars.Append('\\');
-				output.chars.Append(input.chars[i]);
+				output.chars.Append(input[i]);
 			}
-			else if(input.chars[i] == '\n')
+			else if(input[i] == '\n')
 			{
 				output.chars.Append('\\');
 				output.chars.Append('n');
 			}
-			else if(input.chars[i] == '\t')
+			else if(input[i] == '\t')
 			{
 				output.chars.Append('\\');
 				output.chars.Append('t');
 			}
-			else if(input.chars[i] < 32)
+			else if(input[i] < 32)
 			{
-				output += TString::Format(U"\\u%04x", input.chars[i]);
+				output += TString::Format(U"\\u%04x", input[i]);
 			}
 			else
 			{
-				output.chars.Append(input.chars[i]);
+				output.chars.Append(input[i]);
 			}
 
 		output.chars.Append('\"');
@@ -587,7 +587,7 @@ namespace el1::io::format::json
 		);
 	}
 
-	const TJsonValue& TJsonValue::operator()(const TString& key) const
+	const TJsonValue& TJsonValue::operator()(const TStringView key) const
 	{
 		return (IsMap() && Map().Contains(key)) ? Map()[key] : NULLVALUE;
 	}
@@ -635,9 +635,9 @@ namespace el1::io::format::json
 		return token.Contains(U'.') || token.Contains(U'e') || token.Contains(U'E') ? ConvertNumber(token) : ConvertInteger(token);
 	}
 
-	TJsonValue TJsonValue::Parse(const TString& str, const bool tolerant)
+	TJsonValue TJsonValue::Parse(const TStringView str, const bool tolerant)
 	{
-		TStringViewTextReader reader(str.View());
+		TStringViewTextReader reader(str);
 		TJsonValue value = Parse(reader, tolerant);
 		if(reader.Ensure(1))
 			ThrowSyntaxError(reader, 0);

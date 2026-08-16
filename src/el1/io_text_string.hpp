@@ -74,6 +74,8 @@ namespace el1::io::text::string
 			double ToDouble() const EL_GETTER;
 			s64_t ToInteger() const EL_GETTER;
 
+			std::unique_ptr<char[]> MakeCStr() const;
+
 			bool operator==(const TStringView rhs) const EL_GETTER;
 			bool operator!=(const TStringView rhs) const EL_GETTER { return !operator==(rhs); }
 			bool operator>=(const TStringView rhs) const EL_GETTER;
@@ -122,38 +124,32 @@ namespace el1::io::text::string
 			static TString Format(F&& format, A const& ...args);
 
 			static TString Join(array_t<const TString> list, const TStringView delimiter);
-			static TString Join(array_t<const TString> list, const TString& delimiter) { return Join(list, delimiter.View()); }
 
 			bool Contains(const TStringView needle) const;
-			bool Contains(const TString& needle) const { return Contains(needle.View()); }
 			bool Contains(const char32_t needle) const;
 			usys_t Find(const TStringView needle, const ssys_t start = 0, const bool reverse = false) const;
-			usys_t Find(const TString& needle, const ssys_t start = 0, const bool reverse = false) const { return Find(needle.View(), start, reverse); }
 			usys_t Find(const char32_t needle, const ssys_t start = 0, const bool reverse = false) const;
 			usys_t FindFirst(const array_t<const char32_t>& charset, const ssys_t start = 0, const bool reverse = false) const;
 			TString& Trim(const bool start = true, const bool end = true, const array_t<const char32_t> trim_chars = WHITESPACE_CHARS);
 			void ReplaceAt(const ssys_t pos, const usys_t length, const TStringView substitute);
-			void ReplaceAt(const ssys_t pos, const usys_t length, const TString& substitute) { ReplaceAt(pos, length, substitute.View()); }
 			usys_t Replace(const TStringView needle, const TStringView substitute, const ssys_t start = 0, const bool reverse = false, const usys_t n_max_replacements = NEG1);
-			usys_t Replace(const TString& needle, const TString& substitute, const ssys_t start = 0, const bool reverse = false, const usys_t n_max_replacements = NEG1) { return Replace(needle.View(), substitute.View(), start, reverse, n_max_replacements); }
 			void Insert(const ssys_t pos, const TStringView str);
-			void Insert(const ssys_t pos, const TString& str) { Insert(pos, str.View()); }
 			void Append(const TStringView str);
-			void Append(const TString& str) { Append(str.View()); }
 			bool BeginsWith(const TStringView txt) const EL_GETTER;
-			bool BeginsWith(const TString& txt) const EL_GETTER { return BeginsWith(txt.View()); }
 			bool EndsWith(const TStringView txt) const EL_GETTER;
-			bool EndsWith(const TString& txt) const EL_GETTER { return EndsWith(txt.View()); }
 
 			TString SliceSL(const ssys_t start, usys_t length = NEG1) const;
 			TString SliceBE(const ssys_t begin, const ssys_t end) const;
 
 			TList<TString> Split(const TStringView delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
-			TList<TString> Split(const TString& delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER { return Split(delimiter.View(), n_max, skip_empty); }
+			template<std::size_t N>
+			TList<TString> Split(const char32_t (&delimiter EL_LIFETIME_BOUND)[N], const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER
+			{
+				return Split(TStringView(delimiter), n_max, skip_empty);
+			}
 			TList<TString> Split(const char32_t delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			TList<TString> Split(const array_t<const char32_t> split_chars, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			kv_pair_tt<TString,TString> SplitKV(const TStringView delimiter) const;
-			kv_pair_tt<TString,TString> SplitKV(const TString& delimiter) const { return SplitKV(delimiter.View()); }
 			kv_pair_tt<TString,TString> SplitKV(const char32_t delimiter = '=') const;
 
 			TList<TString> BlockFormat(const unsigned n_line_len) const EL_GETTER;
@@ -192,25 +188,17 @@ namespace el1::io::text::string
 			s64_t ToInteger() const EL_GETTER;
 
 			TString& operator+=(const TStringView rhs);
-			TString& operator+=(const TString& rhs) { return operator+=(rhs.View()); }
 			TString  operator+ (const TStringView rhs) const;
-			TString operator+ (const TString& rhs) const { return operator+(rhs.View()); }
 
 			TString& operator+=(const char32_t rhs);
 			TString  operator+ (const char32_t rhs) const;
 
 			bool operator==(const TStringView rhs) const EL_GETTER;
-			// bool operator==(const TString& rhs) const EL_GETTER { return operator==(rhs.View()); }
 			bool operator!=(const TStringView rhs) const EL_GETTER;
-			// bool operator!=(const TString& rhs) const EL_GETTER { return operator!=(rhs.View()); }
 			bool operator>=(const TStringView rhs) const EL_GETTER;
-			// bool operator>=(const TString& rhs) const EL_GETTER { return operator>=(rhs.View()); }
 			bool operator<=(const TStringView rhs) const EL_GETTER;
-			// bool operator<=(const TString& rhs) const EL_GETTER { return operator<=(rhs.View()); }
 			bool operator> (const TStringView rhs) const EL_GETTER;
-			// bool operator> (const TString& rhs) const EL_GETTER { return operator>(rhs.View()); }
 			bool operator< (const TStringView rhs) const EL_GETTER;
-			// bool operator< (const TString& rhs) const EL_GETTER { return operator<(rhs.View()); }
 
 			inline usys_t Length() const noexcept EL_GETTER { return chars.Count(); }
 			TStringView View() const & noexcept EL_LIFETIME_BOUND { return TStringView(chars.View()); }
@@ -333,13 +321,13 @@ namespace el1::io::text::string
 
 	/********************************************/
 
-	static inline bool MatchStringList(const TString& needle, const TStringView haystack)
+	static inline bool MatchStringList(const TStringView needle, const TStringView haystack)
 	{
 		return needle == haystack;
 	}
 
 	template<typename ... A>
-	static inline bool MatchStringList(const TString& needle, const TStringView haystack, const A& ... haystacks)
+	static inline bool MatchStringList(const TStringView needle, const TStringView haystack, const A& ... haystacks)
 	{
 		if(MatchStringList(needle, haystack))
 			return true;

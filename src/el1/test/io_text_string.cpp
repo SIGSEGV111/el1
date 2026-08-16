@@ -130,6 +130,38 @@ namespace
 		EXPECT_EQ(TString::Format(U"%s/%s", TStringView(U"ä"), TStringView(U"😀")), TStringView(U"ä/😀"));
 	}
 
+
+	TEST(io_text_string, TString_UnicodeLiteralOperations)
+	{
+		TString text = U"hello world";
+		EXPECT_TRUE(text.Contains(U"lo wo"));
+		EXPECT_EQ(text.Find(U"world"), 6U);
+		EXPECT_TRUE(text.BeginsWith(U"hello"));
+		EXPECT_TRUE(text.EndsWith(U"world"));
+
+		text.ReplaceAt(6, 5, U"universe");
+		EXPECT_EQ(text, U"hello universe");
+		EXPECT_EQ(text.Replace(U"universe", U"world"), 1U);
+		text.Insert(5, U" brave");
+		text.Append(U"!");
+		EXPECT_EQ(text, U"hello brave world!");
+
+		const auto words = text.Split(U" ");
+		ASSERT_EQ(words.Count(), 3U);
+		EXPECT_EQ(words[1], U"brave");
+
+		const auto pair = TString(U"key=value").SplitKV(U"=");
+		EXPECT_EQ(pair.key, U"key");
+		EXPECT_EQ(pair.value, U"value");
+
+		const TList<TString> parts = { U"a", U"b", U"c" };
+		EXPECT_EQ(TString::Join(parts, U"/"), U"a/b/c");
+
+		TString rhs = U" owned";
+		text += rhs;
+		EXPECT_EQ(text + rhs, U"hello brave world! owned owned");
+	}
+
 	TEST(io_text_string, StaticSymbolViews)
 	{
 		static_assert(OCTAL_SYMBOLS.Length() == 8);

@@ -17,7 +17,7 @@ namespace el1::io::net::bluetooth
 	using namespace text::string;
 
 
-	TRfcommClient::TRfcommClient(const TString& remote_address, const u8_t channel, const TTime connect_timeout) :
+	TRfcommClient::TRfcommClient(const TStringView remote_address, const u8_t channel, const TTime connect_timeout) :
 		TRfcommClient(address_t(remote_address), channel, connect_timeout)
 	{
 	}

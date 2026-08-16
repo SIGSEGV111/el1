@@ -33,8 +33,6 @@ namespace el1::io::text
 			return *this;
 		}
 
-		ITextWriter& Write(const string::TString& text) { return Write(text.View()); }
-
 		template<typename... A>
 		ITextWriter& Print(const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...>& fmt, const A&... args)
 		{

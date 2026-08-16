@@ -84,8 +84,8 @@ namespace el1::db::postgres
 		TString Message() const final override;
 		IException* Clone() const override;
 
-		TPostgresException(void* pg_connection, const TString& description);
-		TPostgresException(PGresult* pg_result, const TString& description);
+		TPostgresException(void* pg_connection, const TStringView description);
+		TPostgresException(PGresult* pg_result, const TStringView description);
 	};
 
 	struct TPostgresColumnDescription : TColumnDescription
@@ -200,8 +200,8 @@ namespace el1::db::postgres
 			void FlusherMain();
 			void ReaderMain();
 
-			void StartNotifyChannel(const TString& channel_name);
-			void ShutdownNotifyChannel(const TString& channel_name);
+			void StartNotifyChannel(const TStringView channel_name);
+			void ShutdownNotifyChannel(const TStringView channel_name);
 
 		public:
 			TPostgresConnection();
@@ -213,11 +213,11 @@ namespace el1::db::postgres
 			void Connect(const TSortedMap<TString, const TString>& properties);
 			void Disconnect();
 
-			std::unique_ptr<IStatement> Prepare(const TString& sql) final override;
-			std::unique_ptr<IResultStream> Execute(const TString& sql, array_t<query_arg_t> args = array_t<query_arg_t>()) final override;
+			std::unique_ptr<IStatement> Prepare(const TStringView sql) final override;
+			std::unique_ptr<IResultStream> Execute(const TStringView sql, array_t<query_arg_t> args = array_t<query_arg_t>()) final override;
 			using IDatabaseConnection::Execute;
 
-			std::unique_ptr<TChannelListener> SubscribeNotifyChannel(const TString& channel_name);
+			std::unique_ptr<TChannelListener> SubscribeNotifyChannel(const TStringView channel_name);
 	};
 }
 #endif

@@ -26,7 +26,7 @@ namespace el1::io::text::terminal
 
 	struct ITerminal
 	{
-		virtual ITerminal& operator<<(const string::TString& str) = 0;
+		virtual ITerminal& operator<<(const string::TStringView str) = 0;
 		virtual string::TString TextColorCode(rgba8_t rgb) const = 0;
 		virtual string::TString BackgroundColorCode(rgba8_t rgb) const = 0;
 		virtual math::vector::TVector<u16_t, 2> WindowSize() const = 0;
@@ -41,7 +41,7 @@ namespace el1::io::text::terminal
 	class TNoTerminal : public ITerminal
 	{
 		public:
-			ITerminal& operator<<(const string::TString& str) final override;
+			ITerminal& operator<<(const string::TStringView str) final override;
 			string::TString TextColorCode(rgba8_t rgb) const final override;
 			string::TString BackgroundColorCode(rgba8_t rgb) const final override;
 			math::vector::TVector<u16_t, 2> WindowSize() const final override;

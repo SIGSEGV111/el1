@@ -28,7 +28,7 @@ namespace el1::security::jwt
 
 		TList<key_t> keys;
 
-		EVP_PKEY* FindKey(const TString& kid, const TString& algorithm) const
+		EVP_PKEY* FindKey(const TStringView kid, const TStringView algorithm) const
 		{
 			for(const auto& key : keys)
 				if(key.kid == kid && (key.algorithm.Length() == 0 || key.algorithm == algorithm))
@@ -43,9 +43,9 @@ namespace el1::security::jwt
 		}
 	};
 
-	static TList<byte_t> ToBytes(const TString& text)
+	static TList<byte_t> ToBytes(const TStringView text)
 	{
-		return text.chars.Pipe().Transform(TUTF8Encoder()).Collect();
+		return text.Pipe().Transform(TUTF8Encoder()).Collect();
 	}
 
 	static TString FromBytes(const TList<byte_t>& bytes)
@@ -89,7 +89,7 @@ namespace el1::security::jwt
 		return key;
 	}
 
-	static const EVP_MD* AlgorithmDigest(const TString& algorithm)
+	static const EVP_MD* AlgorithmDigest(const TStringView algorithm)
 	{
 		if(algorithm == U"RS256")
 			return EVP_sha256();
@@ -100,7 +100,7 @@ namespace el1::security::jwt
 		return nullptr;
 	}
 
-	static bool AudienceMatches(const TJsonValue& audience, const TString& expected)
+	static bool AudienceMatches(const TJsonValue& audience, const TStringView expected)
 	{
 		if(expected.Length() == 0)
 			return true;
@@ -187,12 +187,12 @@ namespace el1::security::jwt
 		data->keys = std::move(keys);
 	}
 
-	TValidationResult TJwkSet::Validate(const TString& token, const TValidationPolicy& policy) const
+	TValidationResult TJwkSet::Validate(const TStringView token, const TValidationPolicy& policy) const
 	{
 		TValidationResult result;
 		try
 		{
-			const TList<TString> parts = token.Split(U'.');
+			const TList<TString> parts = TString(token).Split(U'.');
 			if(parts.Count() != 3)
 				return result;
 

@@ -402,7 +402,7 @@ namespace el1::dev::gcode::grbl
 			TOut tmp;
 			parser_state_t* state;
 
-			std::unique_ptr<ICommand> ParseCommand(const TString& line);
+			std::unique_ptr<ICommand> ParseCommand(const TStringView line);
 
 			template<typename TSourceStream>
 			std::unique_ptr<ICommand>* NextItem(TSourceStream* const source)

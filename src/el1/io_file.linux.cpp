@@ -339,7 +339,7 @@ namespace el1::io::file
 		}
 	}
 
-	direntry_t TDirectory::QueryInfo(const TString& name) const
+	direntry_t TDirectory::QueryInfo(const TStringView name) const
 	{
 		direntry_t e = {
 			.obj_id = (u64_t)-1,
@@ -450,7 +450,7 @@ namespace el1::io::file
 			EL_THROW(TSyscallException, direct_error);
 
 		TString filename = directory;
-		filename += TStringView(U"/el1-XXXXXX");
+		filename += U"/el1-XXXXXX";
 		auto filename_cstr = filename.MakeCStr();
 		const handle_t fallback_handle = EL_SYSERR(mkostemp(filename_cstr.get(), O_CLOEXEC));
 		if(unlink(filename_cstr.get()) != 0)
@@ -502,7 +502,7 @@ namespace el1::io::file
 		}
 	}
 
-	TFile::TFile(const TDirectory& dir, const TString& filename, const TAccess access, const ECreateMode create) : access(access)
+	TFile::TFile(const TDirectory& dir, const TStringView filename, const TAccess access, const ECreateMode create) : access(access)
 	{
 		auto path = filename.MakeCStr();
 		if(create == ECreateMode::DELETE)

@@ -12,7 +12,7 @@ namespace el1::io::net::bluetooth
 	{
 	}
 
-	address_t::address_t(const TString& address) : octet{}
+	address_t::address_t(const TStringView address) : octet{}
 	{
 		auto c_str = address.MakeCStr();
 		u32_t parsed[6] = {};

@@ -56,6 +56,6 @@ namespace el1::security::jwt
 			~TJwkSet();
 
 			void Load(const TJsonValue& jwks);
-			TValidationResult Validate(const TString& token, const TValidationPolicy& policy = {}) const;
+			TValidationResult Validate(const TStringView token, const TValidationPolicy& policy = {}) const;
 	};
 }

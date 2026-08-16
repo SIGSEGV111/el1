@@ -149,11 +149,11 @@ namespace el1::io::net::ip
 		return a == b;
 	}
 
-	netmask_t::netmask_t(const text::string::TString& str, const EIP version)
+	netmask_t::netmask_t(const text::string::TStringView str, const EIP version)
 	{
-		if(str.Contains(TStringView(U"/")))
+		if(str.Contains(U"/"))
 		{
-			auto arr = str.Split(TStringView(U"/"), 2);
+			auto arr = TString(str).Split(U"/", 2);
 			ip = ipaddr_t(arr[0], version);
 			cidr = arr[1].ToInteger();
 		}

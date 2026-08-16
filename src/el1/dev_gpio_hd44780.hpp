@@ -34,7 +34,7 @@ namespace el1::dev::gpio::hd44780
 
 		public:
 			void Render();
-			void Text(const TString str);
+			void Text(const TStringView str);
 
 			char32_t Character(const unsigned x, const unsigned y) const EL_GETTER;
 			void Character(const unsigned x, const unsigned y, const char32_t chr) EL_SETTER;

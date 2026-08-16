@@ -25,7 +25,7 @@ namespace el1::io::net::url
 		TString fragment;
 
 		static TUrl FromString(TStringView text);
-		static u16_t DefaultPort(const TString& scheme);
+		static u16_t DefaultPort(const TStringView scheme);
 		TString RequestTarget() const;
 	};
 }

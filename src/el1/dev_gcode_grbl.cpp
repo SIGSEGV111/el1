@@ -109,7 +109,7 @@ namespace el1::dev::gcode::grbl
 
 	TString IMacroCommand::ToString() const
 	{
-		return TString::Join(commands.Pipe().Map([](auto& cmd) { return cmd->ToString(); }).Collect(), TStringView(U"\n"));
+		return TString::Join(commands.Pipe().Map([](auto& cmd) { return cmd->ToString(); }).Collect(), U"\n");
 	}
 
 	TLinearMoveCommand::TLinearMoveCommand(parser_state_t& state, TList<TString>& fields)
@@ -423,11 +423,11 @@ namespace el1::dev::gcode::grbl
 		return TString::Format(U";%s", comment);
 	}
 
-	std::unique_ptr<ICommand> TGrblParser::ParseCommand(const TString& line)
+	std::unique_ptr<ICommand> TGrblParser::ParseCommand(const TStringView line)
 	{
 		try
 		{
-			auto fields = line.Split(' ', NEG1, true);
+			auto fields = TString(line).Split(' ', NEG1, true);
 			TString& str_cmd = fields[0];
 			str_cmd.ToUpper();
 

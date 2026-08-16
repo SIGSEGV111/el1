@@ -35,7 +35,7 @@ namespace el1::security::kerberos
 
 		TKerberoyKeytab& DefaultKeytab() EL_GETTER;
 
-		std::shared_ptr<TKerberosTicketCache> OpenCache(const TString& name, const bool create);
+		std::shared_ptr<TKerberosTicketCache> OpenCache(const TStringView name, const bool create);
 
 		TKerberosException(const TKerberosContext& context, const krb5_error_code code);
 	};
@@ -48,7 +48,7 @@ namespace el1::security::kerberos
 			krb5_context context;
 
 			TString DefaultRealm() const EL_GETTER;
-			void DefaultRealm(const TString&) EL_SETTER;
+			void DefaultRealm(const TStringView) EL_SETTER;
 
 			TKerberosContext();
 			~TKerberosContext();
@@ -196,7 +196,7 @@ namespace el1::security::kerberos
 			*                      Example for a user (optional role): "admin"
 			*                      Example for a service (host): "www.example.com"
 			*/
-			TKerberosPrincipal(TKerberosContext* const context, const EPrincipalType type, const TString& realm, const TString& primary_name, const TString& instance_name);
+			TKerberosPrincipal(TKerberosContext* const context, const EPrincipalType type, const TStringView realm, const TStringView primary_name, const TStringView instance_name);
 
 			/**
 			* @brief Constructs a TKerberosPrincipal object from an abitrary number of components.
@@ -215,7 +215,7 @@ namespace el1::security::kerberos
 			*                   according to the principal type's requirements. For example, for SRV_XHOST, the order might be
 			*                   service type, followed by hostname, followed by a port number or other identifiers.
 			*/
-			TKerberosPrincipal(TKerberosContext* const context, const EPrincipalType type, const TString& realm, const TList<TString>& components);
+			TKerberosPrincipal(TKerberosContext* const context, const EPrincipalType type, const TStringView realm, const TList<TString>& components);
 
 			/**
 			* @brief Constructs a TKerberosPrincipal object from a full name.
@@ -236,7 +236,7 @@ namespace el1::security::kerberos
 			*
 			* @param full_name The complete string representation of the principal.
 			*/
-			TKerberosPrincipal(TKerberosContext* const context, const EPrincipalType type, const TString& full_name);
+			TKerberosPrincipal(TKerberosContext* const context, const EPrincipalType type, const TStringView full_name);
 
 			TKerberosPrincipal(TKerberosPrincipal&&) = default;
 			TKerberosPrincipal(const TKerberosPrincipal&);
@@ -422,7 +422,7 @@ namespace el1::security::kerberos
 			*   - KCM: Utilizes the Kerberos Credential Manager daemon, e.g., "KCM:uid=1000" where "1000" is the user's UID.
 			*   - API: Represents credentials managed by an external API, potentially not exposing a traditional path or identifier, e.g., "API:VendorSpecific".
 			*/
-			TKerberosTicketCache(TKerberosContext* const context, const TKerberosPrincipal& owner, const TString& url);
+			TKerberosTicketCache(TKerberosContext* const context, const TKerberosPrincipal& owner, const TStringView url);
 
 			~TKerberosTicketCache();
 	};
@@ -774,7 +774,7 @@ namespace el1::security::kerberos
 			* @param context Pointer to the TKerberosContext managing this keytab.
 			* @param url The URL or path of the keytab to manage.
 			*/
-			TKerberoyKeytab(TKerberosContext* const context, const TString& url);
+			TKerberoyKeytab(TKerberosContext* const context, const TStringView url);
 			~TKerberoyKeytab();
 	};
 
@@ -792,7 +792,7 @@ namespace el1::security::kerberos
 			krb5_ticket ticket;
 
 			~TKerberosTicket();
-			TKerberosTicket(const TString& ans1);
+			TKerberosTicket(const TStringView ans1);
 
 			TKerberosPrincipal Principal() const EL_GETTER;
 			TKerberosKeyblock SessionKey() const EL_GETTER;
@@ -810,7 +810,7 @@ namespace el1::security::kerberos
 			void RemoteAddress(ipaddr_t) EL_SETTER;
 			ipaddr_t RemoteAddress() const EL_GETTER;
 
-			TList<byte_t> CreateAuthRequest(const TKerberosPrincipal& service, const TString& hostname, const TList<byte_t>& data);
+			TList<byte_t> CreateAuthRequest(const TKerberosPrincipal& service, const TStringView hostname, const TList<byte_t>& data);
 			bool ProcessAuthRequest(const TList<byte_t>& data);
 			TList<byte_t> CreateAuthReply();
 			bool ProcessAuthReply(const TList<byte_t>& data);

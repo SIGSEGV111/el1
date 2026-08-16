@@ -11,7 +11,7 @@ namespace el1::io::format::base64
 	using namespace text::string;
 
 	TString EncodeBase64Url(collection::list::array_t<const byte_t> data);
-	collection::list::TList<byte_t> DecodeBase64Url(TString text);
+	collection::list::TList<byte_t> DecodeBase64Url(TStringView text);
 
 	class TBase64Decoder
 	{

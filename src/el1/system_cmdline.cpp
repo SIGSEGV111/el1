@@ -59,14 +59,15 @@ namespace el1::system::cmdline
 		EL_ERROR(shorthand == '-', TInvalidArgumentException, "shorthand", "the shorthand cannot be the '-' sign, since \"--\" is used as argument list terminator");
 	}
 
-	static bool ParseBool(TString argv)
+	static bool ParseBool(const TStringView argv)
 	{
-		argv.ToLower();
+		TString value(argv);
+		value.ToLower();
 
-		if(argv == U"false" || argv == U"no" || argv == U"disabled" || argv == U"0")
+		if(value == U"false" || value == U"no" || value == U"disabled" || value == U"0")
 			return false;
 
-		if(argv == U"true" || argv == U"yes" || argv == U"enabled" || argv == U"1")
+		if(value == U"true" || value == U"yes" || value == U"enabled" || value == U"1")
 			return true;
 
 		EL_THROW(TInvalidArgumentException, "argv", "only true/false, yes/no, enabled/disabled, 1/0 are supported as values for flags and boolean arguments");
@@ -74,7 +75,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TShowVersionArgument::ParseValue(const TString& argv, const TParserState& state)
+	void TShowVersionArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
 		if(ParseBool(argv))
 		{
@@ -103,7 +104,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TFlagArgument::ParseValue(const TString& argv, const TParserState& state)
+	void TFlagArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
 		*var = ParseBool(argv);
 	}
@@ -125,7 +126,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TBooleanArgument::ParseValue(const TString& argv, const TParserState& state)
+	void TBooleanArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
 		*var = ParseBool(argv);
 	}
@@ -146,9 +147,9 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TStringArgument::ParseValue(const TString& argv, const TParserState& state)
+	void TStringArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
-		*var = argv;
+		*var = TString(argv);
 	}
 
 	TString TStringArgument::DefaultValue() const
@@ -167,7 +168,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TIntegerArgument::ParseValue(const TString& argv, const TParserState& state)
+	void TIntegerArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
 		*var = argv.ToInteger();
 	}
@@ -188,7 +189,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TFloatArgument::ParseValue(const TString& argv, const TParserState& state)
+	void TFloatArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
 		*var = argv.ToDouble();
 	}
@@ -209,9 +210,9 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void TArrayArgument::ParseValue(const TString& argv, const TParserState& state)
+	void TArrayArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
-		*var = argv.Split(delimiter);
+		*var = TString(argv).Split(delimiter);
 	}
 
 	TString TArrayArgument::DefaultValue() const
@@ -268,9 +269,9 @@ namespace el1::system::cmdline
 		EL_THROW(TLogicException);
 	}
 
-	void TPathArgument::ParseValue(const TString& argv, const TParserState& state)
+	void TPathArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
-		*var = argv;
+		*var = io::file::TPath(TString(argv));
 		var->MakeAbsolute();
 		var->Simplify();
 
@@ -356,7 +357,7 @@ namespace el1::system::cmdline
 				EL_THROW(TLogicException);
 		}
 
-		return str_create_mode + TStringView(U" ") + str_expected_type;
+		return str_create_mode + U" " + str_expected_type;
 	}
 
 	TPathArgument::TPathArgument(TPath* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var), expected_type(EObjectType::UNKNOWN), create_mode(ECreateMode::OPEN)
@@ -370,7 +371,7 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void THelpArgument::ParseValue(const TString& argv, const TParserState& state)
+	void THelpArgument::ParseValue(const TStringView argv, const TParserState& state)
 	{
 		if(ParseBool(argv))
 		{
@@ -395,13 +396,13 @@ namespace el1::system::cmdline
 
 	/************************************/
 
-	void IArgument::ShowHelpGenerated(const TString& progname, const TList<IArgument*>& defs)
+	void IArgument::ShowHelpGenerated(const TStringView progname, const TList<IArgument*>& defs)
 	{
 		TString usage = TString::Format(U"usage: %q", progname);
 
 		const bool multi_line = defs.Count() > 4 || defs.Pipe().Filter([](auto def) { return def->help.Length() > 0; }).Count() > 0;
 		if(multi_line)
-			usage += TStringView(U" ...");
+			usage += U" ...";
 
 		TList<TString> lines;
 
@@ -413,7 +414,7 @@ namespace el1::system::cmdline
 
 				if(def->shorthand != U'\0')
 				{
-					line += TStringView(U"-");
+					line += U"-";
 					line += def->shorthand;
 				}
 
@@ -422,7 +423,7 @@ namespace el1::system::cmdline
 
 				if(def->name.Length() > 0)
 				{
-					line += TStringView(U"--");
+					line += U"--";
 					line += def->name;
 				}
 
@@ -436,7 +437,7 @@ namespace el1::system::cmdline
 					}
 					else
 					{
-						line += TStringView(U"=<");
+						line += U"=<";
 						line += def->ExpectedType();
 						line += '>';
 					}
@@ -466,7 +467,7 @@ namespace el1::system::cmdline
 				const TString& current_line = lines[i];
 				const IArgument* def = defs[i];
 
-				usage += TStringView(U"\n  ");
+				usage += U"\n  ";
 				usage += current_line;
 
 				if(def->help.Length() > 0)

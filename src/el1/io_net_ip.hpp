@@ -60,7 +60,7 @@ namespace el1::io::net::ip
 		explicit operator text::string::TString() const EL_GETTER;
 
 		ipaddr_t(const u32_t ipv4);
-		ipaddr_t(const text::string::TString&, const EIP version = EIP::ANY);
+		ipaddr_t(const text::string::TStringView, const EIP version = EIP::ANY);
 
 		static ipaddr_t MaskFromCidr(const u8_t cidr, const EIP ver);
 
@@ -85,7 +85,7 @@ namespace el1::io::net::ip
 
 		constexpr netmask_t(const EIP version = EIP::V6) : ip(version), cidr(0) {}
 		constexpr netmask_t(ipaddr_t ip, u8_t cidr) : ip(ip), cidr(cidr) {}
-		netmask_t(const text::string::TString&, const EIP version = EIP::ANY);
+		netmask_t(const text::string::TStringView, const EIP version = EIP::ANY);
 	};
 
 	struct ipport_t
@@ -95,7 +95,7 @@ namespace el1::io::net::ip
 	};
 
 	io::collection::list::TList<ipaddr_t> EnumMyIpAddresses();
-	io::collection::list::TList<ipaddr_t> ResolveHostname(const text::string::TString&);
+	io::collection::list::TList<ipaddr_t> ResolveHostname(const text::string::TStringView);
 
 	class IStreamClient : public stream::ISink<byte_t>, public stream::ISource<byte_t>
 	{
@@ -128,8 +128,8 @@ namespace el1::io::net::ip
 			ipport_t LocalAddress() const final override EL_GETTER;
 			ipport_t RemoteAddress() const final override EL_GETTER;
 
-			TTcpClient(const io::text::string::TString remote_host, const port_t remote_port);
-			TTcpClient(const io::text::string::TString remote_host, const port_t remote_port, const system::time::TTime connect_timeout);
+			TTcpClient(const io::text::string::TStringView remote_host, const port_t remote_port);
+			TTcpClient(const io::text::string::TStringView remote_host, const port_t remote_port, const system::time::TTime connect_timeout);
 			TTcpClient(const ipaddr_t remote_ip, const port_t remote_port);
 			TTcpClient(const ipaddr_t remote_ip, const port_t remote_port, const system::time::TTime connect_timeout);
 			TTcpClient(system::handle::THandle handle, const ipport_t remote_address);

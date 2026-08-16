@@ -5,6 +5,7 @@
 namespace el1::io::text::string
 {
 	class TString;
+	class TStringView;
 }
 
 namespace el1::io::net::eth
@@ -18,6 +19,6 @@ namespace el1::io::net::eth
 		explicit operator text::string::TString() const EL_GETTER;
 
 		TMAC();
-		TMAC(const text::string::TString&);
+		TMAC(const text::string::TStringView);
 	};
 }

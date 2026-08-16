@@ -64,7 +64,7 @@ namespace el1::debug
 	{
 		TString str;
 		Hexdump(data, n_bytes, line_length, context, [&](const char* const line) {
-			str += line;
+			str += TString(line);
 			str += '\n';
 		});
 		return str;

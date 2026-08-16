@@ -83,7 +83,7 @@ namespace el1::io::net::tls
 			TClient(void* const ssl_context, std::unique_ptr<ip::TTcpClient> tcp_client);
 
 		public:
-			TClient(text::string::TString remote_host, const ip::port_t remote_port, client_config_t config = {});
+			TClient(text::string::TStringView remote_host, const ip::port_t remote_port, client_config_t config = {});
 			TClient(TClient&&) noexcept;
 			TClient(const TClient&) = delete;
 			~TClient() override;

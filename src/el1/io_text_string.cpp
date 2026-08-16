@@ -560,7 +560,7 @@ namespace el1::io::text::string
 			if(current_line.Length() + word.Length() <= n_line_len)
 			{
 				if(current_line.Length() > 0)
-					current_line += TStringView(U" ");
+					current_line += U" ";
 				current_line += word;
 				word.chars.Clear();
 			}
@@ -729,13 +729,18 @@ namespace el1::io::text::string
 		return str;
 	}
 
-	std::unique_ptr<char[]> TString::MakeCStr() const
+	std::unique_ptr<char[]> TStringView::MakeCStr() const
 	{
-		const usys_t n_bytes = chars.Pipe().Transform(TCharEncoder()).Count();
+		const usys_t n_bytes = Pipe().Transform(TCharEncoder()).Count();
 		auto p = std::unique_ptr<char[]>(new char[n_bytes + 1]);
-		chars.Pipe().Transform(TCharEncoder()).ReadAll((byte_t*)p.get(), n_bytes);
+		Pipe().Transform(TCharEncoder()).ReadAll((byte_t*)p.get(), n_bytes);
 		p.get()[n_bytes] = 0;
 		return p;
+	}
+
+	std::unique_ptr<char[]> TString::MakeCStr() const
+	{
+		return View().MakeCStr();
 	}
 
 

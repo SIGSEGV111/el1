@@ -33,7 +33,7 @@ namespace el1::system::cmdline
 	class IArgument
 	{
 		protected:
-			virtual void ParseValue(const TString& value, const TParserState& state) = 0;
+			virtual void ParseValue(const TStringView value, const TParserState& state) = 0;
 			virtual TString DefaultValue() const EL_GETTER = 0;
 			virtual TString ExpectedType() const EL_GETTER = 0;
 
@@ -41,7 +41,7 @@ namespace el1::system::cmdline
 
 		public:
 			static usys_t ParseCmdlineArguments(const TParserState& state);
-			static void ShowHelpGenerated(const TString& progname, const TList<IArgument*>& defs);
+			static void ShowHelpGenerated(const TStringView progname, const TList<IArgument*>& defs);
 
 			const TString name;
 			const TString env;
@@ -58,7 +58,7 @@ namespace el1::system::cmdline
 		protected:
 			const char* const proginfo;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 
@@ -72,7 +72,7 @@ namespace el1::system::cmdline
 		protected:
 			bool* const var;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 
@@ -86,7 +86,7 @@ namespace el1::system::cmdline
 		protected:
 			bool* const var;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 
@@ -101,7 +101,7 @@ namespace el1::system::cmdline
 		protected:
 			TString* const var;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 
@@ -115,7 +115,7 @@ namespace el1::system::cmdline
 		protected:
 			s64_t* const var;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 
@@ -129,7 +129,7 @@ namespace el1::system::cmdline
 		protected:
 			double* const var;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 
@@ -144,7 +144,7 @@ namespace el1::system::cmdline
 			io::collection::list::TList<TString>* const var;
 			const TString delimiter;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 
@@ -160,7 +160,7 @@ namespace el1::system::cmdline
 			const io::file::EObjectType expected_type;
 			const io::file::ECreateMode create_mode;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 
@@ -180,7 +180,7 @@ namespace el1::system::cmdline
 			const TString bugtracker_url;
 			const TString scm_url;
 
-			void ParseValue(const TString& value, const TParserState& state) final override;
+			void ParseValue(const TStringView value, const TParserState& state) final override;
 			TString DefaultValue() const final override EL_GETTER;
 			TString ExpectedType() const final override EL_GETTER;
 

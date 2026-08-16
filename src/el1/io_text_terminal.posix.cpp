@@ -38,9 +38,9 @@ namespace el1::io::text::terminal
 	stream::TKernelStream stdout(ReopenStdio(STDOUT_FILENO, io::file::TAccess::WO));
 	stream::TKernelStream stderr(ReopenStdio(STDERR_FILENO, io::file::TAccess::WO));
 
-	ITerminal& TNoTerminal::operator<<(const string::TString& str)
+	ITerminal& TNoTerminal::operator<<(const string::TStringView str)
 	{
-		str.chars.Pipe().Transform(encoding::utf8::TUTF8Encoder()).ToStream(stdout);
+		str.Pipe().Transform(encoding::utf8::TUTF8Encoder()).ToStream(stdout);
 		return *this;
 	}
 

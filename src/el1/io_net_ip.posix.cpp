@@ -195,7 +195,7 @@ namespace el1::io::net::ip
 
 	/*********************************************************************************/
 
-	ipaddr_t::ipaddr_t(const TString& str, const EIP version)
+	ipaddr_t::ipaddr_t(const TStringView str, const EIP version)
 	{
 		const auto cstr = str.MakeCStr();
 
@@ -247,7 +247,7 @@ namespace el1::io::net::ip
 		return addrs;
 	}
 
-	TList<ipaddr_t> ResolveHostname(const text::string::TString& hostname)
+	TList<ipaddr_t> ResolveHostname(const text::string::TStringView hostname)
 	{
 		TList<ipaddr_t> addrs;
 
@@ -297,12 +297,12 @@ namespace el1::io::net::ip
 		return this->remote_address;
 	}
 
-	TTcpClient::TTcpClient(const io::text::string::TString remote_host, const port_t remote_port) :
+	TTcpClient::TTcpClient(const io::text::string::TStringView remote_host, const port_t remote_port) :
 		TTcpClient(remote_host, remote_port, -1)
 	{
 	}
 
-	TTcpClient::TTcpClient(const io::text::string::TString remote_host, const port_t remote_port, const TTime connect_timeout) :
+	TTcpClient::TTcpClient(const io::text::string::TStringView remote_host, const port_t remote_port, const TTime connect_timeout) :
 		TTcpClient(ResolveHostname(remote_host)[0], remote_port, connect_timeout)
 	{
 	}

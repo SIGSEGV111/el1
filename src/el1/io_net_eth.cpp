@@ -15,7 +15,7 @@ namespace el1::io::net::eth
 		memset(octets, 0, sizeof(octets));
 	}
 
-	TMAC::TMAC(const text::string::TString& str)
+	TMAC::TMAC(const text::string::TStringView str)
 	{
 		EL_ERROR(sscanf(str.MakeCStr().get(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", octets + 0, octets + 1, octets + 2, octets + 3, octets + 4, octets + 5) != 6, TException, TString::Format(U"invalid MAC-address %q", str));
 	}

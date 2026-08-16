@@ -532,7 +532,7 @@ namespace el1::system::task
 				TList<const char*> env_cstr;
 				for(const auto& kv : env.Items())
 				{
-					env_cstr.Append((kv.key + TStringView(U"=") + kv.value).MakeCStr().release());
+					env_cstr.Append((kv.key + U"=" + kv.value).MakeCStr().release());
 				}
 				env_cstr.Append(nullptr);
 

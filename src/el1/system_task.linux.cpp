@@ -150,30 +150,32 @@ namespace el1::system::task
 		}
 	}
 
-	static TString GetStatusLine(const pid_t thread_pid, io::text::string::TString key)
+	static TString GetStatusLine(const pid_t thread_pid, const io::text::string::TStringView key)
 	{
 		using namespace io::text::encoding::utf8;
-		key += ':';
+		TString prefix(key);
+		prefix += ':';
 		TFile file = EL_ANNOTATE_ERROR(TFile(TString::Format(U"/proc/%d/status", thread_pid)), TException, U"unable to read status file from procfs");
 		return file.Pipe()
 			.Transform(TUTF8Decoder())
 			.Transform(TLineReader())
-			.Filter([&](const TString& line){ return line.BeginsWith(key); })
+			.Filter([&](const TString& line){ return line.BeginsWith(prefix); })
 			.First()
 			.SplitKV(':')
 			.value
 			.Trim();
 	}
 
-	static TString GetStatusLine(io::text::string::TString key)
+	static TString GetStatusLine(const io::text::string::TStringView key)
 	{
 		using namespace io::text::encoding::utf8;
-		key += ':';
+		TString prefix(key);
+		prefix += ':';
 		TFile file = EL_ANNOTATE_ERROR(TFile(U"/proc/self/status"), TException, U"unable to read own status file from procfs");
 		return file.Pipe()
 			.Transform(TUTF8Decoder())
 			.Transform(TLineReader())
-			.Filter([&](const TString& line){ return line.BeginsWith(key); })
+			.Filter([&](const TString& line){ return line.BeginsWith(prefix); })
 			.First()
 			.SplitKV(':')
 			.value

@@ -65,13 +65,16 @@ namespace el1::io::net::tls
 			{
 				char buffer[256];
 				ERR_error_string_n(error_code, buffer, sizeof(buffer));
-				msg += first ? TStringView(U": ") : TStringView(U"; ");
-				msg += buffer;
+				if(first)
+					msg += U": ";
+				else
+					msg += U"; ";
+				msg += TString(buffer);
 				first = false;
 			}
 
 			if(first)
-				msg += TStringView(U": unknown OpenSSL error");
+				msg += U": unknown OpenSSL error";
 
 			return msg;
 		}
@@ -377,10 +380,10 @@ namespace el1::io::net::tls
 	{
 	}
 
-	TClient::TClient(TString remote_host, const ip::port_t remote_port, client_config_t config)
+	TClient::TClient(const TStringView remote_host, const ip::port_t remote_port, client_config_t config)
 	{
 		if(config.server_name.Length() == 0)
-			config.server_name = remote_host;
+			config.server_name = TString(remote_host);
 
 		ERR_clear_error();
 		SSL_CTX* const context = SSL_CTX_new(TLS_client_method());

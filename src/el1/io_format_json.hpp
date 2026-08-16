@@ -56,8 +56,8 @@ namespace el1::io::format::json
 	const char* JsonTypeToString(const EType type);
 
 	// escapes and quotes the input string
-	TString JsonQuote(const TString& input);
-	TString JsonUnquote(const TString& input);
+	TString JsonQuote(const TStringView input);
+	TString JsonUnquote(const TStringView input);
 
 	class TJsonValue
 	{
@@ -86,15 +86,15 @@ namespace el1::io::format::json
 			bool operator==(const TJsonValue& rhs) const EL_GETTER;
 			bool operator!=(const TJsonValue& rhs) const EL_GETTER;
 
-			TJsonValue& operator[](const TString& key) EL_GETTER  { return Map()[key]; }
-			const TJsonValue& operator[](const TString& key) const EL_GETTER { return Map()[key]; }
+			TJsonValue& operator[](const TStringView key) EL_GETTER  { return Map()[key]; }
+			const TJsonValue& operator[](const TStringView key) const EL_GETTER { return Map()[key]; }
 			TJsonValue& operator[](const char* const key) EL_GETTER  { return Map()[key]; }
 			const TJsonValue& operator[](const char* const key) const EL_GETTER { return Map()[key]; }
 
 			TJsonValue& operator[](const ssys_t index) EL_LIFETIME_BOUND { return Array()[index]; }
 			const TJsonValue& operator[](const ssys_t index) const EL_LIFETIME_BOUND EL_GETTER { return const_cast<TJsonValue*>(this)->Array()[index]; }
 
-			const TJsonValue& operator()(const TString& key) const EL_GETTER;
+			const TJsonValue& operator()(const TStringView key) const EL_GETTER;
 
 			#if (__SIZEOF_SIZE_T__ != __SIZEOF_INT__)	// ssys_t vs. int
 				TJsonValue& operator[](const int index) EL_LIFETIME_BOUND { return Array()[index]; }
@@ -196,7 +196,7 @@ namespace el1::io::format::json
 			static const TJsonValue EMPTY_ARRAY;
 			static const TJsonValue EMPTY_MAP;
 
-			static TJsonValue Parse(const TString& str, const bool tolerant = false);
+			static TJsonValue Parse(const TStringView str, const bool tolerant = false);
 			static TJsonValue Parse(ITextReader& reader, const bool tolerant = false);
 			static TJsonValue Parse(const file::TFile& file, const bool tolerant = false);
 	};

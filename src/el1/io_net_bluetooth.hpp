@@ -17,7 +17,7 @@ namespace el1::io::net::bluetooth
 		byte_t octet[6];
 
 		address_t();
-		explicit address_t(const text::string::TString& address);
+		explicit address_t(const text::string::TStringView address);
 		explicit operator text::string::TString() const EL_GETTER;
 		bool operator==(const address_t& rhs) const = default;
 	};
@@ -44,7 +44,7 @@ namespace el1::io::net::bluetooth
 			void Close() final override;
 			void Flush() final override;
 
-			TRfcommClient(const text::string::TString& remote_address, const u8_t channel, const system::time::TTime connect_timeout = -1);
+			TRfcommClient(const text::string::TStringView remote_address, const u8_t channel, const system::time::TTime connect_timeout = -1);
 			TRfcommClient(const address_t remote_address, const u8_t channel, const system::time::TTime connect_timeout = -1);
 			TRfcommClient(TRfcommClient&&) = default;
 			TRfcommClient(const TRfcommClient&) = delete;

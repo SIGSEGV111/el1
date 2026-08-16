@@ -205,7 +205,7 @@ namespace el1::io::file
 			// fields that have no valid value are set to -1
 			void Enum(util::function::TFunction<bool, direntry_t&> receiver) const;
 
-			bool Contains(const TString& name) const;
+			bool Contains(const TStringView name) const;
 			bool IsRoot() const;
 			bool IsMountpoint() const;
 
@@ -213,7 +213,7 @@ namespace el1::io::file
 
 			// retrieves information about the named file-system object within this directory
 			// this call usually yields more infomation than Enum()
-			direntry_t QueryInfo(const TString& name) const;
+			direntry_t QueryInfo(const TStringView name) const;
 
 			// returns an aproximated count of file-system objects within the directoy without
 			// actually enumerating them - this might be inaccurate, but should give a rough idea
@@ -301,7 +301,7 @@ namespace el1::io::file
 
 			// opens or creates a file
 			TFile(const TPath& path, const TAccess access = TAccess::RO, const ECreateMode create = ECreateMode::OPEN);
-			TFile(const TDirectory& dir, const TString& filename, const TAccess access = TAccess::RO, const ECreateMode create = ECreateMode::OPEN);
+			TFile(const TDirectory& dir, const TStringView filename, const TAccess access = TAccess::RO, const ECreateMode create = ECreateMode::OPEN);
 
 			// takes control over a open file handle
 			explicit TFile(THandle&& handle);

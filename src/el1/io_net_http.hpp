@@ -164,8 +164,8 @@ namespace el1::io::net::http
 
 				collection::list::TList<header_line_t> header_lines;
 
-				const text::string::TString* FindHeader(const text::string::TString& name) const EL_GETTER;
-				collection::list::TList<text::string::TString> FindHeaders(const text::string::TString& name) const EL_GETTER;
+				const text::string::TString* FindHeader(const text::string::TStringView name) const EL_GETTER;
+				collection::list::TList<text::string::TString> FindHeaders(const text::string::TStringView name) const EL_GETTER;
 			};
 
 			struct response_t : response_header_t
@@ -184,8 +184,8 @@ namespace el1::io::net::http
 			collection::list::TList<cookie_t> cookies;
 
 			void Connect();
-			void ProcessSetCookie(const text::string::TString& value, const text::string::TString& request_path);
-			text::string::TString BuildCookieHeader(const text::string::TString& request_path);
+			void ProcessSetCookie(const text::string::TStringView value, const text::string::TStringView request_path);
+			text::string::TString BuildCookieHeader(const text::string::TStringView request_path);
 
 		public:
 			THttpHeaderFields request_headers;
@@ -222,14 +222,14 @@ namespace el1::io::net::http
 			);
 
 			void SetHeader(text::string::TString name, text::string::TString value);
-			const text::string::TString* FindHeader(const text::string::TString& name) const EL_GETTER;
-			bool RemoveHeader(const text::string::TString& name);
+			const text::string::TString* FindHeader(const text::string::TStringView name) const EL_GETTER;
+			bool RemoveHeader(const text::string::TStringView name);
 
 			const collection::list::TList<cookie_t>& ListCookies() const EL_GETTER { return cookies; }
 			void ClearCookies() { cookies.Clear(); }
 			void Close();
 	};
 
-	text::string::TString UrlDecode(text::string::TString url);
-	text::string::TString UrlEncode(text::string::TString url);
+	text::string::TString UrlDecode(text::string::TStringView url);
+	text::string::TString UrlEncode(text::string::TStringView url);
 }
