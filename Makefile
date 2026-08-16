@@ -25,7 +25,7 @@ TEST_CXXFLAGS ?=
 TEST_GTEST_FLAGS ?=
 LIFETIME_EXTRA_CXXFLAGS ?=
 
-RELEASE_CXXFLAGS ?= -O3 -g -DNDEBUG -flto -flto-partitions=4
+RELEASE_CXXFLAGS ?= -O3 -g -DNDEBUG -flto
 DEBUG_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
 GTEST_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
 COVERAGE_CXXFLAGS ?= -fprofile-instr-generate -fcoverage-mapping
