@@ -114,7 +114,7 @@ namespace el1::io::graphics::image::format::png
 	{
 		byte_t magic[8];
 		stream.ReadAll(magic, 8);
-		EL_ERROR(::memcmp(MAGIC, magic, 8) != 0, TException, "invalid PNG file magic");
+		EL_ERROR(::memcmp(MAGIC, magic, 8) != 0, TException, U"invalid PNG file magic");
 	}
 
 	constexpr unsigned ComponentsPerPixel(const EColorType color_type)
@@ -228,7 +228,7 @@ namespace el1::io::graphics::image::format::png
 	TPLTEChunk::TPLTEChunk(IBinarySource& stream, const u32_t size, const unsigned bpc) : IChunk(EChunkType::PLTE)
 	{
 		const unsigned n_entries = size / 3;
-		EL_ERROR(size == 0 || size % 3 != 0 || n_entries > (1U << bpc), TException, "PLTE chunk has invalid size");
+		EL_ERROR(size == 0 || size % 3 != 0 || n_entries > (1U << bpc), TException, U"PLTE chunk has invalid size");
 		palette.SetCount(n_entries);
 		stream.ReadAll((byte_t*)&palette[0], size);
 	}
@@ -242,7 +242,7 @@ namespace el1::io::graphics::image::format::png
 	// 		case EColorType::TRUECOLOR:
 	// 			EL_NOT_IMPLEMENTED;
 	// 		default:
-	// 			EL_THROW(TException, "TRANS chunk provided for a color-type that does not make use of it");
+	// 			EL_THROW(TException, U"TRANS chunk provided for a color-type that does not make use of it");
 	// 	}
 	// }
 
@@ -391,7 +391,7 @@ namespace el1::io::graphics::image::format::png
 					break;
 
 				default:
-					EL_THROW(TException, "invalid/unknown scanline filter type");
+					EL_THROW(TException, U"invalid/unknown scanline filter type");
 			}
 
 			return scanline;
@@ -498,7 +498,7 @@ namespace el1::io::graphics::image::format::png
 				if(scanline == nullptr)
 					return nullptr;
 				npx = width;
-				EL_ERROR(npx == 0, TException, "scanline has 0 pixels");
+				EL_ERROR(npx == 0, TException, U"scanline has 0 pixels");
 				ipx = 0;
 			}
 
@@ -554,7 +554,7 @@ namespace el1::io::graphics::image::format::png
 		ReadAndVerifyMagic(stream);
 
 		auto header = TChunkHeader::LoadHeader(stream);
-		EL_ERROR(header.Type() != EChunkType::IHDR, TException, "first chunk in PNG file must be a IHDR");
+		EL_ERROR(header.Type() != EChunkType::IHDR, TException, U"first chunk in PNG file must be a IHDR");
 		TIHDRChunk ihdr(stream, header.size);
 		stream.Discard(4);	// eat CRC
 		std::unique_ptr<TPLTEChunk> plte;
@@ -573,11 +573,11 @@ namespace el1::io::graphics::image::format::png
 			switch(header.Type())
 			{
 				case EChunkType::IHDR:
-					EL_THROW(TException, "found another IHDR");
+					EL_THROW(TException, U"found another IHDR");
 
 				case EChunkType::PLTE:
-					EL_ERROR(plte != nullptr, TException, "found another PLTE");
-					EL_ERROR(ihdr.color_type != EColorType::INDEXED_COLOR, TException, "platette provided for a color-type that doesn't use a palette");
+					EL_ERROR(plte != nullptr, TException, U"found another PLTE");
+					EL_ERROR(ihdr.color_type != EColorType::INDEXED_COLOR, TException, U"platette provided for a color-type that doesn't use a palette");
 					plte = New<TPLTEChunk>(stream, header.size, ihdr.bit_depth);
 					break;
 
@@ -599,7 +599,7 @@ namespace el1::io::graphics::image::format::png
 			stream.Discard(4);
 		}
 
-		EL_ERROR(ihdr.color_type == EColorType::INDEXED_COLOR && plte == nullptr, TException, "palette missing");
+		EL_ERROR(ihdr.color_type == EColorType::INDEXED_COLOR && plte == nullptr, TException, U"palette missing");
 
 		data = Inflate(data);
 

@@ -155,7 +155,7 @@ namespace el1::io::text
 			auto Parse(const parser::TParser<N>& grammar, const parser::TParseLimits limits = {}) -> typename N::return_t
 			{
 				auto value = TryParse(grammar, limits);
-				EL_ERROR(!value, TException, "text input does not match parser");
+				EL_ERROR(!value, TException, U"text input does not match parser");
 				return std::move(*value);
 			}
 
@@ -176,7 +176,7 @@ namespace el1::io::text
 			{
 				std::tuple<std::optional<std::remove_cvref_t<A>>...> values;
 				usys_t consumed = 0;
-				EL_ERROR(!fmt.TryScan(*this, values, consumed), TException, "text input does not match scan format");
+				EL_ERROR(!fmt.TryScan(*this, values, consumed), TException, U"text input does not match scan format");
 				AssignTuple(values, output...);
 				Shift(consumed);
 				return consumed;

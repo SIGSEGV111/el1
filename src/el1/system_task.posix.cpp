@@ -395,7 +395,7 @@ namespace el1::system::task
 
 	void TProcess::Start(const TPath& exe, const TList<TString>& args, const TSortedMap<fd_t, const EFDIO>& streams, const TSortedMap<TString, const TString>& env)
 	{
-		EL_ERROR(pid != -1, TException, "process already running");
+		EL_ERROR(pid != -1, TException, U"process already running");
 
 		TSortedMap<fd_t, THandle> child_handles;
 		this->streams.Clear();
@@ -532,7 +532,7 @@ namespace el1::system::task
 				TList<const char*> env_cstr;
 				for(const auto& kv : env.Items())
 				{
-					env_cstr.Append((kv.key + "=" + kv.value).MakeCStr().release());
+					env_cstr.Append((kv.key + TStringView(U"=") + kv.value).MakeCStr().release());
 				}
 				env_cstr.Append(nullptr);
 
@@ -564,13 +564,13 @@ namespace el1::system::task
 
 	void TProcess::Stop()
 	{
-		EL_ERROR(pid == -1, TException, "process not started yet");
+		EL_ERROR(pid == -1, TException, U"process not started yet");
 		kill(pid, SIGSTOP);
 	}
 
 	void TProcess::Resume()
 	{
-		EL_ERROR(pid == -1, TException, "process not started yet");
+		EL_ERROR(pid == -1, TException, U"process not started yet");
 		kill(pid, SIGCONT);
 	}
 

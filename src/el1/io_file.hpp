@@ -154,6 +154,7 @@ namespace el1::io::file
 			TPath(const TString& str);
 			TPath(const char* str);
 			TPath(const wchar_t* str);
+			TPath(const char32_t* str);
 			TPath(std::initializer_list<TString> list);
 			TPath();
 			TPath(TPath&&) = default;
@@ -163,8 +164,8 @@ namespace el1::io::file
 
 			static TPath CurrentWorkingDirectory();
 			static const char32_t SEPERATOR;
-			static const char* const PARENT_DIR;
-			static const char* const CURRENT_DIR;
+			static const TString PARENT_DIR;
+			static const TString CURRENT_DIR;
 	};
 
 	using TInvalidPathException = io::path::TInvalidPathException;

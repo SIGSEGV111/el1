@@ -61,7 +61,7 @@ namespace el1::io::format::base64
 				if(arr_input[0] >= 64)
 					return 0;
 
-				EL_ERROR(arr_input[1] >= 64, TException, TString("incomplete/invalid base64 sequence"));
+				EL_ERROR(arr_input[1] >= 64, TException, TString(U"incomplete/invalid base64 sequence"));
 
 				arr_output[0] =   (arr_input[0] & 0b111111) << 2
 								| (arr_input[1] & 0b110000) >> 4;

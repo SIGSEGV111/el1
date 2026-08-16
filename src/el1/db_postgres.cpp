@@ -90,7 +90,7 @@ namespace el1::db::postgres
 
 			void Deserialize(const array_t<const byte_t> pg_in, void* const cxx_out) const final override
 			{
-				EL_ERROR(pg_in.Count() != 1 || pg_in[0] > 1, TException, "invalid PostgreSQL bool binary value");
+				EL_ERROR(pg_in.Count() != 1 || pg_in[0] > 1, TException, U"invalid PostgreSQL bool binary value");
 				new (cxx_out) bool(pg_in[0] != 0);
 			}
 	};
@@ -112,7 +112,7 @@ namespace el1::db::postgres
 
 			void Deserialize(const array_t<const byte_t> pg_in, void* const cxx_out) const final override
 			{
-				EL_ERROR(pg_in.Count() != 1, TException, "invalid PostgreSQL char binary value");
+				EL_ERROR(pg_in.Count() != 1, TException, U"invalid PostgreSQL char binary value");
 				new (cxx_out) char(reinterpret_cast<const char*>(pg_in.ItemPtr(0))[0]);
 			}
 	};
@@ -261,7 +261,7 @@ namespace el1::db::postgres
 			usys_t Serialize(const void* const cxx_in, array_t<byte_t> pg_out) const final override
 			{
 				const TString& value = *reinterpret_cast<const TString*>(cxx_in);
-				EL_ERROR(value.Length() > std::numeric_limits<usys_t>::max() / 4U, TException, "string is too large to encode as UTF-8");
+				EL_ERROR(value.Length() > std::numeric_limits<usys_t>::max() / 4U, TException, U"string is too large to encode as UTF-8");
 				const usys_t estimated_size = value.Length() * 4U;
 				if(pg_out.Count() == 0)
 					return estimated_size;
@@ -298,7 +298,7 @@ namespace el1::db::postgres
 
 			void Deserialize(const array_t<const byte_t> pg_in, void* const cxx_out) const final override
 			{
-				EL_ERROR(pg_in.Count() != 8, TException, "invalid PostgreSQL timestamp binary value");
+				EL_ERROR(pg_in.Count() != 8, TException, U"invalid PostgreSQL timestamp binary value");
 				u64_t encoded;
 				memcpy(&encoded, pg_in.ItemPtr(0), sizeof(encoded));
 				encoded = be64toh(encoded);
@@ -323,7 +323,7 @@ namespace el1::db::postgres
 				const TJsonValue& value = *reinterpret_cast<const TJsonValue*>(cxx_in);
 				const TString text = value.ToString();
 				const usys_t header_size = is_jsonb ? 1U : 0U;
-				EL_ERROR(text.Length() > (std::numeric_limits<usys_t>::max() - header_size) / 4U, TException, "JSON value is too large to encode as UTF-8");
+				EL_ERROR(text.Length() > (std::numeric_limits<usys_t>::max() - header_size) / 4U, TException, U"JSON value is too large to encode as UTF-8");
 				const usys_t estimated_size = header_size + text.Length() * 4U;
 				if(pg_out.Count() == 0)
 					return estimated_size;
@@ -342,7 +342,7 @@ namespace el1::db::postgres
 				usys_t offset = 0;
 				if(is_jsonb)
 				{
-					EL_ERROR(pg_in.Count() == 0 || pg_in[0] != 1, TException, "unsupported PostgreSQL jsonb binary version");
+					EL_ERROR(pg_in.Count() == 0 || pg_in[0] != 1, TException, U"unsupported PostgreSQL jsonb binary version");
 					offset = 1;
 				}
 
@@ -364,7 +364,7 @@ namespace el1::db::postgres
 				EL_ERROR(value.Separator() != U'.', TInvalidArgumentException, "cxx_in", "ltree paths must use '.' as their component separator");
 
 				const TString text = value.ToString();
-				EL_ERROR(text.Length() > (std::numeric_limits<usys_t>::max() - 1U) / 4U, TException, "ltree value is too large to encode as UTF-8");
+				EL_ERROR(text.Length() > (std::numeric_limits<usys_t>::max() - 1U) / 4U, TException, U"ltree value is too large to encode as UTF-8");
 				const usys_t estimated_size = 1U + text.Length() * 4U;
 				if(pg_out.Count() == 0)
 					return estimated_size;
@@ -378,7 +378,7 @@ namespace el1::db::postgres
 
 			void Deserialize(const array_t<const byte_t> pg_in, void* const cxx_out) const final override
 			{
-				EL_ERROR(pg_in.Count() == 0 || pg_in[0] != 1, TException, "unsupported PostgreSQL ltree binary version");
+				EL_ERROR(pg_in.Count() == 0 || pg_in[0] != 1, TException, U"unsupported PostgreSQL ltree binary version");
 				const TString text(reinterpret_cast<const char*>(pg_in.ItemPtr(1)), pg_in.Count() - 1U);
 				new (cxx_out) io::path::TPath(text, '.');
 			}
@@ -462,14 +462,14 @@ namespace el1::db::postgres
 
 	TTypeMap TTypeMap::LoadTypeMap(TPostgresConnection& conn, const TCodecRegistry& registry)
 	{
-		EL_ERROR(conn.pg_connection == nullptr, TException, "cannot load PostgreSQL datatype map without an active connection");
+		EL_ERROR(conn.pg_connection == nullptr, TException, U"cannot load PostgreSQL datatype map without an active connection");
 
 		for(usys_t i = 0; i < registry.Count(); i++)
 		{
 			const IDatatypeCodec* const codec = registry[i];
-			EL_ERROR(codec == nullptr, TException, "PostgreSQL datatype codec registry contains a NULL entry");
-			EL_ERROR(codec->namespace_name == nullptr || codec->datatype_name == nullptr || codec->cxx_type_info == nullptr, TException, "PostgreSQL datatype codec has incomplete metadata");
-			EL_ERROR(codec->cxx_alignment == 0, TException, "PostgreSQL datatype codec has invalid C++ alignment metadata");
+			EL_ERROR(codec == nullptr, TException, U"PostgreSQL datatype codec registry contains a NULL entry");
+			EL_ERROR(codec->namespace_name == nullptr || codec->datatype_name == nullptr || codec->cxx_type_info == nullptr, TException, U"PostgreSQL datatype codec has incomplete metadata");
+			EL_ERROR(codec->cxx_alignment == 0, TException, U"PostgreSQL datatype codec has invalid C++ alignment metadata");
 
 			for(usys_t j = 0; j < i; j++)
 			{
@@ -482,8 +482,8 @@ namespace el1::db::postgres
 			"SELECT t.oid, n.nspname, t.typname, t.typtype, t.typbasetype "
 			"FROM pg_catalog.pg_type AS t "
 			"JOIN pg_catalog.pg_namespace AS n ON n.oid = t.typnamespace"), &PQclear);
-		EL_ERROR(result == nullptr, TPostgresException, conn.pg_connection, "unable to query PostgreSQL datatype catalog");
-		EL_ERROR(PQresultStatus(result.get()) != PGRES_TUPLES_OK, TPostgresException, result.get(), "unable to query PostgreSQL datatype catalog");
+		EL_ERROR(result == nullptr, TPostgresException, conn.pg_connection, U"unable to query PostgreSQL datatype catalog");
+		EL_ERROR(PQresultStatus(result.get()) != PGRES_TUPLES_OK, TPostgresException, result.get(), U"unable to query PostgreSQL datatype catalog");
 
 		TList<oid_t> resolved_oids;
 		resolved_oids.SetCount(registry.Count());
@@ -740,7 +740,7 @@ namespace el1::db::postgres
 
 				// error handling...
 				case PGRES_EMPTY_QUERY:
-					EL_THROW(TException, "empty query");
+					EL_THROW(TException, U"empty query");
 				case PGRES_COPY_OUT:
 					EL_THROW(TLogicException);
 				case PGRES_COPY_IN:
@@ -748,15 +748,15 @@ namespace el1::db::postgres
 				case PGRES_BAD_RESPONSE:
 					EL_THROW(TLogicException);
 				case PGRES_NONFATAL_ERROR:
-					EL_THROW(TPostgresException, current_result.get(), "PGRES_NONFATAL_ERROR");
+					EL_THROW(TPostgresException, current_result.get(), U"PGRES_NONFATAL_ERROR");
 				case PGRES_FATAL_ERROR:
-					EL_THROW(TPostgresException, current_result.get(), "PGRES_FATAL_ERROR");
+					EL_THROW(TPostgresException, current_result.get(), U"PGRES_FATAL_ERROR");
 				case PGRES_COPY_BOTH:
 					EL_THROW(TLogicException);
 				case PGRES_PIPELINE_SYNC:
 					EL_THROW(TLogicException);
 				case PGRES_PIPELINE_ABORTED:
-					EL_THROW(TPostgresException, current_result.get(), "PGRES_PIPELINE_ABORTED");
+					EL_THROW(TPostgresException, current_result.get(), U"PGRES_PIPELINE_ABORTED");
 			}
 		}
 	}
@@ -826,14 +826,14 @@ namespace el1::db::postgres
 
 	std::unique_ptr<IResultStream> TStatement::Execute(array_t<query_arg_t> args)
 	{
-		TString exec = "EXECUTE ";
+		TString exec = U"EXECUTE ";
 		exec += name;
 		if(args.Count() > 0)
 		{
-			exec += "($1";
+			exec += TStringView(U"($1");
 			for(usys_t i = 1; i < args.Count(); i++)
 				exec += TString::Format(U",$%d", i);
-			exec += ")";
+			exec += TStringView(U")");
 		}
 		return conn->Execute(exec, args);
 	}
@@ -853,8 +853,8 @@ namespace el1::db::postgres
 	static TString QuoteIdentifier(TString identifier)
 	{
 		EL_ERROR(identifier.Length() == 0, TInvalidArgumentException, "channel_name", "PostgreSQL notification channel names must not be empty");
-		identifier.Replace("\"", "\"\"");
-		identifier.Insert(0, "\"");
+		identifier.Replace(TStringView(U"\""), TStringView(U"\"\""));
+		identifier.Insert(0, TStringView(U"\""));
 		identifier += '"';
 		return identifier;
 	}
@@ -870,7 +870,7 @@ namespace el1::db::postgres
 			EL_THROW(TLogicException);
 		}
 
-		return "";
+		return U"";
 	}
 
 	system::waitable::TMemoryWaitable<usys_t>* TChannelListener::OnNotify() const
@@ -911,7 +911,7 @@ namespace el1::db::postgres
 			for(;;)
 			{
 				const int r = PQflush((PGconn*)pg_connection);
-				EL_ERROR(r < 0, TPostgresException, pg_connection, "unable to flush output buffer to server");
+				EL_ERROR(r < 0, TPostgresException, pg_connection, U"unable to flush output buffer to server");
 				if(r > 0) // more data to send but unable at the moment
 					on_tx_ready.WaitFor();
 				else // no more data to send (r == 0)
@@ -936,7 +936,7 @@ namespace el1::db::postgres
 			for(;;)
 			{
 				on_rx_ready.WaitFor();
-				EL_ERROR(PQconsumeInput((PGconn*)pg_connection) == 0, TPostgresException, pg_connection, "unable to process data from server server");
+				EL_ERROR(PQconsumeInput((PGconn*)pg_connection) == 0, TPostgresException, pg_connection, U"unable to process data from server server");
 
 				gt_begin:;
 				while(active_queries.Count() > 0 && PQisBusy((PGconn*)pg_connection) == 0)
@@ -1048,7 +1048,7 @@ namespace el1::db::postgres
 
 	void TPostgresConnection::Connect(const TSortedMap<TString, const TString>& properties)
 	{
-		EL_ERROR(pg_connection != nullptr, TException, "already connected");
+		EL_ERROR(pg_connection != nullptr, TException, U"already connected");
 
 		TList<std::unique_ptr<char[]>> keywords;
 		TList<std::unique_ptr<char[]>> values;
@@ -1062,7 +1062,7 @@ namespace el1::db::postgres
 		keywords.MoveAppend(std::unique_ptr<char[]>(nullptr));
 		values.MoveAppend(std::unique_ptr<char[]>(nullptr));
 
-		EL_ERROR((pg_connection = PQconnectStartParams((char**)&keywords[0], (char**)&values[0], 0)) == nullptr, TException, "libpq has been unable to allocate a new PGconn structure");
+		EL_ERROR((pg_connection = PQconnectStartParams((char**)&keywords[0], (char**)&values[0], 0)) == nullptr, TException, U"libpq has been unable to allocate a new PGconn structure");
 
 		PostgresPollingStatusType ps;
 		do
@@ -1083,7 +1083,7 @@ namespace el1::db::postgres
 					break;
 				}
 				case PGRES_POLLING_FAILED:
-					EL_THROW(TPostgresException, pg_connection, "unable to establish connection with server");
+					EL_THROW(TPostgresException, pg_connection, U"unable to establish connection with server");
 
 				case PGRES_POLLING_OK:
 					break;
@@ -1097,8 +1097,8 @@ namespace el1::db::postgres
 
 		type_map = TTypeMap::LoadTypeMap(*this);
 
-		EL_ERROR(PQenterPipelineMode((PGconn*)pg_connection) != 1, TPostgresException, pg_connection, "unable to enter pipeline mode on postgres connection");
-		EL_ERROR(PQsetnonblocking((PGconn*)pg_connection, 1) != 0, TPostgresException, pg_connection, "unable to set non-blocking mode on postgres connection");
+		EL_ERROR(PQenterPipelineMode((PGconn*)pg_connection) != 1, TPostgresException, pg_connection, U"unable to enter pipeline mode on postgres connection");
+		EL_ERROR(PQsetnonblocking((PGconn*)pg_connection, 1) != 0, TPostgresException, pg_connection, U"unable to set non-blocking mode on postgres connection");
 
 		fib_flusher.Start(TFunction(this, &TPostgresConnection::FlusherMain));
 		fib_reader.Start(TFunction(this, &TPostgresConnection::ReaderMain));
@@ -1186,7 +1186,7 @@ namespace el1::db::postgres
 
 				oids[i] = (Oid)binding.oid;
 				const usys_t estimated_size = codec.Serialize(arg.value, array_t<byte_t>());
-				EL_ERROR(estimated_size > (usys_t)std::numeric_limits<int>::max(), TException, "encoded PostgreSQL query argument exceeds the libpq size limit");
+				EL_ERROR(estimated_size > (usys_t)std::numeric_limits<int>::max(), TException, U"encoded PostgreSQL query argument exceeds the libpq size limit");
 				values[i].SetCount(estimated_size == 0 ? 1U : estimated_size);
 				const usys_t encoded_size = codec.Serialize(arg.value, values[i]);
 				EL_ERROR(encoded_size > estimated_size, TLogicException);
@@ -1203,11 +1203,11 @@ namespace el1::db::postgres
 			}
 		}
 
-		EL_ERROR(PQsendQueryParams((PGconn*)pg_connection, sql.MakeCStr().get(), (int)n_args, oids.get(), value_ptrs.get(), lengths.get(), formats.get(), 1) != 1, TPostgresException, pg_connection, "unable to dispatch query to server");
+		EL_ERROR(PQsendQueryParams((PGconn*)pg_connection, sql.MakeCStr().get(), (int)n_args, oids.get(), value_ptrs.get(), lengths.get(), formats.get(), 1) != 1, TPostgresException, pg_connection, U"unable to dispatch query to server");
 
 		PQsetSingleRowMode((PGconn*)pg_connection);	// sometimes it works, sometimes it doesn't - after consulting the libPQ source it depends on whether or not the connection has an active result pending. Now we can't know this here, since we are working in a pipeline and we are here on the sending side, not the receiving side, so we do not know in what state the result processing is. So by trial-and-error I found that the first query needs it here, while further queries need it in ReaderMain()... and that seems to work... for now.
 
-		EL_ERROR(PQpipelineSync((PGconn*)pg_connection) != 1, TPostgresException, pg_connection, "unable to send sync request");
+		EL_ERROR(PQpipelineSync((PGconn*)pg_connection) != 1, TPostgresException, pg_connection, U"unable to send sync request");
 
 		fib_flusher.Resume();
 

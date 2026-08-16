@@ -60,6 +60,7 @@ namespace el1::io::path
 			TPath(const TString& str, char32_t separator);
 			TPath(const char* str, char32_t separator);
 			TPath(const wchar_t* str, char32_t separator);
+			TPath(const char32_t* str, char32_t separator);
 			TPath(std::initializer_list<TString> list, char32_t separator);
 
 			TPath(TPath&&) = default;

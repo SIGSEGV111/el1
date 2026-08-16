@@ -18,15 +18,15 @@ static el1::dev::w1::EPowerSource parsePowerSource(const el1::io::text::string::
 	using namespace el1::dev::w1;
 	using namespace el1::error;
 
-	if(value == "auto")
+	if(value == U"auto")
 	{
 		return EPowerSource::AUTO_DETECT;
 	}
-	if(value == "parasitic")
+	if(value == U"parasitic")
 	{
 		return EPowerSource::PARASITIC;
 	}
-	if(value == "dedicated")
+	if(value == U"dedicated")
 	{
 		return EPowerSource::DEDICATED;
 	}
@@ -50,8 +50,8 @@ int main(const int argc, char* argv[])
 
 	try
 	{
-		TString backend = "spi";
-		TString power_source_name = "auto";
+		TString backend = U"spi";
+		TString power_source_name = U"auto";
 		TString raspberry_pi_polling_limit_file;
 		TPath spi_device = "/dev/spidev0.0";
 		TPath i2c_device = "/dev/i2c-1";
@@ -61,19 +61,19 @@ int main(const int argc, char* argv[])
 		bool active_pullup = true;
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Scan a 1-Wire bus and read DS18B20/DS18S20 temperature sensors. Supports SPI bit-banging and DS2482S-100."),
-			TStringArgument(&backend, 'B', "backend", "", true, false, "Bus backend: spi or ds2482"),
-			TStringArgument(&power_source_name, 'P', "power", "", true, false, "Sensor power source: auto, parasitic or dedicated"),
-			TPathArgument(&spi_device, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 's', "spi-device", "", true, false, "SPI device used by the bit-bang backend"),
-			TBooleanArgument(&invert_tx, 'I', "invert-tx", "", true, false, "Invert SPI transmit polarity"),
-			TIntegerArgument(&min_transfer_bytes, 'M', "min-transfer-bytes", "", true, false, "Minimum SPI transfer size used to enforce DMA"),
-			TStringArgument(&raspberry_pi_polling_limit_file, 'R', "rpi-polling-limit-file", "", true, false, "Optional spi_bcm2835 polling_limit_us file to set to zero"),
-			TPathArgument(&i2c_device, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'i', "i2c-device", "", true, false, "I2C device used by the DS2482 backend"),
-			TIntegerArgument(&i2c_address, 'a', "address", "", true, false, "DS2482 7-bit I2C address"),
-			TBooleanArgument(&active_pullup, 'A', "active-pullup", "", true, false, "Enable the DS2482 active pull-up feature")
+			THelpArgument(U"Scan a 1-Wire bus and read DS18B20/DS18S20 temperature sensors. Supports SPI bit-banging and DS2482S-100."),
+			TStringArgument(&backend, 'B', U"backend", U"", true, false, U"Bus backend: spi or ds2482"),
+			TStringArgument(&power_source_name, 'P', U"power", U"", true, false, U"Sensor power source: auto, parasitic or dedicated"),
+			TPathArgument(&spi_device, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 's', U"spi-device", U"", true, false, U"SPI device used by the bit-bang backend"),
+			TBooleanArgument(&invert_tx, 'I', U"invert-tx", U"", true, false, U"Invert SPI transmit polarity"),
+			TIntegerArgument(&min_transfer_bytes, 'M', U"min-transfer-bytes", U"", true, false, U"Minimum SPI transfer size used to enforce DMA"),
+			TStringArgument(&raspberry_pi_polling_limit_file, 'R', U"rpi-polling-limit-file", U"", true, false, U"Optional spi_bcm2835 polling_limit_us file to set to zero"),
+			TPathArgument(&i2c_device, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'i', U"i2c-device", U"", true, false, U"I2C device used by the DS2482 backend"),
+			TIntegerArgument(&i2c_address, 'a', U"address", U"", true, false, U"DS2482 7-bit I2C address"),
+			TBooleanArgument(&active_pullup, 'A', U"active-pullup", U"", true, false, U"Enable the DS2482 active pull-up feature")
 		);
 
-		EL_ERROR(backend != "spi" && backend != "ds2482", TInvalidArgumentException, "backend", "spi or ds2482");
+		EL_ERROR(backend != U"spi" && backend != U"ds2482", TInvalidArgumentException, "backend", "spi or ds2482");
 		EL_ERROR(i2c_address < 0x03 || i2c_address > 0x77, TInvalidArgumentException, "address", "valid 7-bit I2C address");
 		EL_ERROR(min_transfer_bytes < 0 || min_transfer_bytes > 255, TInvalidArgumentException, "min-transfer-bytes", "range 0-255");
 		const EPowerSource power_source = parsePowerSource(power_source_name);
@@ -82,7 +82,7 @@ int main(const int argc, char* argv[])
 		std::unique_ptr<el1::dev::i2c::native::TBus> i2c_bus;
 		std::unique_ptr<IW1Bus> one_wire_bus;
 
-		if(backend == "spi")
+		if(backend == U"spi")
 		{
 			if(raspberry_pi_polling_limit_file.Length() > 0)
 			{

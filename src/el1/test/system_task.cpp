@@ -43,7 +43,7 @@ namespace
 			*status = true;
 		}
 
-		TSlowThread(bool* status) : status(status), thread("test", TFunction(this, &TSlowThread::ThreadMain), false)
+		TSlowThread(bool* status) : status(status), thread(U"test", TFunction(this, &TSlowThread::ThreadMain), false)
 		{
 			this->thread.Start();
 		}
@@ -66,7 +66,7 @@ namespace
 		{
 		}
 
-		TSlowConstructorThread(bool* status) : status(status), thread("test", TFunction(this, &TSlowConstructorThread::ThreadMain))
+		TSlowConstructorThread(bool* status) : status(status), thread(U"test", TFunction(this, &TSlowConstructorThread::ThreadMain))
 		{
 			usleep(1000);
 		}
@@ -88,7 +88,7 @@ namespace
 			EL_THROW(TDebugException, 17);
 		}
 
-		TThrowThread(bool* status) : status(status), thread("test", TFunction(this, &TThrowThread::ThreadMain))
+		TThrowThread(bool* status) : status(status), thread(U"test", TFunction(this, &TThrowThread::ThreadMain))
 		{
 			usleep(1000);
 		}
@@ -116,7 +116,7 @@ namespace
 			this->thread.Stop();
 		}
 
-		TStopThread() : thread("test", TFunction(this, &TStopThread::ThreadMain))
+		TStopThread() : thread(U"test", TFunction(this, &TStopThread::ThreadMain))
 		{
 		}
 
@@ -152,7 +152,7 @@ namespace
 
 		{
 			status = false;
-			TThread thread("test", [&](){
+			TThread thread(U"test", [&](){
 				status = true;
 			});
 		}
@@ -163,7 +163,7 @@ namespace
 	TEST(system_task, TThread_ShutdownWhileWaiting)
 	{
 		std::atomic<bool> waiting(false);
-		TThread thread("shutdown-wait", [&](){
+		TThread thread(U"shutdown-wait", [&](){
 			waiting.store(true, std::memory_order_release);
 			TFiber::Sleep(1);
 		});
@@ -184,7 +184,7 @@ namespace
 	TEST(system_task, ProcessSignalIsForwardedToMainThread)
 	{
 		std::atomic<bool> waiting(false);
-		TThread worker("signal-wait", [&](){
+		TThread worker(U"signal-wait", [&](){
 			waiting.store(true, std::memory_order_release);
 			TFiber::Sleep(1);
 		});
@@ -564,8 +564,8 @@ namespace
 	TEST(system_task, EnvironmentVariables)
 	{
 		EXPECT_TRUE(EnvironmentVariables().Items().Count() > 0U);
-		EXPECT_TRUE(EnvironmentVariables().Get("PATH") != nullptr);
-		EXPECT_TRUE(EnvironmentVariables()["PATH"].chars.Count() > 0U);
+		EXPECT_TRUE(EnvironmentVariables().Get(U"PATH") != nullptr);
+		EXPECT_TRUE(EnvironmentVariables()[U"PATH"].chars.Count() > 0U);
 	}
 
 // 	TEST(system_task, TThread_StopResume)
@@ -582,7 +582,7 @@ namespace
 		TSimpleMutex mtx;
 		mtx.Acquire();
 
-		TThread t("test", [&](){
+		TThread t(U"test", [&](){
 			mtx.Acquire();
 			while(state == 0) sched_yield(); // busy loop, bypass internal scheduler, but call yield() to make valgrind happy
 		});
@@ -602,16 +602,16 @@ namespace
 	TEST(system_task, TProcess_simple_invoke)
 	{
 		{
-			TProcess proc1("/bin/echo", { "hello world!" } );
+			TProcess proc1(U"/bin/echo", { U"hello world!" } );
 			EXPECT_EQ(proc1.Join(), 0);
 		}
 
 		{
-			TProcess proc1("/bin/sleep", { "1h" } );
+			TProcess proc1(U"/bin/sleep", { U"1h" } );
 		}
 
 		{
-			TProcess proc1("/bin/sleep", { "1h" } );
+			TProcess proc1(U"/bin/sleep", { U"1h" } );
 			usleep(100000UL);
 			proc1.Shutdown();
 			EXPECT_TRUE(proc1.Join() < 0);
@@ -648,7 +648,7 @@ namespace
 			w += r;
 		}
 
-		EXPECT_EQ(TString("foobar\nhello world\n"), (char*)buffer);
+		EXPECT_EQ(TString(U"foobar\nhello world\n"), TString((char*)buffer));
 
 		EXPECT_EQ(proc1.Join(), 0);
 	}
@@ -661,7 +661,7 @@ namespace
 			stream_map.Add(1, TProcess::EFDIO::DISCARD);
 			stream_map.Add(2, TProcess::EFDIO::INHERIT);
 
-			TProcess proc1("/usr/bin/head", { "-c", "128" }, stream_map);
+			TProcess proc1(U"/usr/bin/head", { U"-c", U"128" }, stream_map);
 			EXPECT_EQ(proc1.Join(), 0);
 		}
 
@@ -671,7 +671,7 @@ namespace
 			stream_map.Add(1, TProcess::EFDIO::DISCARD);
 			stream_map.Add(2, TProcess::EFDIO::INHERIT);
 
-			TProcess proc1("/usr/bin/head", { "-c", "128" }, stream_map);
+			TProcess proc1(U"/usr/bin/head", { U"-c", U"128" }, stream_map);
 			EXPECT_EQ(proc1.Join(), 0);
 		}
 
@@ -681,7 +681,7 @@ namespace
 			stream_map.Add(1, TProcess::EFDIO::DISCARD);
 			stream_map.Add(2, TProcess::EFDIO::INHERIT);
 
-			TProcess proc1("/usr/bin/head", { "-c", "128" }, stream_map);
+			TProcess proc1(U"/usr/bin/head", { U"-c", U"128" }, stream_map);
 			EXPECT_EQ(proc1.Join(), 0);
 		}
 	}
@@ -689,7 +689,7 @@ namespace
 	TEST(system_task, TProcess_stop_resume)
 	{
 		{
-			TProcess proc1("/bin/sleep", { "1h" } );
+			TProcess proc1(U"/bin/sleep", { U"1h" } );
 			usleep(100000UL);
 			proc1.Stop();
 			proc1.Shutdown();
@@ -697,7 +697,7 @@ namespace
 		}
 
 		{
-			TProcess proc1("/bin/sleep", { "1h" } );
+			TProcess proc1(U"/bin/sleep", { U"1h" } );
 			usleep(100000UL);
 			proc1.Stop();
 		}
@@ -706,26 +706,26 @@ namespace
 	TEST(system_task, TProcess_Execute)
 	{
 		{
-			const TString stdout = TProcess::Execute("/bin/echo", { "hello world" });
-			EXPECT_EQ(stdout, "hello world\n");
+			const TString stdout = TProcess::Execute(U"/bin/echo", { U"hello world" });
+			EXPECT_EQ(stdout, U"hello world\n");
 		}
 
 		{
-			TString stdin = "hello world foobar";
+			TString stdin = U"hello world foobar";
 			const TString stdout = TProcess::Execute("/bin/cat", {}, &stdin, nullptr, 10);
-			EXPECT_EQ(stdout, "hello world foobar");
+			EXPECT_EQ(stdout, U"hello world foobar");
 		}
 
 		{
-			TString stdin = "hello world foobar";
+			TString stdin = U"hello world foobar";
 			TString stderr;
-			const TString stdout = TProcess::Execute("/bin/bash", { "-euc", "echo text_on_stderr 1>&2; echo text_on_stdout" }, &stdin, &stderr, 10);
-			EXPECT_EQ(stdout, "text_on_stdout\n");
-			EXPECT_EQ(stderr, "text_on_stderr\n");
+			const TString stdout = TProcess::Execute(U"/bin/bash", { U"-euc", U"echo text_on_stderr 1>&2; echo text_on_stdout" }, &stdin, &stderr, 10);
+			EXPECT_EQ(stdout, U"text_on_stdout\n");
+			EXPECT_EQ(stderr, U"text_on_stderr\n");
 		}
 
 		{
-			EXPECT_THROW(TProcess::Execute("/bin/sleep", { "1m" }, nullptr, nullptr, 1), TProcess::TTimeoutException);
+			EXPECT_THROW(TProcess::Execute(U"/bin/sleep", { U"1m" }, nullptr, nullptr, 1), TProcess::TTimeoutException);
 			EXPECT_THROW(TProcess::Execute("/bin/false"), TProcess::TNonZeroExitException);
 		}
 	}

@@ -8,7 +8,7 @@ namespace el1::io::stream
 
 	TString TStreamDryException::Message() const
 	{
-		return L"source stream ran out of elements";
+		return U"source stream ran out of elements";
 	}
 
 	IException* TStreamDryException::Clone() const
@@ -18,7 +18,7 @@ namespace el1::io::stream
 
 	TString TSinkFloodedException::Message() const
 	{
-		return L"sink stream refused to accept further elements";
+		return U"sink stream refused to accept further elements";
 	}
 
 	IException* TSinkFloodedException::Clone() const
@@ -28,7 +28,7 @@ namespace el1::io::stream
 
 	TString TLimitExceededException::Message() const
 	{
-		return L"stream sink exceeded configured item limit";
+		return U"stream sink exceeded configured item limit";
 	}
 
 	IException* TLimitExceededException::Clone() const

@@ -89,7 +89,7 @@ namespace el1::dev::i2c::pca9555
 
 	void TPin::State(const bool new_state)
 	{
-		EL_ERROR(this->Mode() != EMode::OUTPUT, TException, "pin is not in OUTPUT mode");
+		EL_ERROR(this->Mode() != EMode::OUTPUT, TException, U"pin is not in OUTPUT mode");
 		SetBits(this->controller->reg_new.output, 1, this->index, new_state ? 1 : 0);
 		if(this->auto_commit)
 			this->controller->Commit();
@@ -233,9 +233,9 @@ namespace el1::dev::i2c::pca9555
 		this->reg_ref.config   = this->device->ReadWordRegister(REG_CONFIG);
 		this->reg_new = this->reg_ref;
 
-		EL_ERROR(this->reg_ref.output   != 0xffff, TException, TString("unable to init PCA9555 at address %x", this->device->Address()));
-		EL_ERROR(this->reg_ref.polarity != 0x0000, TException, TString("unable to init PCA9555 at address %x", this->device->Address()));
-		EL_ERROR(this->reg_ref.config   != 0xffff, TException, TString("unable to init PCA9555 at address %x", this->device->Address()));
+		EL_ERROR(this->reg_ref.output   != 0xffff, TException, TString(U"unable to init PCA9555 at address %x", this->device->Address()));
+		EL_ERROR(this->reg_ref.polarity != 0x0000, TException, TString(U"unable to init PCA9555 at address %x", this->device->Address()));
+		EL_ERROR(this->reg_ref.config   != 0xffff, TException, TString(U"unable to init PCA9555 at address %x", this->device->Address()));
 
 		if(this->irq)
 		{

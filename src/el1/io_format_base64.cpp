@@ -7,9 +7,9 @@ namespace el1::io::format::base64
 	TString EncodeBase64Url(const array_t<const byte_t> data)
 	{
 		TString result = data.Pipe().Transform(TBase64Encoder()).Collect();
-		result.Replace(U"+", U"-");
-		result.Replace(U"/", U"_");
-		while(result.EndsWith(U"="))
+		result.Replace(TStringView(U"+"), TStringView(U"-"));
+		result.Replace(TStringView(U"/"), TStringView(U"_"));
+		while(result.EndsWith(TStringView(U"=")))
 			result.Truncate(result.Length() - 1);
 		return result;
 	}
@@ -17,10 +17,10 @@ namespace el1::io::format::base64
 	TList<byte_t> DecodeBase64Url(TString text)
 	{
 		EL_ERROR((text.Length() % 4U) == 1U, error::TInvalidArgumentException, "text", "invalid base64url length");
-		text.Replace(U"-", U"+");
-		text.Replace(U"_", U"/");
+		text.Replace(TStringView(U"-"), TStringView(U"+"));
+		text.Replace(TStringView(U"_"), TStringView(U"/"));
 		while((text.Length() % 4U) != 0U)
-			text += U"=";
+			text += TStringView(U"=");
 		return text.chars.Pipe().Transform(TBase64Decoder()).Collect();
 	}
 }

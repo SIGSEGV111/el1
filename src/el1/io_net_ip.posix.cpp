@@ -117,7 +117,7 @@ namespace el1::io::net::ip
 
 			// LCOV_EXCL_START
 			default:
-				EL_THROW(TException, "unknown address family");
+				EL_THROW(TException, U"unknown address family");
 			// LCOV_EXCL_STOP
 		}
 	}
@@ -335,7 +335,7 @@ namespace el1::io::net::ip
 		if(result < 0)
 		{
 			EL_ERROR(errno != EINPROGRESS, TSyscallException, errno);
-			EL_ERROR(!on_tx_ready.WaitFor(connect_timeout), TException, "TCP connection attempt timed out");
+			EL_ERROR(!on_tx_ready.WaitFor(connect_timeout), TException, U"TCP connection attempt timed out");
 			on_tx_ready.Reset();
 
 			int socket_error = 0;

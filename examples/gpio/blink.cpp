@@ -24,12 +24,12 @@ int main(const int argc, char* argv[])
 		s64_t mode = 1;
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Toggle a GPIO output or alternate its input pull resistor."),
-			TPathArgument(&gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device"),
-			TIntegerArgument(&gpio_line, 'g', "gpio", "", false, false, "GPIO line index"),
-			TIntegerArgument(&delay_ms, 'd', "delay", "", true, false, "Delay between state changes in milliseconds"),
-			TIntegerArgument(&repeat_count, 'n', "count", "", true, false, "Number of cycles"),
-			TIntegerArgument(&mode, 'm', "mode", "", true, false, "0=alternate input pull-down/up, 1=toggle output low/high")
+			THelpArgument(U"Toggle a GPIO output or alternate its input pull resistor."),
+			TPathArgument(&gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', U"gpio-chip", U"", true, false, U"GPIO character device"),
+			TIntegerArgument(&gpio_line, 'g', U"gpio", U"", false, false, U"GPIO line index"),
+			TIntegerArgument(&delay_ms, 'd', U"delay", U"", true, false, U"Delay between state changes in milliseconds"),
+			TIntegerArgument(&repeat_count, 'n', U"count", U"", true, false, U"Number of cycles"),
+			TIntegerArgument(&mode, 'm', U"mode", U"", true, false, U"0=alternate input pull-down/up, 1=toggle output low/high")
 		);
 
 		EL_ERROR(gpio_line < 0, TInvalidArgumentException, "gpio", "non-negative GPIO line index");

@@ -200,23 +200,25 @@ namespace el1::io::text::string
 			TString  operator+ (const char32_t rhs) const;
 
 			bool operator==(const TStringView rhs) const EL_GETTER;
-			bool operator==(const TString& rhs) const EL_GETTER { return operator==(rhs.View()); }
+			// bool operator==(const TString& rhs) const EL_GETTER { return operator==(rhs.View()); }
 			bool operator!=(const TStringView rhs) const EL_GETTER;
-			bool operator!=(const TString& rhs) const EL_GETTER { return operator!=(rhs.View()); }
+			// bool operator!=(const TString& rhs) const EL_GETTER { return operator!=(rhs.View()); }
 			bool operator>=(const TStringView rhs) const EL_GETTER;
-			bool operator>=(const TString& rhs) const EL_GETTER { return operator>=(rhs.View()); }
+			// bool operator>=(const TString& rhs) const EL_GETTER { return operator>=(rhs.View()); }
 			bool operator<=(const TStringView rhs) const EL_GETTER;
-			bool operator<=(const TString& rhs) const EL_GETTER { return operator<=(rhs.View()); }
+			// bool operator<=(const TString& rhs) const EL_GETTER { return operator<=(rhs.View()); }
 			bool operator> (const TStringView rhs) const EL_GETTER;
-			bool operator> (const TString& rhs) const EL_GETTER { return operator>(rhs.View()); }
+			// bool operator> (const TString& rhs) const EL_GETTER { return operator>(rhs.View()); }
 			bool operator< (const TStringView rhs) const EL_GETTER;
-			bool operator< (const TString& rhs) const EL_GETTER { return operator<(rhs.View()); }
+			// bool operator< (const TString& rhs) const EL_GETTER { return operator<(rhs.View()); }
 
 			inline usys_t Length() const noexcept EL_GETTER { return chars.Count(); }
 			TStringView View() const & noexcept EL_LIFETIME_BOUND { return TStringView(chars.View()); }
 			TStringView View() const && = delete;
 			inline char32_t operator[](const ssys_t index) const EL_GETTER { return chars[index]; }
 			inline char32_t& operator[](const ssys_t index) EL_GETTER { return chars[index]; }
+
+			// inline operator TStringView() const & noexcept EL_LIFETIME_BOUND { return TStringView(chars.View()); }
 
 			std::unique_ptr<char[]> MakeCStr() const;
 
@@ -225,7 +227,7 @@ namespace el1::io::text::string
 			TString(const TString&) = default;
 			TString(const char* const str, const usys_t maxlen = NEG1);
 			TString(const wchar_t* const str, const usys_t maxlen = NEG1);
-			explicit TString(const char32_t* const str, const usys_t maxlen = NEG1);
+			TString(const char32_t* const str, const usys_t maxlen = NEG1);
 			TString(TList<char32_t> chars) : chars(std::move(chars)) {}
 			TString(array_t<const char32_t> chars) : chars(chars) {}
 			TString(const TStringView chars) : chars(static_cast<const array_t<const char32_t>&>(chars)) {}
@@ -331,13 +333,13 @@ namespace el1::io::text::string
 
 	/********************************************/
 
-	static inline bool MatchStringList(const TString& needle, const char* const haystack)
+	static inline bool MatchStringList(const TString& needle, const TStringView haystack)
 	{
 		return needle == haystack;
 	}
 
 	template<typename ... A>
-	static inline bool MatchStringList(const TString& needle, const char* const haystack, const A ... haystacks)
+	static inline bool MatchStringList(const TString& needle, const TStringView haystack, const A& ... haystacks)
 	{
 		if(MatchStringList(needle, haystack))
 			return true;
@@ -388,7 +390,7 @@ namespace el1::io::text::string
 	TString TString::Format(F&& runtime_format, A const& ...args)
 	{
 		const format::TFormatString<std::type_identity_t<std::decay_t<const A>>...> parsed_format(runtime_format.Data(), runtime_format.Length());
-		EL_ERROR(!parsed_format.IsValid(), TException, "invalid format string or formatter/argument mismatch");
+		EL_ERROR(!parsed_format.IsValid(), TException, U"invalid format string or formatter/argument mismatch");
 		return Format(parsed_format, args...);
 	}
 }

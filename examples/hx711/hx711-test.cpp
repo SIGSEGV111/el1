@@ -38,17 +38,17 @@ int main(const int argc, char* argv[])
 		f64_t sample_rate = 11.0;
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Read samples from an HX711 through an SPI controller."),
-			TPathArgument(&path_spi, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', "bus", "", true, false, "SPI device"),
-			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device for optional CE/IRQ lines"),
-			TIntegerArgument(&capture_count, 'n', "count", "", true, false, "Number of samples; -1 has no limit"),
-			TIntegerArgument(&configuration, 'c', "config", "", true, false, "0=channel A x128, 1=channel B x32, 2=channel A x64"),
-			TIntegerArgument(&chip_enable_line, 'e', "ce", "", true, false, "GPIO line used as chip enable; -1 disables it"),
-			TIntegerArgument(&irq_line, 'i', "irq", "", true, false, "GPIO line used as interrupt source; -1 disables it"),
-			TIntegerArgument(&clock_hz, 'f', "clock", "", true, false, "SPI clock frequency in Hz"),
-			TFloatArgument(&sample_rate, 'r', "rate", "", true, false, "Expected HX711 sample rate used for polling"),
-			TFlagArgument(&DEBUG, 'd', "debug", "", "Enable driver debug output"),
-			TIntegerArgument(&average_count, 'a', "avg", "", true, false, "Number of samples in the moving average; 0 disables averaging")
+			THelpArgument(U"Read samples from an HX711 through an SPI controller."),
+			TPathArgument(&path_spi, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', U"bus", U"", true, false, U"SPI device"),
+			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', U"gpio-chip", U"", true, false, U"GPIO character device for optional CE/IRQ lines"),
+			TIntegerArgument(&capture_count, 'n', U"count", U"", true, false, U"Number of samples; -1 has no limit"),
+			TIntegerArgument(&configuration, 'c', U"config", U"", true, false, U"0=channel A x128, 1=channel B x32, 2=channel A x64"),
+			TIntegerArgument(&chip_enable_line, 'e', U"ce", U"", true, false, U"GPIO line used as chip enable; -1 disables it"),
+			TIntegerArgument(&irq_line, 'i', U"irq", U"", true, false, U"GPIO line used as interrupt source; -1 disables it"),
+			TIntegerArgument(&clock_hz, 'f', U"clock", U"", true, false, U"SPI clock frequency in Hz"),
+			TFloatArgument(&sample_rate, 'r', U"rate", U"", true, false, U"Expected HX711 sample rate used for polling"),
+			TFlagArgument(&DEBUG, 'd', U"debug", U"", U"Enable driver debug output"),
+			TIntegerArgument(&average_count, 'a', U"avg", U"", true, false, U"Number of samples in the moving average; 0 disables averaging")
 		);
 
 		EL_ERROR(configuration < 0 || configuration > 2, TInvalidArgumentException, "config", "range 0-2");

@@ -56,8 +56,8 @@ namespace el1::security::jwt
 
 	static EVP_PKEY* RsaJwkToKey(const TJsonValue& jwk)
 	{
-		const TList<byte_t> modulus = DecodeBase64Url(jwk("n").String());
-		const TList<byte_t> exponent = DecodeBase64Url(jwk("e").String());
+		const TList<byte_t> modulus = DecodeBase64Url(jwk(U"n").String());
+		const TList<byte_t> exponent = DecodeBase64Url(jwk(U"e").String());
 		EL_ERROR(modulus.Count() == 0 || exponent.Count() == 0, TInvalidArgumentException, "jwks", "invalid RSA JWK");
 
 		BIGNUM* n = BN_bin2bn(modulus.ItemPtr(0), (int)modulus.Count(), nullptr);
@@ -70,7 +70,7 @@ namespace el1::security::jwt
 			BN_free(e);
 			RSA_free(rsa);
 			EVP_PKEY_free(key);
-			EL_THROW(TException, "failed to construct RSA key from JWK");
+			EL_THROW(TException, U"failed to construct RSA key from JWK");
 		}
 		if(RSA_set0_key(rsa, n, e, nullptr) != 1)
 		{
@@ -78,13 +78,13 @@ namespace el1::security::jwt
 			BN_free(e);
 			RSA_free(rsa);
 			EVP_PKEY_free(key);
-			EL_THROW(TException, "failed to construct RSA key from JWK");
+			EL_THROW(TException, U"failed to construct RSA key from JWK");
 		}
 		if(EVP_PKEY_assign_RSA(key, rsa) != 1)
 		{
 			RSA_free(rsa);
 			EVP_PKEY_free(key);
-			EL_THROW(TException, "failed to construct RSA key from JWK");
+			EL_THROW(TException, U"failed to construct RSA key from JWK");
 		}
 		return key;
 	}
@@ -148,22 +148,22 @@ namespace el1::security::jwt
 
 	void TJwkSet::Load(const TJsonValue& jwks)
 	{
-		EL_ERROR(!jwks("keys").IsArray(), TInvalidArgumentException, "jwks", "JWK set does not contain a keys array");
+		EL_ERROR(!jwks(U"keys").IsArray(), TInvalidArgumentException, "jwks", "JWK set does not contain a keys array");
 
 		TList<data_t::key_t> keys;
 		try
 		{
-			for(const auto& jwk : jwks("keys").Array())
+			for(const auto& jwk : jwks(U"keys").Array())
 			{
-				if(jwk("kty").String("") != "RSA")
+				if(jwk(U"kty").String(U"") != U"RSA")
 					continue;
-				const TString use = jwk("use").String("");
-				if(use.Length() > 0 && use != "sig")
+				const TString use = jwk(U"use").String(U"");
+				if(use.Length() > 0 && use != U"sig")
 					continue;
-				const TString algorithm = jwk("alg").String("");
+				const TString algorithm = jwk(U"alg").String(U"");
 				if(algorithm.Length() > 0 && AlgorithmDigest(algorithm) == nullptr)
 					continue;
-				const TString kid = jwk("kid").String("");
+				const TString kid = jwk(U"kid").String(U"");
 				if(kid.Length() == 0)
 					continue;
 
@@ -197,14 +197,14 @@ namespace el1::security::jwt
 				return result;
 
 			result.header = TJsonValue::Parse(FromBytes(DecodeBase64Url(parts[0])));
-			const TString algorithm = result.header("alg").String("");
+			const TString algorithm = result.header(U"alg").String(U"");
 			const EVP_MD* const digest = AlgorithmDigest(algorithm);
 			if(digest == nullptr)
 			{
 				result.error = EValidationError::UNSUPPORTED_ALGORITHM;
 				return result;
 			}
-			const TString kid = result.header("kid").String("");
+			const TString kid = result.header(U"kid").String(U"");
 			if(kid.Length() == 0)
 				return result;
 
@@ -231,19 +231,19 @@ namespace el1::security::jwt
 			}
 
 			result.claims = TJsonValue::Parse(FromBytes(DecodeBase64Url(parts[1])));
-			if(policy.issuer.Length() > 0 && result.claims("iss").String("") != policy.issuer)
+			if(policy.issuer.Length() > 0 && result.claims(U"iss").String(U"") != policy.issuer)
 			{
 				result.error = EValidationError::ISSUER_MISMATCH;
 				return result;
 			}
-			if(!AudienceMatches(result.claims("aud"), policy.audience))
+			if(!AudienceMatches(result.claims(U"aud"), policy.audience))
 			{
 				result.error = EValidationError::AUDIENCE_MISMATCH;
 				return result;
 			}
 
 			const s64_t now = TTime::Now().Seconds();
-			const s64_t exp = NumericClaim(result.claims("exp"), 0);
+			const s64_t exp = NumericClaim(result.claims(U"exp"), 0);
 			if(policy.require_expiration && exp == 0)
 			{
 				result.error = EValidationError::MISSING_EXPIRATION;
@@ -254,7 +254,7 @@ namespace el1::security::jwt
 				result.error = EValidationError::EXPIRED;
 				return result;
 			}
-			const s64_t nbf = NumericClaim(result.claims("nbf"), 0);
+			const s64_t nbf = NumericClaim(result.claims(U"nbf"), 0);
 			if(nbf != 0 && nbf - policy.clock_skew_seconds > now)
 			{
 				result.error = EValidationError::NOT_YET_VALID;

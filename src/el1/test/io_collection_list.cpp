@@ -474,21 +474,21 @@ namespace
 
 		{
 			const TList<TString> list = {
-				"abc",
-				"hello world",
-				"test 123",
-				"z9999"
+				U"abc",
+				U"hello world",
+				U"test 123",
+				U"z9999"
 			};
 
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "abc"        ); }),  0U);
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "hello world"); }),  1U);
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "test 123"   ); }),  2U);
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "z9999"      ); }),  3U);
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "abc123"     ); }), NEG1);
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "abc"        ); }, true), 0U);
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "help!"      ); }, true), 1U);
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "abc1"       ); }, true), 0U);
-			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, "z1"         ); }, true), 3U);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"abc"        ); }),  0U);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"hello world"); }),  1U);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"test 123"   ); }),  2U);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"z9999"      ); }),  3U);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"abc123"     ); }), NEG1);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"abc"        ); }, true), 0U);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"help!"      ); }, true), 1U);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"abc1"       ); }, true), 0U);
+			EXPECT_EQ(list.BinarySearch([](const TString& item) { return StdSorter<TString>(item, U"z1"         ); }, true), 3U);
 		}
 
 		{

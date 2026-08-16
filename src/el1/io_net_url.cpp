@@ -13,7 +13,7 @@ namespace el1::io::net::url
 		static TUrl::TAuthority MakeAuthority(const std::optional<TStringView> username, const TStringView host, const std::optional<TStringView> port)
 		{
 			const s64_t n_port = port ? port->ToInteger() : 0;
-			EL_ERROR((port && n_port < 1) || n_port > 65535, TException, "invalid port");
+			EL_ERROR((port && n_port < 1) || n_port > 65535, TException, U"invalid port");
 			return {{}, username.value_or(U""), host, (u16_t)n_port};
 		}
 
@@ -43,7 +43,7 @@ namespace el1::io::net::url
 				{
 					if(!authority)
 						for(usys_t i = 0; i < path.Length() && path[i] != U'/'; i++)
-							EL_ERROR(path[i] == U':', TException, "invalid relative URL");
+							EL_ERROR(path[i] == U':', TException, U"invalid relative URL");
 
 					TUrl url{authority.value_or(TUrl::TAuthority{}), path, query.value_or(U""), fragment.value_or(U"")};
 					if(authority && url.path.Length() == 0)

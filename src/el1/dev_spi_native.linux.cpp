@@ -25,7 +25,7 @@ namespace el1::dev::spi::native
 	{
 		if(force)
 		{
-			EL_ERROR(this->bus->IsBusy(), TException, "bus is currently busy - check IsBusy() and OnBusIdle()");
+			EL_ERROR(this->bus->IsBusy(), TException, U"bus is currently busy - check IsBusy() and OnBusIdle()");
 			this->bus->active_device = this;
 			this->chip_enable_pin->State(false);
 		}
@@ -49,7 +49,7 @@ namespace el1::dev::spi::native
 	{
 		// this assumes we are running on a Raspberry Pi... which is not always true I guess..
 		// https://github.com/torvalds/linux/blob/master/drivers/spi/spi-bcm2835.c
-		EL_ERROR(clean_signal && n_bytes < 96, TException, "clean_signal requires at least 96 bytes to be transfered (FIXME)");
+		EL_ERROR(clean_signal && n_bytes < 96, TException, U"clean_signal requires at least 96 bytes to be transfered (FIXME)");
 
 		// EL_ERROR(clean_signal, TNotImplementedException);
 

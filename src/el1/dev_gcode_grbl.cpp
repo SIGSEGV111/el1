@@ -109,7 +109,7 @@ namespace el1::dev::gcode::grbl
 
 	TString IMacroCommand::ToString() const
 	{
-		return TString::Join(commands.Pipe().Map([](auto& cmd) { return cmd->ToString(); }).Collect(), "\n");
+		return TString::Join(commands.Pipe().Map([](auto& cmd) { return cmd->ToString(); }).Collect(), TStringView(U"\n"));
 	}
 
 	TLinearMoveCommand::TLinearMoveCommand(parser_state_t& state, TList<TString>& fields)
@@ -117,7 +117,7 @@ namespace el1::dev::gcode::grbl
 		auto args = ParseArgs(fields, 1, "", "XYZF");
 		target = TDecimalVector(state.unit, "XYZ", args);
 
-		const bool fast = fields[0] == "G0" || fields[0] == "G00";
+		const bool fast = fields[0] == U"G0" || fields[0] == U"G00";
 		const bool has_xy = !target[0].IsZero() || !target[1].IsZero();
 		const bool has_z = !target[2].IsZero();
 		const TDecimal& fr_max = has_xy && has_z ? util::Min(state.fr_rapid_xy, state.fr_rapid_z) : (has_xy ? state.fr_rapid_xy : state.fr_rapid_z);
@@ -147,7 +147,7 @@ namespace el1::dev::gcode::grbl
 		feedrate = state.fr_cmd = args.GetWithDefault('F', state.fr_cmd);
 		center = TDecimalVector(state.unit, "IJK", args) + state.pos;
 		plane = state.plane;
-		rot = MatchStringList(fields[0], "G2", "G02") ? ERotation::CLOCKWISE : ERotation::COUNTER_CLOCKWISE;
+		rot = MatchStringList(fields[0], U"G2", U"G02") ? ERotation::CLOCKWISE : ERotation::COUNTER_CLOCKWISE;
 		target.UpdatePosition(state);
 	}
 
@@ -187,14 +187,14 @@ namespace el1::dev::gcode::grbl
 
 	TPlaneSelectCommand::TPlaneSelectCommand(parser_state_t& state, TList<TString>& fields)
 	{
-		if(fields[0] == "G17")
+		if(fields[0] == U"G17")
 			plane = EPlane::XY;
-		else if(fields[0] == "G18")
+		else if(fields[0] == U"G18")
 			plane = EPlane::ZX;
-		else if(fields[0] == "G19")
+		else if(fields[0] == U"G19")
 			plane = EPlane::YZ;
 		else
-			EL_THROW(TException, "invalid plane seclect command");
+			EL_THROW(TException, U"invalid plane seclect command");
 		state.plane = plane;
 	}
 
@@ -202,21 +202,21 @@ namespace el1::dev::gcode::grbl
 	{
 		switch(plane)
 		{
-			case EPlane::XY: return "G17";
-			case EPlane::ZX: return "G18";
-			case EPlane::YZ: return "G19";
+			case EPlane::XY: return U"G17";
+			case EPlane::ZX: return U"G18";
+			case EPlane::YZ: return U"G19";
 		}
 		EL_THROW(TLogicException);
 	}
 
 	TUnitSelectCommand::TUnitSelectCommand(parser_state_t& state, TList<TString>& fields)
 	{
-		if(fields[0] == "G20")
+		if(fields[0] == U"G20")
 			unit = EUnit::IMPERIAL;
-		else if(fields[0] == "G21")
+		else if(fields[0] == U"G21")
 			unit = EUnit::METRIC;
 		else
-			EL_THROW(TException, "invalid unit seclect command");
+			EL_THROW(TException, U"invalid unit seclect command");
 		state.unit = unit;
 	}
 
@@ -227,8 +227,8 @@ namespace el1::dev::gcode::grbl
 
 	TProbeCommand::TProbeCommand(parser_state_t& state, TList<TString>& fields)
 	{
-		trigger = MatchStringList(fields[0], "G38.2", "G38.3") ? ETrigger::CONTACT : ETrigger::CLEAR;
-		error_on_miss = MatchStringList(fields[0], "G38.2", "G38.4");
+		trigger = MatchStringList(fields[0], U"G38.2", U"G38.3") ? ETrigger::CONTACT : ETrigger::CLEAR;
+		error_on_miss = MatchStringList(fields[0], U"G38.2", U"G38.4");
 	}
 
 	TString TProbeCommand::ToString() const
@@ -250,7 +250,7 @@ namespace el1::dev::gcode::grbl
 	{
 		fields[0].Cut(1,0);
 		idx_wcs = fields[0].ToInteger() - 54;
-		EL_ERROR(idx_wcs >= 6, TException, "invalid WCS index");
+		EL_ERROR(idx_wcs >= 6, TException, U"invalid WCS index");
 		state.idx_wcs = idx_wcs;
 	}
 
@@ -294,7 +294,7 @@ namespace el1::dev::gcode::grbl
 
 	TSelectCoordModeCommand::TSelectCoordModeCommand(parser_state_t& state, TList<TString>& fields)
 	{
-		state.coord_mode = mode = fields[0] == "G90" ? ECoordMode::ABSOLUTE : ECoordMode::RELATIVE;
+		state.coord_mode = mode = fields[0] == U"G90" ? ECoordMode::ABSOLUTE : ECoordMode::RELATIVE;
 	}
 
 	TString TSelectCoordModeCommand::ToString() const
@@ -304,7 +304,7 @@ namespace el1::dev::gcode::grbl
 
 	TSetDrillReturnCommand::TSetDrillReturnCommand(parser_state_t& state, TList<TString>& fields)
 	{
-		state.drill_return = drill_return = fields[0] == "G98" ? EDrillReturn::R_LEVEL : EDrillReturn::PREVIOUS_Z;
+		state.drill_return = drill_return = fields[0] == U"G98" ? EDrillReturn::R_LEVEL : EDrillReturn::PREVIOUS_Z;
 	}
 
 	TString TSetDrillReturnCommand::ToString() const
@@ -314,12 +314,12 @@ namespace el1::dev::gcode::grbl
 
 	TPauseCommand::TPauseCommand(parser_state_t& state, TList<TString>& fields)
 	{
-		optional = MatchStringList(fields[0], "M0", "M00");
+		optional = MatchStringList(fields[0], U"M0", U"M00");
 	}
 
 	TString TPauseCommand::ToString() const
 	{
-		return optional ? "M00" : "M01";
+		return optional ? U"M00" : U"M01";
 	}
 
 	TEndOfProgramCommand::TEndOfProgramCommand(parser_state_t& state, TList<TString>& fields)
@@ -329,23 +329,23 @@ namespace el1::dev::gcode::grbl
 
 	TString TEndOfProgramCommand::ToString() const
 	{
-		return "M02";
+		return U"M02";
 	}
 
 	TSpindelDirCommand::TSpindelDirCommand(parser_state_t& state, TList<TString>& fields)
 	{
-		if(MatchStringList(fields[0], "M5", "M05"))
+		if(MatchStringList(fields[0], U"M5", U"M05"))
 		{
 			auto args = ParseArgs(fields, 1, "", "");
 			rpm = -1;
 			state.spindle_on = spindle_on = false;
 		}
-		else if(MatchStringList(fields[0], "M3", "M03", "M4", "M04"))
+		else if(MatchStringList(fields[0], U"M3", U"M03", U"M4", U"M04"))
 		{
 			auto args = ParseArgs(fields, 1, "", "S");
 			rpm = state.spindle_rpm = args.GetWithDefault('S', state.spindle_rpm);
-			EL_ERROR(rpm.IsNegative(), TException, "spindle start requested, but RPM not set");
-			state.spindle_dir = dir = MatchStringList(fields[0], "M3", "M03") ? ERotation::CLOCKWISE : ERotation::COUNTER_CLOCKWISE;
+			EL_ERROR(rpm.IsNegative(), TException, U"spindle start requested, but RPM not set");
+			state.spindle_dir = dir = MatchStringList(fields[0], U"M3", U"M03") ? ERotation::CLOCKWISE : ERotation::COUNTER_CLOCKWISE;
 			state.spindle_on = spindle_on = true;
 		}
 		else
@@ -361,7 +361,7 @@ namespace el1::dev::gcode::grbl
 		if(spindle_on)
 			return TString::Format(U"%s S%d", dir == ERotation::CLOCKWISE ? "M03" : "M04", rpm);
 		else
-			return "M05";
+			return U"M05";
 	}
 
 	TToolChangeCommand::TToolChangeCommand(parser_state_t& state, TList<TString>& fields)
@@ -432,73 +432,73 @@ namespace el1::dev::gcode::grbl
 			str_cmd.ToUpper();
 
 			// hack to support FreeCADs broken gcode generator
-			if(str_cmd[0] == 'T' && str_cmd[1] >= '0' && str_cmd[1] <= '9' && (fields[1] == "M4" || fields[1] == "M04"))
+			if(str_cmd[0] == 'T' && str_cmd[1] >= '0' && str_cmd[1] <= '9' && (fields[1] == U"M4" || fields[1] == U"M04"))
 			{
 				fields[1] = str_cmd;
-				str_cmd = "M04";
+				str_cmd = U"M04";
 			}
 
-			if(MatchStringList(str_cmd, "G0", "G00", "G1", "G01"))
+			if(MatchStringList(str_cmd, U"G0", U"G00", U"G1", U"G01"))
 			{
 				return New<TLinearMoveCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G2", "G02", "G2", "G02"))
+			else if(MatchStringList(str_cmd, U"G2", U"G02", U"G2", U"G02"))
 			{
 				return New<TArcMoveCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G4", "G04"))
+			else if(MatchStringList(str_cmd, U"G4", U"G04"))
 			{
 				return New<TDwellCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G10"))
+			else if(MatchStringList(str_cmd, U"G10"))
 			{
 				return New<TSetWorkCoordOffsetCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G17", "G18", "G19"))
+			else if(MatchStringList(str_cmd, U"G17", U"G18", U"G19"))
 			{
 				return New<TPlaneSelectCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G20", "G21"))
+			else if(MatchStringList(str_cmd, U"G20", U"G21"))
 			{
 				return New<TUnitSelectCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G38.2", "G38.3", "G38.4", "G38.5"))
+			else if(MatchStringList(str_cmd, U"G38.2", U"G38.3", U"G38.4", U"G38.5"))
 			{
 				return New<TProbeCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G54", "G55", "G56", "G57", "G58", "G59"))
+			else if(MatchStringList(str_cmd, U"G54", U"G55", U"G56", U"G57", U"G58", U"G59"))
 			{
 				return New<TSelectWorkCoordOffsetCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G80"))
+			else if(MatchStringList(str_cmd, U"G80"))
 			{
 				return New<TCancelActiveCycleCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G81"))
+			else if(MatchStringList(str_cmd, U"G81"))
 			{
 				return New<TDrillCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G90", "G91"))
+			else if(MatchStringList(str_cmd, U"G90", U"G91"))
 			{
 				return New<TSelectCoordModeCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "G98", "G99"))
+			else if(MatchStringList(str_cmd, U"G98", U"G99"))
 			{
 				return New<TSetDrillReturnCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "M0", "M00", "M1", "M01"))
+			else if(MatchStringList(str_cmd, U"M0", U"M00", U"M1", U"M01"))
 			{
 				return New<TPauseCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "M2", "M02"))
+			else if(MatchStringList(str_cmd, U"M2", U"M02"))
 			{
 				return New<TEndOfProgramCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "M3", "M03", "M4", "M04", "M5", "M05"))
+			else if(MatchStringList(str_cmd, U"M3", U"M03", U"M4", U"M04", U"M5", U"M05"))
 			{
 				return New<TSpindelDirCommand, ICommand>(*state, fields);
 			}
-			else if(MatchStringList(str_cmd, "M6", "M06"))
+			else if(MatchStringList(str_cmd, U"M6", U"M06"))
 			{
 				return New<TToolChangeCommand, ICommand>(*state, fields);
 			}

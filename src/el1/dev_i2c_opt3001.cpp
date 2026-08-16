@@ -83,7 +83,7 @@ namespace el1::dev::i2c::opt3001
 		if(this->config_cache.crf == 0)
 			return false;
 
-		EL_ERROR(this->config_cache.ovf != 0 && this->config_cache.rn == 0b1100, TException, "chip reported overflow while in automatic full-scale mode.");
+		EL_ERROR(this->config_cache.ovf != 0 && this->config_cache.rn == 0b1100, TException, U"chip reported overflow while in automatic full-scale mode.");
 
 		const u16_t reg = ReadRegister(0x00);
 		const u16_t exponent = (reg & 0xf000) >> 12;
@@ -117,7 +117,7 @@ namespace el1::dev::i2c::opt3001
 		do
 		{
 			EL_ERROR(this->config_cache.m == 0, TLogicException);	// WTF... chip went to shutdown (after data was converted?), but did not have any data ready?
-			EL_ERROR(!this->irq->OnInputTrigger().WaitFor(8), TException, "OPT3001 IRQ timeout (expected IRQ within 8s after conversion start)");
+			EL_ERROR(!this->irq->OnInputTrigger().WaitFor(8), TException, U"OPT3001 IRQ timeout (expected IRQ within 8s after conversion start)");
 		}
 		while(!Fetch()); // We received the IRQ, but there was no ready data (yet) to be fetched. This can happen if the IRQ line is shared with other devices.
 

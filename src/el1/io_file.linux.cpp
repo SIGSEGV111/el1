@@ -450,7 +450,7 @@ namespace el1::io::file
 			EL_THROW(TSyscallException, direct_error);
 
 		TString filename = directory;
-		filename += "/el1-XXXXXX";
+		filename += TStringView(U"/el1-XXXXXX");
 		auto filename_cstr = filename.MakeCStr();
 		const handle_t fallback_handle = EL_SYSERR(mkostemp(filename_cstr.get(), O_CLOEXEC));
 		if(unlink(filename_cstr.get()) != 0)
@@ -464,7 +464,7 @@ namespace el1::io::file
 
 	TFile::TFile() : access(TAccess::RW)
 	{
-		const TString* const tmpdir = system::task::EnvironmentVariables().Get("TMPDIR");
+		const TString* const tmpdir = system::task::EnvironmentVariables().Get(U"TMPDIR");
 		if(tmpdir == nullptr)
 			this->handle = THandle(OpenTemporaryFile("/tmp"), true);
 		else

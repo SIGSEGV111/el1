@@ -9,7 +9,7 @@ namespace el1::io::compression::deflate
 	TList<byte_t> Inflate(array_t<const byte_t> input)
 	{
 		z_stream stream = {};
-		EL_ERROR(inflateInit(&stream) != Z_OK, TException, "inflateInit() failed");
+		EL_ERROR(inflateInit(&stream) != Z_OK, TException, U"inflateInit() failed");
 
 		try
 		{
@@ -28,7 +28,7 @@ namespace el1::io::compression::deflate
 				stream.next_out = (Bytef*)&output[idx_output];
 
 				status = inflate(&stream, Z_NO_FLUSH);
-				EL_ERROR(status != Z_OK && status != Z_STREAM_END, TException, "inflate() failed");
+				EL_ERROR(status != Z_OK && status != Z_STREAM_END, TException, U"inflate() failed");
 
 				const usys_t n_consumed = (input.Count() - idx_input) - stream.avail_in;
 				const usys_t n_produced = SZ_OUTBUF_INCR - stream.avail_out;

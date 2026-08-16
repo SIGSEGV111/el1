@@ -53,7 +53,7 @@ namespace el1::dev::spi::w1bb
 	TW1BbDevice::TW1BbDevice(TW1BbBus* const w1bus, const uuid_t uuid) : w1bus(w1bus), uuid(uuid), speed(ESpeed::REGULAR)
 	{
 		for(const TW1BbDevice* device : this->w1bus->claimed_devices)
-			EL_ERROR(device->uuid == uuid, TException, "device already claimed");
+			EL_ERROR(device->uuid == uuid, TException, U"device already claimed");
 
 		this->w1bus->claimed_devices.Append(this);
 	}
@@ -134,7 +134,7 @@ namespace el1::dev::spi::w1bb
 
 	void TTransaction::AddWrite(const void* const arr_data, const unsigned n_data)
 	{
-		EL_ERROR(this->idx_buffer_next + n_data * 8U > this->buffer.Count(), TException, "buffer too small");
+		EL_ERROR(this->idx_buffer_next + n_data * 8U > this->buffer.Count(), TException, U"buffer too small");
 		Encode(arr_data, n_data, this->idx_buffer_next);
 		this->idx_buffer_next += n_data * 8U;
 	}
@@ -142,7 +142,7 @@ namespace el1::dev::spi::w1bb
 	unsigned TTransaction::AddRead(const unsigned n_data)
 	{
 		const unsigned idx_read = this->idx_buffer_next;
-		EL_ERROR(this->idx_buffer_next + n_data * 8U > this->buffer.Count(), TException, "buffer too small");
+		EL_ERROR(this->idx_buffer_next + n_data * 8U > this->buffer.Count(), TException, U"buffer too small");
 		this->AddPattern(SPIBB_ONE, n_data * 8U);
 		return idx_read;
 	}
@@ -230,7 +230,7 @@ namespace el1::dev::spi::w1bb
 
 	TTransaction::TTransaction(TW1BbBus* const w1bus, io::collection::list::array_t<byte_t> buffer EL_LIFETIME_BOUND) : w1bus(w1bus), buffer(buffer), idx_buffer_next(0)
 	{
-		EL_ERROR(buffer.Count() < this->w1bus->min_transfer_bytes, TException, "buffer smaller than min_transfer_bytes");
+		EL_ERROR(buffer.Count() < this->w1bus->min_transfer_bytes, TException, U"buffer smaller than min_transfer_bytes");
 	}
 
 	/**********************************************/

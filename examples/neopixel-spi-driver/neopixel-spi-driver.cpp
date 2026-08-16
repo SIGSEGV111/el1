@@ -40,14 +40,14 @@ int main(const int argc, char* argv[])
 		s64_t http_port = 8080;
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Control a WS2812B strip through a small HTTP JSON endpoint."),
-			TFlagArgument(&THttpServer::DEBUG, 'H', "debug-http", "", "Enable HTTP server debug output"),
-			TFlagArgument(&TFiber::DEBUG, 'F', "debug-fiber", "", "Enable fiber debug output"),
-			TPathArgument(&path_spi, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', "bus", "", true, false, "SPI device"),
-			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device for optional level-shifter enable"),
-			TIntegerArgument(&chip_enable_line, 'e', "ce", "", true, false, "GPIO line controlling the level shifter; -1 disables it"),
-			TIntegerArgument(&led_count, 'c', "count", "", true, false, "Number of LEDs; -1 enables loopback auto-detection"),
-			TIntegerArgument(&http_port, 'p', "port", "", true, false, "HTTP listen port")
+			THelpArgument(U"Control a WS2812B strip through a small HTTP JSON endpoint."),
+			TFlagArgument(&THttpServer::DEBUG, 'H', U"debug-http", U"", U"Enable HTTP server debug output"),
+			TFlagArgument(&TFiber::DEBUG, 'F', U"debug-fiber", U"", U"Enable fiber debug output"),
+			TPathArgument(&path_spi, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', U"bus", U"", true, false, U"SPI device"),
+			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', U"gpio-chip", U"", true, false, U"GPIO character device for optional level-shifter enable"),
+			TIntegerArgument(&chip_enable_line, 'e', U"ce", U"", true, false, U"GPIO line controlling the level shifter; -1 disables it"),
+			TIntegerArgument(&led_count, 'c', U"count", U"", true, false, U"Number of LEDs; -1 enables loopback auto-detection"),
+			TIntegerArgument(&http_port, 'p', U"port", U"", true, false, U"HTTP listen port")
 		);
 
 		EL_ERROR(chip_enable_line < -1, TInvalidArgumentException, "ce", "-1 or a non-negative GPIO line");

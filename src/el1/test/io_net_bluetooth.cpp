@@ -12,10 +12,10 @@ namespace
 
 	TEST(io_net_bluetooth_address_t, ParseAndFormat)
 	{
-		const address_t address("AA:bb:01:02:FE:ff");
-		EXPECT_EQ(static_cast<TString>(address), "aa:bb:01:02:fe:ff");
-		EXPECT_EQ(address, address_t("aa:bb:01:02:fe:ff"));
-		EXPECT_THROW(address_t("aa:bb:cc"), TInvalidArgumentException);
-		EXPECT_THROW(address_t("gg:bb:01:02:03:04"), TInvalidArgumentException);
+		const address_t address(U"AA:bb:01:02:FE:ff");
+		EXPECT_EQ(static_cast<TString>(address), U"aa:bb:01:02:fe:ff");
+		EXPECT_EQ(address, address_t(U"aa:bb:01:02:fe:ff"));
+		EXPECT_THROW(address_t(U"aa:bb:cc"), TInvalidArgumentException);
+		EXPECT_THROW(address_t(U"gg:bb:01:02:03:04"), TInvalidArgumentException);
 	}
 }

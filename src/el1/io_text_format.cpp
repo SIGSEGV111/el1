@@ -163,7 +163,7 @@ namespace el1::io::text::format::detail
 				result = std::to_chars(buffer, buffer + sizeof(buffer), value, std::chars_format::fixed, (int)spec.precision);
 			else
 				result = std::to_chars(buffer, buffer + sizeof(buffer), value);
-			EL_ERROR(result.ec != std::errc{}, error::TException, "floating point formatting failed");
+			EL_ERROR(result.ec != std::errc{}, error::TException, U"floating point formatting failed");
 			AppendAsciiNumber(out, buffer, result.ptr, spec);
 			return;
 		}

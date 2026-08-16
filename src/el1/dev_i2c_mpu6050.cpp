@@ -55,7 +55,7 @@ namespace el1::dev::i2c::mpu6050
 
 	TString TFifoOverflowException::Message() const
 	{
-		return L"MPU6050 on-chip FIFO overflow";
+		return U"MPU6050 on-chip FIFO overflow";
 	}
 
 	IException* TFifoOverflowException::Clone() const

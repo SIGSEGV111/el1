@@ -92,74 +92,74 @@ namespace
 	{
 		// LF only
 		{
-			const TString input_str = "hello world\nfoobar\ntest\n\n";
+			const TString input_str = U"hello world\nfoobar\ntest\n\n";
 			const TList< TString> lines = input_str.chars.Pipe().Transform(TLineReader()).Collect();
 			EXPECT_EQ(lines.Count(), 4U);
-			EXPECT_EQ(lines[0], "hello world");
-			EXPECT_EQ(lines[1], "foobar");
-			EXPECT_EQ(lines[2], "test");
-			EXPECT_EQ(lines[3], "");
+			EXPECT_EQ(lines[0], U"hello world");
+			EXPECT_EQ(lines[1], U"foobar");
+			EXPECT_EQ(lines[2], U"test");
+			EXPECT_EQ(lines[3], U"");
 		}
 
 		// CR LF
 		{
-			const TString input_str = "hello world\r\nfoobar\r\ntest\r\n\r\n";
+			const TString input_str = U"hello world\r\nfoobar\r\ntest\r\n\r\n";
 			const TList< TString> lines = input_str.chars.Pipe().Transform(TLineReader()).Collect();
 			EXPECT_EQ(lines.Count(), 4U);
-			EXPECT_EQ(lines[0], "hello world");
-			EXPECT_EQ(lines[1], "foobar");
-			EXPECT_EQ(lines[2], "test");
-			EXPECT_EQ(lines[3], "");
+			EXPECT_EQ(lines[0], U"hello world");
+			EXPECT_EQ(lines[1], U"foobar");
+			EXPECT_EQ(lines[2], U"test");
+			EXPECT_EQ(lines[3], U"");
 		}
 
 		// mixing CR LF and LF only
 		{
-			const TString input_str = "hello world\r\nfoobar\ntest\n\r\n";
+			const TString input_str = U"hello world\r\nfoobar\ntest\n\r\n";
 			const TList< TString> lines = input_str.chars.Pipe().Transform(TLineReader()).Collect();
 			EXPECT_EQ(lines.Count(), 4U);
-			EXPECT_EQ(lines[0], "hello world");
-			EXPECT_EQ(lines[1], "foobar");
-			EXPECT_EQ(lines[2], "test");
-			EXPECT_EQ(lines[3], "");
+			EXPECT_EQ(lines[0], U"hello world");
+			EXPECT_EQ(lines[1], U"foobar");
+			EXPECT_EQ(lines[2], U"test");
+			EXPECT_EQ(lines[3], U"");
 		}
 
 		// preserving CR when alone
 		{
-			const TString input_str = "hello\rworld\r\nfoobar\ntest\n\r\n";
+			const TString input_str = U"hello\rworld\r\nfoobar\ntest\n\r\n";
 			const TList< TString> lines = input_str.chars.Pipe().Transform(TLineReader()).Collect();
 			EXPECT_EQ(lines.Count(), 4U);
-			EXPECT_EQ(lines[0], "hello\rworld");
-			EXPECT_EQ(lines[1], "foobar");
-			EXPECT_EQ(lines[2], "test");
-			EXPECT_EQ(lines[3], "");
+			EXPECT_EQ(lines[0], U"hello\rworld");
+			EXPECT_EQ(lines[1], U"foobar");
+			EXPECT_EQ(lines[2], U"test");
+			EXPECT_EQ(lines[3], U"");
 		}
 
 		// start with LF
 		{
-			const TString input_str = "\nhello world\r\nfoobar\ntest\n\r\n";
+			const TString input_str = U"\nhello world\r\nfoobar\ntest\n\r\n";
 			const TList< TString> lines = input_str.chars.Pipe().Transform(TLineReader()).Collect();
 			EXPECT_EQ(lines.Count(), 5U);
-			EXPECT_EQ(lines[0], "");
-			EXPECT_EQ(lines[1], "hello world");
-			EXPECT_EQ(lines[2], "foobar");
-			EXPECT_EQ(lines[3], "test");
-			EXPECT_EQ(lines[4], "");
+			EXPECT_EQ(lines[0], U"");
+			EXPECT_EQ(lines[1], U"hello world");
+			EXPECT_EQ(lines[2], U"foobar");
+			EXPECT_EQ(lines[3], U"test");
+			EXPECT_EQ(lines[4], U"");
 		}
 
 		// no LF at end
 		{
-			const TString input_str = "hello world\nfoobar\ntest\nlast line";
+			const TString input_str = U"hello world\nfoobar\ntest\nlast line";
 			TLineReader lr;
-			lr.buffer = "should not be visible";	// this is for testing only - your are not supposed to use it this way!
+			lr.buffer = U"should not be visible";	// this is for testing only - your are not supposed to use it this way!
 			auto line_pipe = input_str.chars.Pipe().Transform(lr);
 			// The temporary array pipe is now owned by the transform adapter. The
 			// stateful lvalue transformator remains borrowed and therefore observable.
 			const TList< TString> lines = line_pipe.Collect();
 			EXPECT_EQ(lines.Count(), 4U);
-			EXPECT_EQ(lines[0], "hello world");
-			EXPECT_EQ(lines[1], "foobar");
-			EXPECT_EQ(lines[2], "test");
-			EXPECT_EQ(lines[3], "last line");
+			EXPECT_EQ(lines[0], U"hello world");
+			EXPECT_EQ(lines[1], U"foobar");
+			EXPECT_EQ(lines[2], U"test");
+			EXPECT_EQ(lines[3], U"last line");
 			EXPECT_EQ(lr.buffer.chars.Count(), 0U);	// ensure that the TString is moved into the collection in the Collect() step and that lr was taken by reference and not copied in the Transform(lr) call - again this is only for testing and not supposed to be used this way
 		}
 	}
@@ -199,12 +199,12 @@ namespace
 		{
 			TStreamTextWriter writer(&sink, 8);
 			EXPECT_EQ(writer.BufferSize(), 8U);
-			writer.Write(U"ab");
+			writer.Write(TStringView(U"ab"));
 			EXPECT_EQ(sink.n_writes, 0U);
-			writer.Write(U"cdefgh");
+			writer.Write(TStringView(U"cdefgh"));
 			EXPECT_EQ(sink.n_writes, 1U);
 			EXPECT_EQ(sink.max_write, 8U);
-			writer.Write(U"ij");
+			writer.Write(TStringView(U"ij"));
 			EXPECT_EQ(sink.n_writes, 1U);
 			writer.Flush();
 			EXPECT_EQ(sink.n_writes, 2U);
@@ -215,7 +215,7 @@ namespace
 		TCountingBinarySink destructor_sink;
 		{
 			TStreamTextWriter writer(&destructor_sink, 16);
-			writer.Write(U"tail");
+			writer.Write(TStringView(U"tail"));
 			EXPECT_EQ(destructor_sink.n_writes, 0U);
 		}
 		EXPECT_EQ(destructor_sink.n_writes, 1U);
@@ -223,7 +223,7 @@ namespace
 
 		TCountingBinarySink unicode_sink;
 		TStreamTextWriter unicode_writer(&unicode_sink, 3);
-		unicode_writer.Write(U"😀ä");
+		unicode_writer.Write(TStringView(U"😀ä"));
 		unicode_writer.Flush();
 		EXPECT_EQ(Decode(unicode_sink.bytes), U"😀ä");
 
@@ -238,7 +238,7 @@ namespace
 
 		writer.Print(U"ä😀 [%04d] %q %x", 42, U"Hällö", 255);
 		writer.Print(U" / 100%%");
-		writer.Write(U" raw%%");
+		writer.Write(TStringView(U" raw%%"));
 		writer.Flush();
 
 		EXPECT_EQ(Decode(bytes), U"ä😀 [0042] 'Hällö' ff / 100% raw%%");

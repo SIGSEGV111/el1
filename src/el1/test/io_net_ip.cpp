@@ -18,18 +18,18 @@ namespace
 	{
 		auto addrs = EnumMyIpAddresses();
 		EXPECT_GE(addrs.Count(), 3U);
-		EXPECT_TRUE(addrs.Contains(ipaddr_t("127.0.0.1")));
-		EXPECT_TRUE(addrs.Contains(ipaddr_t("::1")));
+		EXPECT_TRUE(addrs.Contains(ipaddr_t(U"127.0.0.1")));
+		EXPECT_TRUE(addrs.Contains(ipaddr_t(U"::1")));
 	}
 
 	TEST(io_net_ip_ipaddr_t, IsLoopback)
 	{
-		ipaddr_t a1("127.0.0.1");
-		ipaddr_t a2("127.0.0.2");
-		ipaddr_t a3("10.42.13.1");
-		ipaddr_t a4("10.42.12.2");
-		ipaddr_t a5("::1");
-		ipaddr_t a6("::2");
+		ipaddr_t a1(U"127.0.0.1");
+		ipaddr_t a2(U"127.0.0.2");
+		ipaddr_t a3(U"10.42.13.1");
+		ipaddr_t a4(U"10.42.12.2");
+		ipaddr_t a5(U"::1");
+		ipaddr_t a6(U"::2");
 
 		EXPECT_TRUE(a1.IsLoopback());
 		EXPECT_TRUE(a2.IsLoopback());
@@ -41,10 +41,10 @@ namespace
 
 		TEST(io_net_ip_ipaddr_t, MatchingPrefixLength)
 	{
-		ipaddr_t a1("127.0.0.1");
-		ipaddr_t a2("127.0.0.2");
-		ipaddr_t a3("10.42.13.1");
-		ipaddr_t a4("10.42.12.2");
+		ipaddr_t a1(U"127.0.0.1");
+		ipaddr_t a2(U"127.0.0.2");
+		ipaddr_t a3(U"10.42.13.1");
+		ipaddr_t a4(U"10.42.12.2");
 
 		EXPECT_EQ(a1.MatchingPrefixLength(a1), 128U);
 		EXPECT_EQ(a1.MatchingPrefixLength(a2), 126U);
@@ -53,37 +53,37 @@ namespace
 
 	TEST(io_net_ip_ipaddr_t, parse)
 	{
-		ipaddr_t("127.0.0.1");
-		ipaddr_t("10.42.13.114");
-		ipaddr_t("192.168.168.2");
-		ipaddr_t("::1");
-		ipaddr_t("fe80::aaa1:59ff:fe18:a945");
-		ipaddr_t("0001:0002:0003:0004:0005:0006:0007:0008");
+		ipaddr_t(U"127.0.0.1");
+		ipaddr_t(U"10.42.13.114");
+		ipaddr_t(U"192.168.168.2");
+		ipaddr_t(U"::1");
+		ipaddr_t(U"fe80::aaa1:59ff:fe18:a945");
+		ipaddr_t(U"0001:0002:0003:0004:0005:0006:0007:0008");
 
-		EXPECT_THROW(ipaddr_t("0001:0002:0003:0004:0005:0006:0007:0008", EIP::V4), TException);
-		EXPECT_THROW(ipaddr_t("127.0.0.1", EIP::V6), TException);
+		EXPECT_THROW(ipaddr_t(U"0001:0002:0003:0004:0005:0006:0007:0008", EIP::V4), TException);
+		EXPECT_THROW(ipaddr_t(U"127.0.0.1", EIP::V6), TException);
 
-		EXPECT_THROW(ipaddr_t("127.0.0.256"), TException);
-		EXPECT_THROW(ipaddr_t("fÜÄÖ::aaa1:59ff:fe18:a945"), TException);
-		EXPECT_THROW(ipaddr_t("fe80::aaa1:59ff:fe18:-a945"), TException);
-		EXPECT_THROW(ipaddr_t("0001:0002:0003:0004:0005:0006:0007:0008:0009"), TException);
+		EXPECT_THROW(ipaddr_t(U"127.0.0.256"), TException);
+		EXPECT_THROW(ipaddr_t(U"fÜÄÖ::aaa1:59ff:fe18:a945"), TException);
+		EXPECT_THROW(ipaddr_t(U"fe80::aaa1:59ff:fe18:-a945"), TException);
+		EXPECT_THROW(ipaddr_t(U"0001:0002:0003:0004:0005:0006:0007:0008:0009"), TException);
 
-		EXPECT_THROW(ipaddr_t("hello world"), TException);
+		EXPECT_THROW(ipaddr_t(U"hello world"), TException);
 	}
 
 	TEST(io_net_ip, ResolveHostname)
 	{
 		{
-			const TList<ipaddr_t> addrs = ResolveHostname("localhost");
-			EXPECT_TRUE(addrs.Contains(ipaddr_t("127.0.0.1")));
-			EXPECT_TRUE(addrs.Contains(ipaddr_t("::1")));
+			const TList<ipaddr_t> addrs = ResolveHostname(U"localhost");
+			EXPECT_TRUE(addrs.Contains(ipaddr_t(U"127.0.0.1")));
+			EXPECT_TRUE(addrs.Contains(ipaddr_t(U"::1")));
 		}
 
 		{
 			// this obviously will need an update from time to time ...
-			const TList<ipaddr_t> addrs = ResolveHostname("heise.de");
-			EXPECT_TRUE(addrs.Contains(ipaddr_t("193.99.144.80")));
-			EXPECT_TRUE(addrs.Contains(ipaddr_t("2a02:2e0:3fe:1001:302::")));
+			const TList<ipaddr_t> addrs = ResolveHostname(U"heise.de");
+			EXPECT_TRUE(addrs.Contains(ipaddr_t(U"193.99.144.80")));
+			EXPECT_TRUE(addrs.Contains(ipaddr_t(U"2a02:2e0:3fe:1001:302::")));
 		}
 	}
 
@@ -106,13 +106,13 @@ namespace
 		}
 
 		{
-			TUdpNode udp(ipaddr_t("127.0.0.1"), 12121U);
+			TUdpNode udp(ipaddr_t(U"127.0.0.1"), 12121U);
 			EXPECT_TRUE(udp.LocalAddress().ip.IsV4());
 			EXPECT_FALSE(udp.LocalAddress().ip.IsV6());
 		}
 
 		{
-			TUdpNode udp(ipaddr_t("::1"), 12121U);
+			TUdpNode udp(ipaddr_t(U"::1"), 12121U);
 			EXPECT_TRUE(udp.LocalAddress().ip.IsV6());
 			EXPECT_FALSE(udp.LocalAddress().ip.IsV4());
 		}
@@ -121,8 +121,8 @@ namespace
 	TEST(io_net_ip, TUdpNode_loopback_simple)
 	{
 		{
-			TUdpNode node1(ipaddr_t("::1"), 12121U);
-			TUdpNode node2(ipaddr_t("::1"), 12122U);
+			TUdpNode node1(ipaddr_t(U"::1"), 12121U);
+			TUdpNode node2(ipaddr_t(U"::1"), 12122U);
 
 			byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
 			TList<byte_t> rx;
@@ -133,7 +133,7 @@ namespace
 			ipaddr_t rx_ip;
 			port_t rx_port;
 			EXPECT_TRUE(node2.Receive(rx, &rx_ip, &rx_port));
-			EXPECT_EQ(rx_ip, ipaddr_t("::1"));
+			EXPECT_EQ(rx_ip, ipaddr_t(U"::1"));
 			EXPECT_EQ(rx_port, 12121U);
 
 			EXPECT_TRUE(rx.Count() == sizeof(tx));
@@ -143,8 +143,8 @@ namespace
 		}
 
 		{
-			TUdpNode node1(ipaddr_t("127.0.0.1"), 12121U);
-			TUdpNode node2(ipaddr_t("127.0.0.1"), 12122U);
+			TUdpNode node1(ipaddr_t(U"127.0.0.1"), 12121U);
+			TUdpNode node2(ipaddr_t(U"127.0.0.1"), 12122U);
 
 			byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
 			TList<byte_t> rx;
@@ -155,7 +155,7 @@ namespace
 			ipaddr_t rx_ip;
 			port_t rx_port;
 			EXPECT_TRUE(node2.Receive(rx, &rx_ip, &rx_port));
-			EXPECT_EQ(rx_ip, ipaddr_t("127.0.0.1"));
+			EXPECT_EQ(rx_ip, ipaddr_t(U"127.0.0.1"));
 			EXPECT_EQ(rx_port, 12121U);
 
 			EXPECT_TRUE(rx.Count() == sizeof(tx));
@@ -168,20 +168,20 @@ namespace
 	TEST(io_net_ip, TUdpNode_loopback_dualstack)
 	{
 		{
-			TUdpNode node1(ipaddr_t("127.0.0.1"), 12121U);
+			TUdpNode node1(ipaddr_t(U"127.0.0.1"), 12121U);
 			TUdpNode node2(12122U);
 
 			byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
 			TList<byte_t> rx;
 
-			EXPECT_TRUE(node1.Send(ipaddr_t("127.0.0.1"), 12122U, tx, sizeof(tx)));
+			EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx, sizeof(tx)));
 
 			if(node2.OnReceiveMsg().WaitFor(1))
 			{
 				ipaddr_t rx_ip;
 				port_t rx_port;
 				EXPECT_TRUE(node2.Receive(rx, &rx_ip, &rx_port));
-				EXPECT_EQ(rx_ip, ipaddr_t("127.0.0.1"));
+				EXPECT_EQ(rx_ip, ipaddr_t(U"127.0.0.1"));
 				EXPECT_EQ(rx_port, 12121U);
 
 				EXPECT_TRUE(rx.Count() == sizeof(tx));
@@ -200,19 +200,19 @@ namespace
 			// dual-stack with one socket
 
 			TUdpNode node1(12121U);
-			TUdpNode node2(ipaddr_t("127.0.0.1"), 12122U);
+			TUdpNode node2(ipaddr_t(U"127.0.0.1"), 12122U);
 
 			byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
 			TList<byte_t> rx;
 
-			EXPECT_TRUE(node1.Send(ipaddr_t("127.0.0.1"), 12122U, tx, sizeof(tx)));
+			EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx, sizeof(tx)));
 
 			if(node2.OnReceiveMsg().WaitFor(1))
 			{
 				ipaddr_t rx_ip;
 				port_t rx_port;
 				EXPECT_TRUE(node2.Receive(rx, &rx_ip, &rx_port));
-				EXPECT_EQ(rx_ip, ipaddr_t("127.0.0.1"));
+				EXPECT_EQ(rx_ip, ipaddr_t(U"127.0.0.1"));
 				EXPECT_EQ(rx_port, 12121U);
 
 				EXPECT_TRUE(rx.Count() == sizeof(tx));
@@ -230,8 +230,8 @@ namespace
 
 	TEST(io_net_ip, TUdpNode_loopback_varysize)
 	{
-		TUdpNode node1(ipaddr_t("127.0.0.1"), 12121U);
-		TUdpNode node2(ipaddr_t("127.0.0.1"), 12122U);
+		TUdpNode node1(ipaddr_t(U"127.0.0.1"), 12121U);
+		TUdpNode node2(ipaddr_t(U"127.0.0.1"), 12122U);
 
 		TList<byte_t> tx;
 		TList<byte_t> rx;
@@ -241,7 +241,7 @@ namespace
 		for(usys_t i = 0; i < 1024; i++)
 			tx.Append((byte_t)i % 256);
 
-		EXPECT_TRUE(node1.Send(ipaddr_t("127.0.0.1"), 12122U, tx));
+		EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx));
 		EXPECT_TRUE(node2.OnReceiveMsg().WaitFor(1));
 		EXPECT_TRUE(node2.Receive(rx));
 
@@ -254,7 +254,7 @@ namespace
 		for(usys_t i = 1024; i < 1152; i++)
 			tx.Append((byte_t)i % 256);
 
-		EXPECT_TRUE(node1.Send(ipaddr_t("127.0.0.1"), 12122U, tx));
+		EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx));
 		EXPECT_TRUE(node2.OnReceiveMsg().WaitFor(1));
 		EXPECT_TRUE(node2.Receive(rx));
 
@@ -266,7 +266,7 @@ namespace
 
 		tx = { 0,1,2,3,4,5,6,7 };
 
-		EXPECT_TRUE(node1.Send(ipaddr_t("127.0.0.1"), 12122U, tx));
+		EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx));
 		EXPECT_TRUE(node2.OnReceiveMsg().WaitFor(1));
 		EXPECT_TRUE(node2.Receive(rx));
 
@@ -284,13 +284,13 @@ namespace
 		}
 
 		{
-			TTcpServer server(ipaddr_t("127.0.0.1"), 12121U);
+			TTcpServer server(ipaddr_t(U"127.0.0.1"), 12121U);
 			EXPECT_TRUE(server.LocalAddress().ip.IsV4());
 			EXPECT_FALSE(server.LocalAddress().ip.IsV6());
 		}
 
 		{
-			TTcpServer server(ipaddr_t("::1"), 12121U);
+			TTcpServer server(ipaddr_t(U"::1"), 12121U);
 			EXPECT_TRUE(server.LocalAddress().ip.IsV6());
 			EXPECT_FALSE(server.LocalAddress().ip.IsV4());
 		}
@@ -300,7 +300,7 @@ namespace
 	{
 		{
 			TFiber fib_server([](){
-				TTcpServer server(ipaddr_t("127.0.0.1"), 12121U);
+				TTcpServer server(ipaddr_t(U"127.0.0.1"), 12121U);
 
 				for(;;)
 				{
@@ -333,7 +333,7 @@ namespace
 
 			fib_server.SwitchTo();
 
-			TTcpClient client(ipaddr_t("127.0.0.1"), 12121U);
+			TTcpClient client(ipaddr_t(U"127.0.0.1"), 12121U);
 			char buffer[12];
 			// std::cerr<<"waiting for server to be ready to accept data ...\n";
 			EXPECT_TRUE(client.OnOutputReady()->WaitFor(5));

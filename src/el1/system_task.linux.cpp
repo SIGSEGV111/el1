@@ -154,7 +154,7 @@ namespace el1::system::task
 	{
 		using namespace io::text::encoding::utf8;
 		key += ':';
-		TFile file = EL_ANNOTATE_ERROR(TFile(TString::Format(U"/proc/%d/status", thread_pid)), TException, "unable to read status file from procfs");
+		TFile file = EL_ANNOTATE_ERROR(TFile(TString::Format(U"/proc/%d/status", thread_pid)), TException, U"unable to read status file from procfs");
 		return file.Pipe()
 			.Transform(TUTF8Decoder())
 			.Transform(TLineReader())
@@ -169,7 +169,7 @@ namespace el1::system::task
 	{
 		using namespace io::text::encoding::utf8;
 		key += ':';
-		TFile file = EL_ANNOTATE_ERROR(TFile("/proc/self/status"), TException, "unable to read own status file from procfs");
+		TFile file = EL_ANNOTATE_ERROR(TFile(U"/proc/self/status"), TException, U"unable to read own status file from procfs");
 		return file.Pipe()
 			.Transform(TUTF8Decoder())
 			.Transform(TLineReader())
@@ -195,7 +195,7 @@ namespace el1::system::task
 			InstallFiberStackFaultHandler(SIGBUS);
 
 			// get pid of tracer program (if any)
-			const auto tracer_pid = GetStatusLine("TracerPid").ToInteger();
+			const auto tracer_pid = GetStatusLine(U"TracerPid").ToInteger();
 
 			sigset_t ss;
 			sigfillset(&ss);
@@ -243,7 +243,7 @@ namespace el1::system::task
 		if(ChildState() != EChildState::ALIVE)
 			return ETaskState::NOT_CREATED;
 
-		const TString status = GetStatusLine(thread_pid, "State");
+		const TString status = GetStatusLine(thread_pid, U"State");
 		switch(status[0])
 		{
 			case 'R': return ETaskState::RUNNING;
@@ -450,7 +450,7 @@ namespace el1::system::task
 	{
 		using namespace io::text::encoding;
 		using namespace io::collection::map;
-		EL_ERROR(pid == -1, TException, "process not created");
+		EL_ERROR(pid == -1, TException, U"process not created");
 
 		TSortedMap<TString, TString> map;
 
@@ -470,7 +470,7 @@ namespace el1::system::task
 		if(pid == -1)
 			return ETaskState::NOT_CREATED;
 
-		const char32_t chr = Status()["State"][0];
+		const char32_t chr = Status()[U"State"][0];
 		switch(chr)
 		{
 			case 'S': return ETaskState::RUNNING;

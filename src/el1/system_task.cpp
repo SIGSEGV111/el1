@@ -93,7 +93,7 @@ namespace el1::system::task
 
 	void TFiberMutex::Release()
 	{
-		EL_ERROR(owner != TFiber::Self(), TException, "tried to release a TFiberMutex that was not owned by the calling fiber");
+		EL_ERROR(owner != TFiber::Self(), TException, U"tried to release a TFiberMutex that was not owned by the calling fiber");
 		n_accquire--;
 		if(n_accquire == 0)
 			owner = nullptr;
@@ -110,7 +110,7 @@ namespace el1::system::task
 
 	TFiberMutex::~TFiberMutex()
 	{
-		EL_WARN(owner != nullptr, TException, "TFiberMutex was still locked while beeing destructed");
+		EL_WARN(owner != nullptr, TException, U"TFiberMutex was still locked while beeing destructed");
 	}
 
 	/***************************************************/
@@ -159,7 +159,7 @@ namespace el1::system::task
 
 	bool TFiber::DEBUG = false;
 	EStackAllocator TFiber::DEFAULT_STACK_ALLOCATOR = EStackAllocator::VIRTUAL_ALLOC;
-	usys_t TFiber::FIBER_DEFAULT_STACK_SIZE_BYTES = 16 * 1024;
+	usys_t TFiber::FIBER_DEFAULT_STACK_SIZE_BYTES = 1024 * 1024;
 	usys_t TFiber::VIRTUAL_STACK_GUARD_SIZE_BYTES = PAGE_SIZE;
 	usys_t TFiber::DEBUG_STACK_GUARD_SIZE_BYTES = 512 * 1024;
 	usys_t TFiber::SIGNAL_STACK_SIZE_BYTES = 64 * 1024;
@@ -890,7 +890,7 @@ namespace el1::system::task
 	{
 		TString stdout;
 		const int exit_code = ExecuteWithStatus(exe, args, stdin, &stdout, stderr, timeout);
-		EL_ERROR(exit_code != 0, TNonZeroExitException, exe, args, stderr == nullptr ? "" : *stderr, -1, exit_code);
+		EL_ERROR(exit_code != 0, TNonZeroExitException, exe, args, stderr == nullptr ? TString(U"") : *stderr, -1, exit_code);
 		return stdout;
 	}
 

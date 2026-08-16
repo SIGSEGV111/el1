@@ -56,7 +56,7 @@ namespace el1::testing
 {
 	TString TDebugException::Message() const
 	{
-		return "debug exception";
+		return U"debug exception";
 	}
 
 	IException* TDebugException::Clone() const

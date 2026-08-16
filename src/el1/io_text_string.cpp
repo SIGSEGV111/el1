@@ -163,7 +163,7 @@ namespace el1::io::text::string
 			{
 				if(parse_int)
 				{
-					EL_ERROR(ii >= sizeof(integer_part), TException, "number integer-part is too big");
+					EL_ERROR(ii >= sizeof(integer_part), TException, U"number integer-part is too big");
 					integer_part[ii++] = static_cast<u8_t>(chr - '0');
 				}
 				else
@@ -205,7 +205,7 @@ namespace el1::io::text::string
 			}
 			else if(chr >= '0' && chr <= '9')
 			{
-				EL_ERROR(ii >= sizeof(integer_part), TException, "number integer-part is too big");
+				EL_ERROR(ii >= sizeof(integer_part), TException, U"number integer-part is too big");
 				integer_part[ii++] = static_cast<u8_t>(chr - '0');
 			}
 			else
@@ -560,7 +560,7 @@ namespace el1::io::text::string
 			if(current_line.Length() + word.Length() <= n_line_len)
 			{
 				if(current_line.Length() > 0)
-					current_line += " ";
+					current_line += TStringView(U" ");
 				current_line += word;
 				word.chars.Clear();
 			}

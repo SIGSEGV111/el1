@@ -68,16 +68,16 @@ namespace el1::io::file
 
 	TString TPath::Extension() const
 	{
-		const usys_t pos = components[-1].Find(".", -1, true);
+		const usys_t pos = components[-1].Find(TStringView(U"."), -1, true);
 		if(pos == NEG1)
-			return "";
+			return U"";
 		else
 			return components[-1].SliceBE(pos + 1, components[-1].Length());
 	}
 
 	TString TPath::BareName() const
 	{
-		const usys_t pos = components[-1].Find(".", -1, true);
+		const usys_t pos = components[-1].Find(TStringView(U"."), -1, true);
 		if(pos == NEG1)
 			return components[-1];
 		else
@@ -169,6 +169,10 @@ namespace el1::io::file
 	}
 
 	TPath::TPath(const wchar_t* const str) : TPath(TString(str))
+	{
+	}
+
+	TPath::TPath(const char32_t* const str) : TPath(TString(str))
 	{
 	}
 

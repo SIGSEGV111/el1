@@ -23,13 +23,13 @@ int main(const int argc, char* argv[])
 	{
 		TPath input_path = "-";
 		TPath output_path = "-";
-		TString variable_name = "data";
+		TString variable_name = U"data";
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Convert binary data into a C++ byte array."),
-			TPathArgument(&input_path, EObjectType::FILE, ECreateMode::OPEN, 'i', "input-file", "", true, false, "Binary input file; '-' reads stdin"),
-			TPathArgument(&output_path, EObjectType::FILE, ECreateMode::TRUNCATE, 'o', "output-file", "", true, false, "C++ output file; '-' writes stdout"),
-			TStringArgument(&variable_name, 'n', "name", "", true, false, "Name of the generated C++ variable")
+			THelpArgument(U"Convert binary data into a C++ byte array."),
+			TPathArgument(&input_path, EObjectType::FILE, ECreateMode::OPEN, 'i', U"input-file", U"", true, false, U"Binary input file; '-' reads stdin"),
+			TPathArgument(&output_path, EObjectType::FILE, ECreateMode::TRUNCATE, 'o', U"output-file", U"", true, false, U"C++ output file; '-' writes stdout"),
+			TStringArgument(&variable_name, 'n', U"name", U"", true, false, U"Name of the generated C++ variable")
 		);
 
 		std::unique_ptr<TFile> input_file;
@@ -58,22 +58,22 @@ int main(const int argc, char* argv[])
 		{
 			if(count > 0 && (count & 0xff) == 0)
 			{
-				body += L"\"\n\t\"";
+				body += TStringView(U"\"\n\t\"");
 			}
 
 			count++;
 			switch(byte)
 			{
-				case 0x00: body += L"\\0"; break;
-				case 0x07: body += L"\\a"; break;
-				case 0x08: body += L"\\b"; break;
-				case 0x09: body += L"\\t"; break;
-				case 0x0a: body += L"\\n"; break;
-				case 0x0b: body += L"\\v"; break;
-				case 0x0c: body += L"\\f"; break;
-				case 0x0d: body += L"\\r"; break;
-				case 0x22: body += L"\\\""; break;
-				case 0x5c: body += L"\\\\"; break;
+				case 0x00: body += TStringView(U"\\0"); break;
+				case 0x07: body += TStringView(U"\\a"); break;
+				case 0x08: body += TStringView(U"\\b"); break;
+				case 0x09: body += TStringView(U"\\t"); break;
+				case 0x0a: body += TStringView(U"\\n"); break;
+				case 0x0b: body += TStringView(U"\\v"); break;
+				case 0x0c: body += TStringView(U"\\f"); break;
+				case 0x0d: body += TStringView(U"\\r"); break;
+				case 0x22: body += TStringView(U"\\\""); break;
+				case 0x5c: body += TStringView(U"\\\\"); break;
 				default:
 				{
 					if(byte >= 0x20 && byte <= 0x7e)
@@ -82,7 +82,7 @@ int main(const int argc, char* argv[])
 					}
 					else
 					{
-						(body += L"\\") += number_formatter.Format(byte);
+						(body += TStringView(U"\\")) += number_formatter.Format(byte);
 					}
 					break;
 				}

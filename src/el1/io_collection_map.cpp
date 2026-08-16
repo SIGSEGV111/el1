@@ -7,11 +7,11 @@ namespace el1::io::collection::map
 
 	TString TGenericKeyNotFoundException::Message() const
 	{
-		return "the requested key was not found";
+		return U"the requested key was not found";
 	}
 
 	TString TGenericKeyAlreadyExistsException::Message() const
 	{
-		return "the key associated with the new item already exists in the map";
+		return U"the key associated with the new item already exists in the map";
 	}
 }

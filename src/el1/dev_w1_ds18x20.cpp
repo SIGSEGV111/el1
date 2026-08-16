@@ -19,9 +19,9 @@ namespace el1::dev::w1::ds18x20
 		switch(model)
 		{
 			case EModel::DS18B20:
-				return L"DS18B20";
+				return U"DS18B20";
 			case EModel::DS18S20:
-				return L"DS18S20";
+				return U"DS18S20";
 		}
 
 		EL_THROW(TLogicException);

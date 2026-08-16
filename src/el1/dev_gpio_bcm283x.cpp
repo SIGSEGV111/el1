@@ -292,7 +292,7 @@ namespace el1::dev::gpio::bcm283x
 	const model_config_t* DetectModelThrow()
 	{
 		const model_config_t* m = DetectModel();
-		EL_ERROR(m == nullptr, TException, "Unknown Raspberry Pi Model. Please update MODEL_CONFIG array.");
+		EL_ERROR(m == nullptr, TException, U"Unknown Raspberry Pi Model. Please update MODEL_CONFIG array.");
 		return m;
 	}
 

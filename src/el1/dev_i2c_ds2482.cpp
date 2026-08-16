@@ -101,7 +101,7 @@ namespace el1::dev::i2c::ds2482
 			TFiber::Sleep(TTime(0.00005));
 		}
 		while(TTime::Now(EClock::MONOTONIC) < deadline);
-		EL_THROW(TException, "DS2482 timed out waiting for 1-wire operation");
+		EL_THROW(TException, U"DS2482 timed out waiting for 1-wire operation");
 	}
 
 	void TDS2482Bus::writeConfiguration(const u8_t new_configuration)
@@ -129,7 +129,7 @@ namespace el1::dev::i2c::ds2482
 	{
 		writeCommand(CMD_W1_RESET);
 		const u8_t status = waitBusy();
-		EL_ERROR((status & STATUS_SHORT) != 0, TException, "DS2482 detected a short circuit on the 1-wire bus");
+		EL_ERROR((status & STATUS_SHORT) != 0, TException, U"DS2482 detected a short circuit on the 1-wire bus");
 		return (status & STATUS_PRESENCE) != 0;
 	}
 

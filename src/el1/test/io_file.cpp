@@ -10,8 +10,8 @@ namespace
 	using namespace el1::io::file;
 	using namespace el1::error;
 
-	static const TPath NX_TEST_PATH1 = TString("dir1") + TPath::SEPERATOR + TString("subdir1") + TPath::SEPERATOR + TString("file1.ext");
-	static const TPath NX_TEST_PATH2 = TString("dir2") + TPath::SEPERATOR + TString("subdir2") + TPath::SEPERATOR + TString("file2.ext");
+	static const TPath NX_TEST_PATH1 = TString(U"dir1") + TPath::SEPERATOR + TString(U"subdir1") + TPath::SEPERATOR + TString(U"file1.ext");
+	static const TPath NX_TEST_PATH2 = TString(U"dir2") + TPath::SEPERATOR + TString(U"subdir2") + TPath::SEPERATOR + TString(U"file2.ext");
 
 	TEST(io_file, TFile_Tempfile)
 	{
@@ -70,7 +70,7 @@ namespace
 			EXPECT_EQ(dents.Count(), 11U);
 
 			auto comp_by_name = [](const char* const name, const direntry_t& de) {
-				return de.name == name;
+				return TString(de.name) == TString(name);
 			};
 
 			EXPECT_EQ(dents.Count(), 11U);
@@ -161,17 +161,17 @@ namespace
 		{
 			TPath path = NX_TEST_PATH1;
 			EXPECT_EQ(path.Components().Count(), 3U);
-			EXPECT_EQ(path.Components()[0], "dir1");
-			EXPECT_EQ(path.Components()[1], "subdir1");
-			EXPECT_EQ(path.Components()[2], "file1.ext");
+			EXPECT_EQ(path.Components()[0], U"dir1");
+			EXPECT_EQ(path.Components()[1], U"subdir1");
+			EXPECT_EQ(path.Components()[2], U"file1.ext");
 			EXPECT_FALSE(path.IsAbsolute());
 			EXPECT_TRUE(path.IsRelative());
 		}
 
 		{
-			TPath path = TString("file.ext");
+			TPath path = TString(U"file.ext");
 			EXPECT_EQ(path.Components().Count(), 1U);
-			EXPECT_EQ(path.Components()[0], "file.ext");
+			EXPECT_EQ(path.Components()[0], U"file.ext");
 			EXPECT_FALSE(path.IsAbsolute());
 			EXPECT_TRUE(path.IsRelative());
 		}
@@ -188,7 +188,7 @@ namespace
 		}
 
 		{
-			EXPECT_THROW(TPath(TString("foo") + TPath::SEPERATOR + TPath::SEPERATOR + "bar"), TInvalidPathException);
+			EXPECT_THROW(TPath(TString(U"foo") + TPath::SEPERATOR + TPath::SEPERATOR + TStringView(U"bar")), TInvalidPathException);
 		}
 
 		{
@@ -205,32 +205,32 @@ namespace
 	{
 		{
 			TPath path = NX_TEST_PATH1;
-			EXPECT_EQ(path.FullName(), "file1.ext");
-			EXPECT_EQ(path.BareName(), "file1");
-			EXPECT_EQ(path.Extension(), "ext");
-			EXPECT_EQ(path.Parent().FullName(), "subdir1");
-			EXPECT_EQ(path.Parent().Parent().FullName(), "dir1");
+			EXPECT_EQ(path.FullName(), U"file1.ext");
+			EXPECT_EQ(path.BareName(), U"file1");
+			EXPECT_EQ(path.Extension(), U"ext");
+			EXPECT_EQ(path.Parent().FullName(), U"subdir1");
+			EXPECT_EQ(path.Parent().Parent().FullName(), U"dir1");
 		}
 
 		{
 			const TPath path = { "test.abc.ext" };
-			EXPECT_EQ(path.BareName(), "test.abc");
-			EXPECT_EQ(path.FullName(), "test.abc.ext");
-			EXPECT_EQ(path.Extension(), "ext");
+			EXPECT_EQ(path.BareName(), U"test.abc");
+			EXPECT_EQ(path.FullName(), U"test.abc.ext");
+			EXPECT_EQ(path.Extension(), U"ext");
 		}
 
 		{
 			const TPath path = { "test" };
-			EXPECT_EQ(path.BareName(), "test");
-			EXPECT_EQ(path.FullName(), "test");
-			EXPECT_EQ(path.Extension(), "");
+			EXPECT_EQ(path.BareName(), U"test");
+			EXPECT_EQ(path.FullName(), U"test");
+			EXPECT_EQ(path.Extension(), U"");
 		}
 
 		{
 			const TPath path = { "test.long-ext" };
-			EXPECT_EQ(path.BareName(), "test");
-			EXPECT_EQ(path.FullName(), "test.long-ext");
-			EXPECT_EQ(path.Extension(), "long-ext");
+			EXPECT_EQ(path.BareName(), U"test");
+			EXPECT_EQ(path.FullName(), U"test.long-ext");
+			EXPECT_EQ(path.Extension(), U"long-ext");
 		}
 	}
 
@@ -272,33 +272,33 @@ namespace
 	TEST(io_file, TPath_CreateAsDirectory)
 	{
 		{
-			TPath path = TString("new-dir") + TPath::SEPERATOR + "sub-dir1";
+			TPath path = TString(U"new-dir") + TPath::SEPERATOR + "sub-dir1";
 			EXPECT_EQ(path.Type(), EObjectType::NX);
 			path.CreateAsDirectory(true);
 			EXPECT_EQ(path.Type(), EObjectType::DIRECTORY);
-			TPath check = TString("new-dir") + TPath::SEPERATOR + "sub-dir1";
+			TPath check = TString(U"new-dir") + TPath::SEPERATOR + "sub-dir1";
 			EXPECT_EQ(check.Type(), EObjectType::DIRECTORY);
 			path.CreateAsDirectory(true);
 		}
 
 		{
-			TPath path = TString("new-dir") + TPath::SEPERATOR + "sub-dir2";
+			TPath path = TString(U"new-dir") + TPath::SEPERATOR + "sub-dir2";
 			EXPECT_EQ(path.Type(), EObjectType::NX);
 			path.CreateAsDirectory(false);
 			EXPECT_EQ(path.Type(), EObjectType::DIRECTORY);
-			TPath check = TString("new-dir") + TPath::SEPERATOR + "sub-dir2";
+			TPath check = TString(U"new-dir") + TPath::SEPERATOR + "sub-dir2";
 			EXPECT_EQ(check.Type(), EObjectType::DIRECTORY);
 		}
 
 		{
-			TPath path = TString("non-existing-dir") + TPath::SEPERATOR + "sub-dir";
+			TPath path = TString(U"non-existing-dir") + TPath::SEPERATOR + "sub-dir";
 			EXPECT_EQ(path.Type(), EObjectType::NX);
 			EXPECT_THROW(path.CreateAsDirectory(false), TSyscallException);
 			EXPECT_EQ(path.Type(), EObjectType::NX);
 		}
 
 		{
-			TPath path = TString("non-existing-dir") + TPath::SEPERATOR + "sub-dir";
+			TPath path = TString(U"non-existing-dir") + TPath::SEPERATOR + "sub-dir";
 			EXPECT_EQ(path.Type(), EObjectType::NX);
 			path.CreateAsDirectory(true);
 			EXPECT_EQ(path.Type(), EObjectType::DIRECTORY);
@@ -310,11 +310,11 @@ namespace
 	{
 		{
 			TPath path = NX_TEST_PATH1;
-			EXPECT_EQ(path.Components()[0], "dir1");
+			EXPECT_EQ(path.Components()[0], U"dir1");
 			path.Rebase("dir1", "dir2");
-			EXPECT_EQ(path.Components()[0], "dir2");
-			EXPECT_EQ(path.Components()[1], "subdir1");
-			EXPECT_EQ(path.Components()[2], "file1.ext");
+			EXPECT_EQ(path.Components()[0], U"dir2");
+			EXPECT_EQ(path.Components()[1], U"subdir1");
+			EXPECT_EQ(path.Components()[2], U"file1.ext");
 		}
 	}
 
@@ -324,16 +324,16 @@ namespace
 			TPath path1 = "foo";
 			TPath path2 = "bar";
 			TPath path3 = path1 + path2;
-			EXPECT_EQ(path3.Components()[0], "foo");
-			EXPECT_EQ(path3.Components()[1], "bar");
+			EXPECT_EQ(path3.Components()[0], U"foo");
+			EXPECT_EQ(path3.Components()[1], U"bar");
 			EXPECT_EQ(path3.Components().Count(), 2U);
 		}
 
 		{
-			TPath path1 = TString("foo") + TPath::SEPERATOR + "bar";
+			TPath path1 = TString(U"foo") + TPath::SEPERATOR + TStringView(U"bar");
 			TPath path2 = "bar";
 			TPath path3 = path1 - path2;
-			EXPECT_EQ(path3.Components()[0], "foo");
+			EXPECT_EQ(path3.Components()[0], U"foo");
 			EXPECT_EQ(path3.Components().Count(), 1U);
 		}
 	}
@@ -344,11 +344,11 @@ namespace
 			TPath path = NX_TEST_PATH1;
 			path.ReplaceComponent(0, NX_TEST_PATH2);
 			EXPECT_EQ(path.Components().Count(), 5U);
-			EXPECT_EQ(path.Components()[0], "dir2");
-			EXPECT_EQ(path.Components()[1], "subdir2");
-			EXPECT_EQ(path.Components()[2], "file2.ext");
-			EXPECT_EQ(path.Components()[3], "subdir1");
-			EXPECT_EQ(path.Components()[4], "file1.ext");
+			EXPECT_EQ(path.Components()[0], U"dir2");
+			EXPECT_EQ(path.Components()[1], U"subdir2");
+			EXPECT_EQ(path.Components()[2], U"file2.ext");
+			EXPECT_EQ(path.Components()[3], U"subdir1");
+			EXPECT_EQ(path.Components()[4], U"file1.ext");
 		}
 	}
 
@@ -359,16 +359,16 @@ namespace
 			TPath path = NX_TEST_PATH1;
 			EXPECT_EQ(path.StripCommonPrefix(NX_TEST_PATH2), 0U);
 			EXPECT_EQ(path.Components().Count(), 3U);
-			EXPECT_EQ(path.Components()[0], "dir1");
-			EXPECT_EQ(path.Components()[1], "subdir1");
-			EXPECT_EQ(path.Components()[2], "file1.ext");
+			EXPECT_EQ(path.Components()[0], U"dir1");
+			EXPECT_EQ(path.Components()[1], U"subdir1");
+			EXPECT_EQ(path.Components()[2], U"file1.ext");
 		}
 
 		{
 			TPath path = NX_TEST_PATH1 + "test";
 			EXPECT_EQ(path.StripCommonPrefix(NX_TEST_PATH1), 3U);
 			EXPECT_EQ(path.Components().Count(), 1U);
-			EXPECT_EQ(path.Components()[0], "test");
+			EXPECT_EQ(path.Components()[0], U"test");
 		}
 	}
 
@@ -393,15 +393,15 @@ namespace
 			EXPECT_EQ(path1.Components().Count(), 4U);
 			EXPECT_EQ(path1.Components()[0], TPath::PARENT_DIR);
 			EXPECT_EQ(path1.Components()[1], TPath::PARENT_DIR);
-			EXPECT_EQ(path1.Components()[2], "foo");
-			EXPECT_EQ(path1.Components()[3], "bar");
+			EXPECT_EQ(path1.Components()[2], U"foo");
+			EXPECT_EQ(path1.Components()[3], U"bar");
 		}
 	}
 
 	/*
 	TEST(io_file, TPath_CreateAsFile)
 	{
-		const TPath path = TString("foo") + TPath::SEPERATOR + "bar" + TPath::SEPERATOR + "file.txt";
+		const TPath path = TString(U"foo") + TPath::SEPERATOR + "bar" + TPath::SEPERATOR + "file.txt";
 		EXPECT_EQ(path.Type(), EObjectType::NX);
 		EXPECT_EQ(path.Parent().Type(), EObjectType::NX);
 		EXPECT_THROW(path.CreateAsFile(false), TException);
@@ -415,27 +415,27 @@ namespace
 	TEST(io_file, TPath_Strip)
 	{
 		{
-			TPath path = { "foo", "bar", "baz" };
+			TPath path = { U"foo", U"bar", U"baz" };
 			EXPECT_EQ(path.Components().Count(), 3U);
 			path.Strip(1);
 			EXPECT_EQ(path.Components().Count(), 2U);
-			EXPECT_EQ(path.Components()[0], "bar");
-			EXPECT_EQ(path.Components()[1], "baz");
+			EXPECT_EQ(path.Components()[0], U"bar");
+			EXPECT_EQ(path.Components()[1], U"baz");
 		}
 	}
 
 	TEST(io_file, TPath_Simplify)
 	{
 		{
-			TPath test = {"some", "path", "..", "file"};
-			const TPath expect = {"some", "file"};
+			TPath test = {U"some", U"path", U"..", U"file"};
+			const TPath expect = {U"some", U"file"};
 
 			test.Simplify();
 			EXPECT_EQ(test, expect);
 		}
 
 		{
-			TPath test = {"some", "path", "..", "..", "file"};
+			TPath test = {U"some", U"path", U"..", U"..", U"file"};
 			const TPath expect = {"file"};
 
 			test.Simplify();
@@ -443,15 +443,15 @@ namespace
 		}
 
 		{
-			TPath test = {"some", "path", "..", "..", "..", "file"};
-			const TPath expect = {"..", "file"};
+			TPath test = {U"some", U"path", U"..", U"..", U"..", U"file"};
+			const TPath expect = {U"..", U"file"};
 
 			test.Simplify();
 			EXPECT_EQ(test, expect);
 		}
 
 		{
-			TPath test = {".", "some", "..", "path", "..", ".", "file"};
+			TPath test = {U".", U"some", U"..", U"path", U"..", U".", U"file"};
 			const TPath expect = {"file"};
 
 			test.Simplify();
@@ -480,7 +480,7 @@ namespace
 	TEST(io_file, TPath_EdgeCases)
 	{
 		const TPath empty;
-		EXPECT_EQ(empty.ToString(), ".");
+		EXPECT_EQ(empty.ToString(), U".");
 		EXPECT_EQ(empty.Parent(), TPath(".."));
 
 		const TPath root("/");
@@ -512,30 +512,30 @@ namespace
 		}
 
 		EXPECT_TRUE(file_path.IsFile());
-		EXPECT_EQ(TFile::ReadText(file_path), "alpha beta");
-		EXPECT_EQ(TFile::ReadText(file_path, false), "  alpha beta  \n");
-		EXPECT_EQ(TFile::ReadText(file_path, true, 7), "alpha");
+		EXPECT_EQ(TFile::ReadText(file_path), U"alpha beta");
+		EXPECT_EQ(TFile::ReadText(file_path, false), U"  alpha beta  \n");
+		EXPECT_EQ(TFile::ReadText(file_path, true, 7), U"alpha");
 
 		TDirectory directory(nested);
-		EXPECT_TRUE(directory.Contains("sample.txt"));
-		EXPECT_FALSE(directory.Contains("missing.txt"));
+		EXPECT_TRUE(directory.Contains(U"sample.txt"));
+		EXPECT_FALSE(directory.Contains(U"missing.txt"));
 		EXPECT_GT(directory.ObjectID(), 0U);
 		EXPECT_GT(directory.AproxCount(), 0U);
-		EXPECT_EQ(directory.Path().FullName(), "b");
+		EXPECT_EQ(directory.Path().FullName(), U"b");
 		EXPECT_EQ(directory.Parent(), TDirectory(nested.Parent()));
 
-		const direntry_t file_info = directory.QueryInfo("sample.txt");
+		const direntry_t file_info = directory.QueryInfo(U"sample.txt");
 		EXPECT_EQ(file_info.type, EObjectType::FILE);
 		EXPECT_EQ(file_info.size, strlen("  alpha beta  \n"));
 		EXPECT_GT(file_info.obj_id, 0U);
 
-		const direntry_t missing_info = directory.QueryInfo("missing.txt");
+		const direntry_t missing_info = directory.QueryInfo(U"missing.txt");
 		EXPECT_EQ(missing_info.type, EObjectType::NX);
 
 		TPath resolved = file_path;
 		resolved.Resolve();
 		EXPECT_TRUE(resolved.IsAbsolute());
-		EXPECT_EQ(resolved.FullName(), "sample.txt");
+		EXPECT_EQ(resolved.FullName(), U"sample.txt");
 
 		root.Delete(true);
 		EXPECT_EQ(root.Type(), EObjectType::NX);
@@ -561,7 +561,7 @@ namespace
 			TFile second(path, TAccess::RO, ECreateMode::OPEN);
 			EXPECT_EQ(first, second);
 			EXPECT_EQ(first.ObjectID(), second.ObjectID());
-			EXPECT_EQ(first.Path().FullName(), "data.bin");
+			EXPECT_EQ(first.Path().FullName(), U"data.bin");
 			EXPECT_EQ(first.Size(), 8U);
 
 			TMapping mapping(&first, 0, 4);

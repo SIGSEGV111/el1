@@ -312,10 +312,10 @@ namespace
 	}
 	TEST(dev_w1, uuid_string_roundtrip)
 	{
-		const uuid_t uuid = uuid_t::FromString("28|01:02:03:04:05:06|9e");
-		EXPECT_EQ(uuid.ToString(), "28|01:02:03:04:05:06|9e");
-		EXPECT_THROW(uuid_t::FromString("28|01:02:03:04:05:06|9e trailing"), el1::error::TInvalidArgumentException);
-		EXPECT_THROW(uuid_t::FromString("28|01:02:03:04:05:0g|9e"), el1::error::TInvalidArgumentException);
+		const uuid_t uuid = uuid_t::FromString(U"28|01:02:03:04:05:06|9e");
+		EXPECT_EQ(uuid.ToString(), U"28|01:02:03:04:05:06|9e");
+		EXPECT_THROW(uuid_t::FromString(U"28|01:02:03:04:05:06|9e trailing"), el1::error::TInvalidArgumentException);
+		EXPECT_THROW(uuid_t::FromString(U"28|01:02:03:04:05:0g|9e"), el1::error::TInvalidArgumentException);
 	}
 
 }

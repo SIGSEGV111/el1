@@ -213,7 +213,7 @@ namespace el1::dev::motor::servo42d
 		{
 			const s64_t target = servo_target;
 			const EMotionControllerState state_before_command = motion.State();
-			EL_ERROR(state_before_command == EMotionControllerState::ERROR, TException, "Servo42D motion controller reported an error before applying servo target");
+			EL_ERROR(state_before_command == EMotionControllerState::ERROR, TException, U"Servo42D motion controller reported an error before applying servo target");
 			if(state_before_command == EMotionControllerState::ACTIVE)
 				motion.Stop(-1.0f);
 
@@ -224,8 +224,8 @@ namespace el1::dev::motor::servo42d
 				const EMotionControllerState state = motion.State();
 				if(state == EMotionControllerState::IDLE)
 					return;
-				EL_ERROR(state == EMotionControllerState::ERROR, TException, "Servo42D motion controller reported an error while applying servo target");
-				EL_ERROR(state == EMotionControllerState::DISABLED, TException, "Servo42D motion controller became disabled while applying servo target");
+				EL_ERROR(state == EMotionControllerState::ERROR, TException, U"Servo42D motion controller reported an error while applying servo target");
+				EL_ERROR(state == EMotionControllerState::DISABLED, TException, U"Servo42D motion controller became disabled while applying servo target");
 				TFiber::Sleep(0.01);
 			}
 
@@ -272,7 +272,7 @@ namespace el1::dev::motor::servo42d
 			case EFiberState::FINISHED:
 			case EFiberState::CRASHED:
 			case EFiberState::KILLED:
-				EL_THROW(TException, "Servo42D control fiber is no longer operational");
+				EL_THROW(TException, U"Servo42D control fiber is no longer operational");
 		}
 	}
 
@@ -494,15 +494,15 @@ namespace el1::dev::motor::servo42d
 
 	void TServo42D::TStepperDriver::Step(const bool state)
 	{
-		EL_ERROR(parent.step == nullptr, TException, "no STEP pin was provided");
-		EL_ERROR(parent.mc_enabled, TException, "Step/Dir interface is only available when the motion controller is disabled");
+		EL_ERROR(parent.step == nullptr, TException, U"no STEP pin was provided");
+		EL_ERROR(parent.mc_enabled, TException, U"Step/Dir interface is only available when the motion controller is disabled");
 		parent.step->State(state);
 	}
 
 	void TServo42D::TStepperDriver::Direction(const EMotorDirection dir)
 	{
-		EL_ERROR(parent.dir == nullptr, TException, "no DIR pin was provided");
-		EL_ERROR(parent.mc_enabled, TException, "Step/Dir interface is only available when the motion controller is disabled");
+		EL_ERROR(parent.dir == nullptr, TException, U"no DIR pin was provided");
+		EL_ERROR(parent.mc_enabled, TException, U"Step/Dir interface is only available when the motion controller is disabled");
 
 		if(parent.dir_inverted)
 			parent.dir->State(dir == EMotorDirection::FORWARD);
@@ -512,8 +512,8 @@ namespace el1::dev::motor::servo42d
 
 	EMotorDirection TServo42D::TStepperDriver::Direction() const
 	{
-		EL_ERROR(parent.dir == nullptr, TException, "no DIR pin was provided");
-		EL_ERROR(parent.mc_enabled, TException, "Step/Dir interface is only available when the motion controller is disabled");
+		EL_ERROR(parent.dir == nullptr, TException, U"no DIR pin was provided");
+		EL_ERROR(parent.mc_enabled, TException, U"Step/Dir interface is only available when the motion controller is disabled");
 		return parent.dir->State() == parent.dir_inverted ? EMotorDirection::FORWARD : EMotorDirection::REVERSE;
 	}
 
@@ -766,7 +766,7 @@ namespace el1::dev::motor::servo42d
 
 	void TServo42D::TMotionController::Goto(const s64_t absolute_position, const float accel, const float max_speed)
 	{
-		EL_ERROR(!parent.mc_enabled, TException, "motion controller is currently disabled");
+		EL_ERROR(!parent.mc_enabled, TException, U"motion controller is currently disabled");
 		EL_ERROR(!std::isfinite(accel) || accel < 0.0f, TInvalidArgumentException, "accel", "acceleration must be finite and non-negative");
 		EL_ERROR(!std::isfinite(max_speed) || max_speed <= 0.0f, TInvalidArgumentException, "max_speed", "max_speed must be finite and greater than zero");
 		EL_ERROR(absolute_position != (s64_t)(s32_t)absolute_position, TInvalidArgumentException, "absolute_position", "value too large");
@@ -783,7 +783,7 @@ namespace el1::dev::motor::servo42d
 
 	void TServo42D::TMotionController::Move(const s64_t relative_position, const float accel, const float max_speed)
 	{
-		EL_ERROR(!parent.mc_enabled, TException, "motion controller is currently disabled");
+		EL_ERROR(!parent.mc_enabled, TException, U"motion controller is currently disabled");
 		EL_ERROR(!std::isfinite(accel) || accel < 0.0f, TInvalidArgumentException, "accel", "acceleration must be finite and non-negative");
 		EL_ERROR(!std::isfinite(max_speed) || max_speed <= 0.0f, TInvalidArgumentException, "max_speed", "max_speed must be finite and greater than zero");
 		EL_ERROR(relative_position < -0xFFFFFFFFLL || relative_position > 0xFFFFFFFFLL, TInvalidArgumentException, "relative_position", "value too large");
@@ -810,13 +810,13 @@ namespace el1::dev::motor::servo42d
 
 	void TServo42D::TMotionController::GoHome()
 	{
-		EL_ERROR(!parent.mc_enabled, TException, "motion controller is currently disabled");
+		EL_ERROR(!parent.mc_enabled, TException, U"motion controller is currently disabled");
 		EL_NOT_IMPLEMENTED;
 	}
 
 	void TServo42D::TMotionController::Run(const EMotorDirection _dir, const float accel, const float max_speed)
 	{
-		EL_ERROR(!parent.mc_enabled, TException, "motion controller is currently disabled");
+		EL_ERROR(!parent.mc_enabled, TException, U"motion controller is currently disabled");
 		EL_ERROR(!std::isfinite(accel) || accel < 0.0f, TInvalidArgumentException, "accel", "acceleration must be finite and non-negative");
 		EL_ERROR(!std::isfinite(max_speed) || max_speed <= 0.0f, TInvalidArgumentException, "max_speed", "max_speed must be finite and greater than zero");
 		const u32_t steps_per_turn = parent.driver.StepsPerTurn();

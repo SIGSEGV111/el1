@@ -13,22 +13,22 @@ namespace
 	{
 		TPath dot_path("root.branch.leaf", '.');
 		ASSERT_EQ(dot_path.Components().Count(), 3U);
-		EXPECT_TRUE(dot_path.Components()[0] == "root");
-		EXPECT_TRUE(dot_path.Components()[1] == "branch");
-		EXPECT_TRUE(dot_path.Components()[2] == "leaf");
-		EXPECT_TRUE(dot_path.ToString() == "root.branch.leaf");
-		EXPECT_TRUE(dot_path.Parent().ToString() == "root.branch");
+		EXPECT_TRUE(dot_path.Components()[0] == U"root");
+		EXPECT_TRUE(dot_path.Components()[1] == U"branch");
+		EXPECT_TRUE(dot_path.Components()[2] == U"leaf");
+		EXPECT_TRUE(dot_path.ToString() == U"root.branch.leaf");
+		EXPECT_TRUE(dot_path.Parent().ToString() == U"root.branch");
 
 		dot_path += TPath("item", '.');
-		EXPECT_TRUE(dot_path.ToString() == "root.branch.leaf.item");
+		EXPECT_TRUE(dot_path.ToString() == U"root.branch.leaf.item");
 		dot_path -= TPath("leaf.item", '.');
-		EXPECT_TRUE(dot_path.ToString() == "root.branch");
+		EXPECT_TRUE(dot_path.ToString() == U"root.branch");
 
 		const TPath unix_path("root/branch/leaf", '/');
-		EXPECT_TRUE(unix_path.ToString() == "root/branch/leaf");
+		EXPECT_TRUE(unix_path.ToString() == U"root/branch/leaf");
 
 		const TPath windows_path("root\\branch\\leaf", '\\');
-		EXPECT_TRUE(windows_path.ToString() == "root\\branch\\leaf");
+		EXPECT_TRUE(windows_path.ToString() == U"root\\branch\\leaf");
 
 		EXPECT_THROW(TPath("root..leaf", '.'), TInvalidPathException);
 		EXPECT_THROW(dot_path += TPath("other/item", '/'), TInvalidArgumentException);
@@ -38,10 +38,10 @@ namespace
 	{
 		TPath path("root.branch.leaf", '.');
 		path.Rebase(TPath("root.branch", '.'), TPath("other", '.'));
-		EXPECT_TRUE(path.ToString() == "other.leaf");
+		EXPECT_TRUE(path.ToString() == U"other.leaf");
 
 		TPath single("root", '.');
 		EXPECT_TRUE(single.Parent().IsEmpty());
-		EXPECT_TRUE(single.Parent().ToString() == "");
+		EXPECT_TRUE(single.Parent().ToString() == U"");
 	}
 }

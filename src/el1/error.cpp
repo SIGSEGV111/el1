@@ -69,7 +69,7 @@ namespace el1::error
 
 	TString TUnknownException::Message() const
 	{
-		return "a unknown exception was caught";
+		return U"a unknown exception was caught";
 	}
 
 	IException* TUnknownException::Clone() const
@@ -109,7 +109,7 @@ namespace el1::error
 
 	TString TLogicException::Message() const
 	{
-		return TString("programm logic exception");
+		return TString(U"programm logic exception");
 	}
 
 	IException* TLogicException::Clone() const

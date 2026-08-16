@@ -136,7 +136,7 @@ namespace el1::dev::modbus
 
 	void TFrameBuffer::VerifyCRC()
 	{
-		EL_ERROR(pos_write < 3, TException, "response frame too short");
+		EL_ERROR(pos_write < 3, TException, U"response frame too short");
 		const u16_t computed_crc = ComputeCRC(pos_write - 2, buffer);
 		const u16_t expected_crc = (u16_t)buffer[pos_write - 2] | ((u16_t)buffer[pos_write - 1] << 8);
 		EL_ERROR(computed_crc != expected_crc, TException, TString::Format(U"CRC does not match (expected: %04x, computed %04x)", expected_crc, computed_crc));
@@ -192,7 +192,7 @@ namespace el1::dev::modbus
 	void TFrameBuffer::SleepFrameGap(tty::TTeletypewriter& tty, TTime& ts_eof) const
 	{
 		const double baudrate = tty.Baudrate();
-		EL_ERROR(baudrate <= 0.0, TException, "TTY baud rate must be greater than zero");
+		EL_ERROR(baudrate <= 0.0, TException, U"TTY baud rate must be greater than zero");
 		const TConfiguration config = tty.Config();
 		const double bits_per_symbol = 1 + (u32_t)config.data_bits + ((config.parity != EParity::NONE) ? 1 : 0) + (u32_t)config.stop_bits;
 		const double time_per_symbol = bits_per_symbol / baudrate;
@@ -214,13 +214,13 @@ namespace el1::dev::modbus
 		{
 			TFrameBuffer loopback;
 			loopback.ReceiveExcact(tty, pos_write);
-			EL_ERROR(*this != loopback, TException, "TX data corruption/collision; loopback does not match what we intended to send");
+			EL_ERROR(*this != loopback, TException, U"TX data corruption/collision; loopback does not match what we intended to send");
 		}
 	}
 
 	void TFrameBuffer::ReceiveExcact(TTeletypewriter& tty, const u16_t n_bytes)
 	{
-		EL_ERROR(tty.BlockingRead(buffer, n_bytes, 0.1) != n_bytes, TException, "BlockingRead() did not return the expected amount of data");
+		EL_ERROR(tty.BlockingRead(buffer, n_bytes, 0.1) != n_bytes, TException, U"BlockingRead() did not return the expected amount of data");
 		if(TModBus::DEBUG) debug::Hexdump("RX(RE)", buffer, n_bytes);
 		pos_write = n_bytes;
 	}
@@ -233,18 +233,18 @@ namespace el1::dev::modbus
 	void TFrameBuffer::ReceiveResponse(TTeletypewriter& tty, const TTime response_timeout, const u8_t device_id, EFunctionCode function, TTime& ts_eof)
 	{
 		const double baudrate = tty.Baudrate();
-		EL_ERROR(baudrate <= 0.0, TException, "TTY baud rate must be greater than zero");
+		EL_ERROR(baudrate <= 0.0, TException, U"TTY baud rate must be greater than zero");
 		const TConfiguration config = tty.Config();
 		const double bits_per_symbol = 1 + (u32_t)config.data_bits + ((config.parity != EParity::NONE) ? 1 : 0) + (u32_t)config.stop_bits;
 		const double time_per_symbol = bits_per_symbol / baudrate;
 		const TTime symbol_timeout = time_per_symbol * 3.5 * 5;
 
-		EL_ERROR(tty.BlockingRead(buffer, 1, response_timeout + time_per_symbol) != 1, TException, "timeout waiting for response");
+		EL_ERROR(tty.BlockingRead(buffer, 1, response_timeout + time_per_symbol) != 1, TException, U"timeout waiting for response");
 		pos_write = 1;
 
 		for(;;)
 		{
-			EL_ERROR(Space() == 0, TException, "received Modbus frame exceeds buffer size");
+			EL_ERROR(Space() == 0, TException, U"received Modbus frame exceeds buffer size");
 			const usys_t n_read = tty.BlockingRead(buffer + pos_write, Space(), symbol_timeout);
 			if(n_read == 0)
 				break;
@@ -253,7 +253,7 @@ namespace el1::dev::modbus
 
 		if(TModBus::DEBUG) debug::Hexdump("RX(RR)", buffer, pos_write);
 
-		EL_ERROR(pos_write < 4, TException, "received frame is too short");
+		EL_ERROR(pos_write < 4, TException, U"received frame is too short");
 		VerifyCRC();
 
 		ReadByteExpected("device_id", device_id);

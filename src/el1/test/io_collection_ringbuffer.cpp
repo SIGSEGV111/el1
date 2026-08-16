@@ -25,7 +25,7 @@ namespace
 		TRingBufferConsumer<int> consumer(producer);
 
 		TThread writer(
-			"ring-writer",
+			U"ring-writer",
 			[&]()
 			{
 				TFiber::Sleep(0.01);
@@ -143,7 +143,7 @@ namespace
 		std::atomic<int> second_value(0);
 
 		TThread first_reader(
-			"ring-reader-1",
+			U"ring-reader-1",
 			[&]()
 			{
 				first.OnDataAvailable().WaitFor();
@@ -154,7 +154,7 @@ namespace
 		);
 
 		TThread second_reader(
-			"ring-reader-2",
+			U"ring-reader-2",
 			[&]()
 			{
 				second.OnDataAvailable().WaitFor();

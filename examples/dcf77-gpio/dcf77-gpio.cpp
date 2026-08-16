@@ -160,12 +160,12 @@ int main(const int argc, char* argv[])
 		f64_t distance = 0;
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Decode a DCF77 signal from a GPIO line."),
-			TFlagArgument(&DEBUG, 'd', "debug", "", "Enable decoder debug output"),
-			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device"),
-			TIntegerArgument(&signal_line, 'g', "gpio", "", false, false, "GPIO line index carrying the DCF77 signal"),
-			TFloatArgument(&distance, 'm', "distance", "", true, false, "Distance in metres from the DCF77 transmitter"),
-			TIntegerArgument(&chrony_shm_index, 's', "shm-index", "", true, false, "Chrony/NTP shared-memory unit; -1 disables output")
+			THelpArgument(U"Decode a DCF77 signal from a GPIO line."),
+			TFlagArgument(&DEBUG, 'd', U"debug", U"", U"Enable decoder debug output"),
+			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', U"gpio-chip", U"", true, false, U"GPIO character device"),
+			TIntegerArgument(&signal_line, 'g', U"gpio", U"", false, false, U"GPIO line index carrying the DCF77 signal"),
+			TFloatArgument(&distance, 'm', U"distance", U"", true, false, U"Distance in metres from the DCF77 transmitter"),
+			TIntegerArgument(&chrony_shm_index, 's', U"shm-index", U"", true, false, U"Chrony/NTP shared-memory unit; -1 disables output")
 		);
 
 		EL_ERROR(signal_line < 0, TInvalidArgumentException, "gpio", "non-negative GPIO line index");

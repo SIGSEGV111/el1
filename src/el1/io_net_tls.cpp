@@ -65,13 +65,13 @@ namespace el1::io::net::tls
 			{
 				char buffer[256];
 				ERR_error_string_n(error_code, buffer, sizeof(buffer));
-				msg += first ? ": " : "; ";
+				msg += first ? TStringView(U": ") : TStringView(U"; ");
 				msg += buffer;
 				first = false;
 			}
 
 			if(first)
-				msg += ": unknown OpenSSL error";
+				msg += TStringView(U": unknown OpenSSL error");
 
 			return msg;
 		}
@@ -146,7 +146,7 @@ namespace el1::io::net::tls
 					n_certificates++;
 				}
 
-				EL_ERROR(n_certificates == 0, TTlsException, TString("TLS certificate chain in memory contains no certificates"));
+				EL_ERROR(n_certificates == 0, TTlsException, TString(U"TLS certificate chain in memory contains no certificates"));
 			}
 			catch(...)
 			{
@@ -207,7 +207,7 @@ namespace el1::io::net::tls
 			try
 			{
 				X509_STORE* const store = SSL_CTX_get_cert_store(context);
-				EL_ERROR(store == nullptr, TTlsException, TString("TLS context has no certificate store"));
+				EL_ERROR(store == nullptr, TTlsException, TString(U"TLS context has no certificate store"));
 
 				for(int i = 0; i < sk_X509_INFO_num(infos); i++)
 				{
@@ -219,7 +219,7 @@ namespace el1::io::net::tls
 					n_certificates++;
 				}
 
-				EL_ERROR(n_certificates == 0, TTlsException, TString("CA PEM data in memory contains no certificates"));
+				EL_ERROR(n_certificates == 0, TTlsException, TString(U"CA PEM data in memory contains no certificates"));
 			}
 			catch(...)
 			{
@@ -533,7 +533,7 @@ namespace el1::io::net::tls
 
 			const EWaitDirection direction = WaitDirectionFromSslError(data->ssl, result, "SSL_shutdown() failed");
 			const IWaitable* const waitable = data->Waitable(direction);
-			EL_ERROR(waitable == nullptr, TTlsException, "TLS transport closed during shutdown");
+			EL_ERROR(waitable == nullptr, TTlsException, U"TLS transport closed during shutdown");
 			waitable->WaitFor();
 		}
 

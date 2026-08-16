@@ -672,7 +672,7 @@ namespace el1::io::collection::list
 	template<typename T>
 	T TList<T>::PopHead()
 	{
-		EL_ERROR(this->n_items == 0, TException, "list is empty");
+		EL_ERROR(this->n_items == 0, TException, U"list is empty");
 		T tmp = std::move(this->arr_items[0]);
 		this->Remove(0,1);
 		return tmp;

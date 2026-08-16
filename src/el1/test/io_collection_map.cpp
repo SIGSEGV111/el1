@@ -28,9 +28,9 @@ namespace
 		using pair_t = map_t::kv_pair_t;
 
 		TList<pair_t> unsorted = {
-			{3, "three"},
-			{1, "one"},
-			{2, "two"}
+			{3, U"three"},
+			{1, U"one"},
+			{2, U"two"}
 		};
 		const pair_t* const storage = unsorted.ItemPtr(0);
 		map_t sorted(std::move(unsorted));
@@ -40,57 +40,57 @@ namespace
 		EXPECT_EQ(sorted.Items()[0].key, 1);
 		EXPECT_EQ(sorted.Items()[1].key, 2);
 		EXPECT_EQ(sorted.Items()[2].key, 3);
-		EXPECT_EQ(sorted[1], "one");
-		EXPECT_EQ(sorted[2], "two");
-		EXPECT_EQ(sorted[3], "three");
+		EXPECT_EQ(sorted[1], U"one");
+		EXPECT_EQ(sorted[2], U"two");
+		EXPECT_EQ(sorted[3], U"three");
 
 		TList<pair_t> already_sorted = {
-			{1, "one"},
-			{2, "two"},
-			{3, "three"}
+			{1, U"one"},
+			{2, U"two"},
+			{3, U"three"}
 		};
 		const pair_t* const sorted_storage = already_sorted.ItemPtr(0);
 		map_t assumed_sorted(std::move(already_sorted), EInputOrder::ASSUME_SORTED);
 		EXPECT_EQ(assumed_sorted.Items().ItemPtr(0), sorted_storage);
-		EXPECT_EQ(assumed_sorted[1], "one");
-		EXPECT_EQ(assumed_sorted[2], "two");
-		EXPECT_EQ(assumed_sorted[3], "three");
+		EXPECT_EQ(assumed_sorted[1], U"one");
+		EXPECT_EQ(assumed_sorted[2], U"two");
+		EXPECT_EQ(assumed_sorted[3], U"three");
 
 		TList<pair_t> duplicates = {
-			{2, "first"},
-			{1, "one"},
-			{2, "second"}
+			{2, U"first"},
+			{1, U"one"},
+			{2, U"second"}
 		};
 		EXPECT_THROW((map_t(std::move(duplicates))), TKeyAlreadyExistsException<int>);
 
 		map_t initialized = {
-			{3, "three"},
-			{1, "one"},
-			{2, "two"}
+			{3, U"three"},
+			{1, U"one"},
+			{2, U"two"}
 		};
-		EXPECT_EQ(initialized[1], "one");
-		EXPECT_EQ(initialized[2], "two");
-		EXPECT_EQ(initialized[3], "three");
+		EXPECT_EQ(initialized[1], U"one");
+		EXPECT_EQ(initialized[2], U"two");
+		EXPECT_EQ(initialized[3], U"three");
 
 		auto reverse = [](const int& a, const int& b) -> int { return StdSorter(b, a); };
 		TList<pair_t> reverse_items = {
-			{1, "one"},
-			{3, "three"},
-			{2, "two"}
+			{1, U"one"},
+			{3, U"three"},
+			{2, U"two"}
 		};
 		map_t reverse_sorted(std::move(reverse_items), EInputOrder::UNSORTED, reverse);
 		EXPECT_EQ(reverse_sorted.Items()[0].key, 3);
 		EXPECT_EQ(reverse_sorted.Items()[1].key, 2);
 		EXPECT_EQ(reverse_sorted.Items()[2].key, 1);
-		EXPECT_EQ(reverse_sorted[1], "one");
-		EXPECT_EQ(reverse_sorted[2], "two");
-		EXPECT_EQ(reverse_sorted[3], "three");
+		EXPECT_EQ(reverse_sorted[1], U"one");
+		EXPECT_EQ(reverse_sorted[2], U"two");
+		EXPECT_EQ(reverse_sorted[3], U"three");
 	}
 
 	TEST(io_collection_map, TSortedMap_UniquePtr)
 	{
 		TSortedMap<int, std::unique_ptr<int>> map;
-		std::unique_ptr<int>& x = EL_ANNOTATE_ERROR(map.Add(10, el1::New<int>(15)), TException, "test");
+		std::unique_ptr<int>& x = EL_ANNOTATE_ERROR(map.Add(10, el1::New<int>(15)), TException, U"test");
 		EXPECT_TRUE(*x == 15);
 		EXPECT_TRUE(*map[10] == 15);
 	}
@@ -99,17 +99,17 @@ namespace
 	{
 		{
 			TSortedMap<int, TString> map;
-			map.Add(100, "100");
-			map.Add(101, "101");
-			EXPECT_THROW(map.Add(100, "100"), TKeyAlreadyExistsException<int>);
+			map.Add(100, U"100");
+			map.Add(101, U"101");
+			EXPECT_THROW(map.Add(100, U"100"), TKeyAlreadyExistsException<int>);
 			EXPECT_EQ(map.Items().Count(), 2U);
 		}
 
 		{
 			TSortedMap<TString, TString> map;
-			map.Add("100", "100");
-			map.Add("101", "101");
-			EXPECT_THROW(map.Add("100", "100"), TKeyAlreadyExistsException<TString>);
+			map.Add(U"100", U"100");
+			map.Add(U"101", U"101");
+			EXPECT_THROW(map.Add(U"100", U"100"), TKeyAlreadyExistsException<TString>);
 			EXPECT_EQ(map.Items().Count(), 2U);
 		}
 
@@ -136,18 +136,18 @@ namespace
 		{
 			TSortedMap<int, TString> map;
 
-			map.Set(100, "100");
+			map.Set(100, U"100");
 			EXPECT_EQ(map.Items().Count(), 1U);
-			EXPECT_EQ(map[100], "100");
+			EXPECT_EQ(map[100], U"100");
 
-			map.Set(101, "101");
+			map.Set(101, U"101");
 			EXPECT_EQ(map.Items().Count(), 2U);
-			EXPECT_EQ(map[100], "100");
-			EXPECT_EQ(map[101], "101");
+			EXPECT_EQ(map[100], U"100");
+			EXPECT_EQ(map[101], U"101");
 
-			map.Set(100, "200");
-			EXPECT_EQ(map[100], "200");
-			EXPECT_EQ(map[101], "101");
+			map.Set(100, U"200");
+			EXPECT_EQ(map[100], U"200");
+			EXPECT_EQ(map[101], U"101");
 			EXPECT_EQ(map.Items().Count(), 2U);
 		}
 
@@ -190,12 +190,12 @@ namespace
 	{
 		{
 			TSortedMap<int, TString> map;
-			map.Add(1, "hello world");
-			map.Add(2, "What's your name?");
-			map.Add(3, "Nice to meet you");
-			map.Add(4, "Goodbye!");
+			map.Add(1, U"hello world");
+			map.Add(2, U"What's your name?");
+			map.Add(3, U"Nice to meet you");
+			map.Add(4, U"Goodbye!");
 			EXPECT_EQ(map.Items().Count(), 4U);
-			EXPECT_EQ(map[3], "Nice to meet you");
+			EXPECT_EQ(map[3], U"Nice to meet you");
 			EXPECT_NE(map.Get(3), nullptr);
 			EXPECT_TRUE(map.Remove(3));
 			EXPECT_EQ(map.Get(3), nullptr);

@@ -76,7 +76,7 @@ namespace el1::dev::gpio::native
 
 	void TNativeGpioPin::State(const bool new_state)
 	{
-		EL_ERROR(mode != EMode::OUTPUT, TException, "line must be in OUTPUT mode before you can change the state");
+		EL_ERROR(mode != EMode::OUTPUT, TException, U"line must be in OUTPUT mode before you can change the state");
 		struct gpio_v2_line_values values = { .bits = (new_state ? 1U : 0U), .mask = 1 };
 		EL_SYSERR(ioctl(on_input_trigger.Handle(), GPIO_V2_LINE_SET_VALUES_IOCTL, &values));
 	}
@@ -138,7 +138,7 @@ namespace el1::dev::gpio::native
 				EL_THROW(TSyscallException, errno);
 			}
 
-			EL_ERROR(n != 0, TException, "short read while acknowledging GPIO input trigger event");
+			EL_ERROR(n != 0, TException, U"short read while acknowledging GPIO input trigger event");
 			break;
 		}
 

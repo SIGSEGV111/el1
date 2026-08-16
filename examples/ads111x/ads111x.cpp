@@ -32,16 +32,16 @@ int main(const int argc, char* argv[])
 		s64_t idx_irq = -1;
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Read samples from an ADS111x ADC."),
-			TFlagArgument(&DEBUG, 'd', "debug", "", "Enable debug output"),
-			TPathArgument(&path_i2c, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', "bus", "", true, false, "I2C bus device"),
-			TIntegerArgument(&i2c_address, 'a', "address", "", true, false, "7-bit I2C address"),
-			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device used for the optional IRQ"),
-			TIntegerArgument(&idx_datarate, 'r', "datarate", "", true, false, "Datarate index 0-7: 8, 16, 32, 64, 128, 250, 475 or 860 samples/s"),
-			TIntegerArgument(&idx_pga, 'g', "pga", "", true, false, "PGA index 0-5: 6144, 4096, 2048, 1024, 512 or 256 mV full scale"),
-			TIntegerArgument(&idx_channel, 'c', "channel", "", true, false, "Input channel index 0-7"),
-			TIntegerArgument(&idx_opmode, 'm', "mode", "", true, false, "Operation mode: 0=continuous, 1=single-shot"),
-			TIntegerArgument(&idx_irq, 'i', "irq", "", true, false, "GPIO line index for data-ready IRQ; -1 disables IRQ")
+			THelpArgument(U"Read samples from an ADS111x ADC."),
+			TFlagArgument(&DEBUG, 'd', U"debug", U"", U"Enable debug output"),
+			TPathArgument(&path_i2c, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'b', U"bus", U"", true, false, U"I2C bus device"),
+			TIntegerArgument(&i2c_address, 'a', U"address", U"", true, false, U"7-bit I2C address"),
+			TPathArgument(&path_gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', U"gpio-chip", U"", true, false, U"GPIO character device used for the optional IRQ"),
+			TIntegerArgument(&idx_datarate, 'r', U"datarate", U"", true, false, U"Datarate index 0-7: 8, 16, 32, 64, 128, 250, 475 or 860 samples/s"),
+			TIntegerArgument(&idx_pga, 'g', U"pga", U"", true, false, U"PGA index 0-5: 6144, 4096, 2048, 1024, 512 or 256 mV full scale"),
+			TIntegerArgument(&idx_channel, 'c', U"channel", U"", true, false, U"Input channel index 0-7"),
+			TIntegerArgument(&idx_opmode, 'm', U"mode", U"", true, false, U"Operation mode: 0=continuous, 1=single-shot"),
+			TIntegerArgument(&idx_irq, 'i', U"irq", U"", true, false, U"GPIO line index for data-ready IRQ; -1 disables IRQ")
 		);
 
 		EL_ERROR(i2c_address < 0x03 || i2c_address > 0x77, TInvalidArgumentException, "address", "valid 7-bit I2C address");

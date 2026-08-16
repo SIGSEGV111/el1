@@ -27,15 +27,15 @@ namespace el1::dev::dht22
 		for(; n < max && Bit(buffer, bitpos) == value; bitpos++)
 			n++;
 
-		EL_ERROR(n > max, TException, TString::Format(U"too many %s bits (max: %d, got: %d) at bitpos %d", value ? "HIGH" : "LOW", max, n, bitpos));
-		EL_ERROR(n < min, TException, TString::Format(U"too few %s bits (min: %d, got: %d) at bitpos %d", value ? "HIGH" : "LOW", min, n, bitpos));
+		EL_ERROR(n > max, TException, TString::Format(U"too many %s bits (max: %d, got: %d) at bitpos %d", value ? U"HIGH" : U"LOW", max, n, bitpos));
+		EL_ERROR(n < min, TException, TString::Format(U"too few %s bits (min: %d, got: %d) at bitpos %d", value ? U"HIGH" : U"LOW", min, n, bitpos));
 
 		return n;
 	}
 
 	static void SeekOverHeader(const void* const buffer, usys_t& bitpos)
 	{
-		EL_ERROR(!Bit(buffer, bitpos), TException, "first bit must be a high bit => circuit/bus error?");
+		EL_ERROR(!Bit(buffer, bitpos), TException, U"first bit must be a high bit => circuit/bus error?");
 
 		// initial no-mans-land phase; resistor will pull high for 20-40 µs until DHT22 takes control
 		CountBits(buffer, bitpos, 1, 6, true);
@@ -135,7 +135,7 @@ namespace el1::dev::dht22
 
 			// the first 'n_start_signal' bytes of the RX buffer must be zeros, or something is wrong with the circuit/bus
 			for(unsigned i = 0; i < n_start_signal; i++)
-				EL_ERROR(rx[i] != 0, TException, "non-zero bus voltage received during 1.6ms start-signal phase => circuit/bus error?");
+				EL_ERROR(rx[i] != 0, TException, U"non-zero bus voltage received during 1.6ms start-signal phase => circuit/bus error?");
 
 			// parse the received PWM data (hand only the data part over, skip the start-signal part)
 			ParsePwmData(rx + n_start_signal, this->temp, this->humidity);

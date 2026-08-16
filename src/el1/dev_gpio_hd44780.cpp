@@ -33,7 +33,7 @@ namespace el1::dev::gpio::hd44780
 
 		Poll();
 		while(this->data[7]->State())
-			EL_ERROR(!this->data[7]->OnInputTrigger().WaitFor(0.1), TException, "HD44780 display did not leave busy state within 100ms");
+			EL_ERROR(!this->data[7]->OnInputTrigger().WaitFor(0.1), TException, U"HD44780 display did not leave busy state within 100ms");
 
 		this->data[7]->Trigger(ETrigger::DISABLED);
 		this->e->State(false);
@@ -266,7 +266,7 @@ namespace el1::dev::gpio::hd44780
 		SendCommand(0b00000010);	// return home
 		SendCommand(0b00000110);	// entry mode set; auto increment address, no shift
 
-		EL_ERROR(GetAddress() != 0, TException, "unable to initialize HD44780 LCD - initial DRAM address not zero");
+		EL_ERROR(GetAddress() != 0, TException, U"unable to initialize HD44780 LCD - initial DRAM address not zero");
 
 		if(DEBUG)
 		{

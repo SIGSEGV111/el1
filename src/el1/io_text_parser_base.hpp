@@ -100,7 +100,7 @@ namespace el1::io::text::parser
 				for(const TRecursionGuard* active = previous; active != nullptr; active = active->previous)
 					EL_ERROR(active->rule == rule && active->position == position, TLogicException);
 				EL_ERROR(context.recursion_depth >= context.limits.max_recursion_depth, TException,
-					"parser recursion depth limit exceeded");
+					U"parser recursion depth limit exceeded");
 				context.active_recursion = this;
 				context.recursion_depth++;
 			}

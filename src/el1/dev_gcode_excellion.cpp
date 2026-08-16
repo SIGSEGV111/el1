@@ -29,10 +29,10 @@ namespace el1::dev::gcode::excellion
 			if(end) return;
 			if(header)
 			{
-				if(line.BeginsWith("METRIC") || line.BeginsWith("INCH"))
+				if(line.BeginsWith(TStringView(U"METRIC")) || line.BeginsWith(TStringView(U"INCH")))
 				{
 					auto tokens = line.Split(',');
-					if(tokens[0] == "METRIC")
+					if(tokens[0] == U"METRIC")
 						unit_convert = 1.0f;
 					else //if(token[0] == "INCH")
 						unit_convert = 25.4f;
@@ -44,11 +44,11 @@ namespace el1::dev::gcode::excellion
 						unit_convert /= scale;
 					}
 				}
-				else if(line == "%")
+				else if(line == U"%")
 					header = false;
-				else if(line == "M48")
+				else if(line == U"M48")
 					; // start of program
-				else if(line.BeginsWith("T"))
+				else if(line.BeginsWith(TStringView(U"T")))
 				{
 					// tool definition
 					auto tokens = line.Split('C', 2);
@@ -61,30 +61,30 @@ namespace el1::dev::gcode::excellion
 			}
 			else
 			{
-				if(line == "G90")
+				if(line == U"G90")
 					; // abspos mode
-				else if(line == "G05")
+				else if(line == U"G05")
 					; // pause - ignored
-				else if(line == "G91")
-					EL_THROW(TException, "relative position mode not supported");
-				else if(line.BeginsWith("T"))
+				else if(line == U"G91")
+					EL_THROW(TException, U"relative position mode not supported");
+				else if(line.BeginsWith(TStringView(U"T")))
 				{
 					// tool select
 					active_tool = line.SliceSL(1).ToInteger();
 
 				}
-				else if(line.BeginsWith("X"))
+				else if(line.BeginsWith(TStringView(U"X")))
 				{
 					// hole pos
 					auto sposs = line.SliceSL(1).Split('Y');
 					auto x = sposs[0].ToDouble() * unit_convert;
 					auto y = sposs[1].ToDouble() * unit_convert;
-					EL_ERROR(active_tool < 0, TException, "encountered drill command, but no tool selected yet");
-					EL_ERROR(unit_convert == 0.0, TException, "encountered drill command, but unit/decimal format not defined yet");
+					EL_ERROR(active_tool < 0, TException, U"encountered drill command, but no tool selected yet");
+					EL_ERROR(unit_convert == 0.0, TException, U"encountered drill command, but unit/decimal format not defined yet");
 					auto& tool = toolset[active_tool];
 					holes.Append({{x,y}, tool.diameter, (u32_t)active_tool});
 				}
-				else if(line == "M30")
+				else if(line == U"M30")
 					end = true;
 				else
 					EL_THROW(TException, TString::Format(U"unknown body directive %q", line));

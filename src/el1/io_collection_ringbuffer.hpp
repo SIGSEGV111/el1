@@ -168,7 +168,7 @@ namespace el1::io::collection::ringbuffer
 				TConsumerRegistration* registration = consumer_registrations.load(std::memory_order_acquire);
 				while(registration != nullptr)
 				{
-					EL_WARN(registration->state.load(std::memory_order_acquire) != ERegistrationState::INACTIVE, error::TException, "ring buffer producer destroyed while consumers were still registered");
+					EL_WARN(registration->state.load(std::memory_order_acquire) != ERegistrationState::INACTIVE, error::TException, U"ring buffer producer destroyed while consumers were still registered");
 					TConsumerRegistration* const next = registration->next;
 					delete registration;
 					registration = next;

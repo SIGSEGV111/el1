@@ -499,9 +499,9 @@ namespace el1::dev::motor
 		const s64_t delta = accumulator / step_denominator;
 
 		if(delta > 0)
-			EL_ERROR(target_position > INT64_MAX - delta, TException, "step target exceeds the signed 64-bit servo coordinate range");
+			EL_ERROR(target_position > INT64_MAX - delta, TException, U"step target exceeds the signed 64-bit servo coordinate range");
 		else if(delta < 0)
-			EL_ERROR(target_position < INT64_MIN - delta, TException, "step target exceeds the signed 64-bit servo coordinate range");
+			EL_ERROR(target_position < INT64_MIN - delta, TException, U"step target exceeds the signed 64-bit servo coordinate range");
 
 		step_remainder = accumulator % step_denominator;
 		target_position += delta;
@@ -667,19 +667,19 @@ namespace el1::dev::motor
 				TFiber::Sleep(t_delay - t_lambda);
 		}
 
-		EL_ERROR(c, TException, "reached end of axis ");
+		EL_ERROR(c, TException, U"reached end of axis ");
 	}
 
 	void TGantry::AlignSquare(const double speed)
 	{
 		WriteDebug(U"TGantry::AlignSquare(speed=%d)", speed);
 		EL_ERROR(!std::isfinite(speed) || speed == 0.0, TInvalidArgumentException, "speed", "speed must be finite and non-zero");
-		EL_ERROR(motors.IsEmpty(), TException, "gantry has no motors");
-		EL_ERROR(axis_length == 0, TException, "gantry axis length is zero");
+		EL_ERROR(motors.IsEmpty(), TException, U"gantry has no motors");
+		EL_ERROR(axis_length == 0, TException, U"gantry axis length is zero");
 		for(const motor_info_t& mi : motors)
 		{
 			const IStallDetector* const stall_detector = mi.stepper->StallDetector();
-			EL_ERROR(mi.encoder == nullptr && (stall_detector == nullptr || !stall_detector->Enabled()), TException, "each gantry motor requires an enabled stall detector or an encoder");
+			EL_ERROR(mi.encoder == nullptr && (stall_detector == nullptr || !stall_detector->Enabled()), TException, U"each gantry motor requires an enabled stall detector or an encoder");
 		}
 		const TTime t_pulse = motors.Pipe().Aggregate([](TTime& r, const motor_info_t& it) { r = Max(r, it.stepper->MinimumStepPulseLength()); }, TTime());
 		WriteDebug(U"t_pulse=%dµs", t_pulse.ConvertToF(EUnit::MICROSECONDS));
@@ -709,9 +709,9 @@ namespace el1::dev::motor
 			arr_encoder_last_motion_step[i] = 0;
 			arr_stalled[i] = false;
 			mi.enabled = true;
-			EL_ERROR(mi.stepper->Enabled(true) != true, TException, "unable to enable stepper");
+			EL_ERROR(mi.stepper->Enabled(true) != true, TException, U"unable to enable stepper");
 			if(mi.servo && !mi.delete_stepper)
-				EL_ERROR(mi.servo->Enabled(false) != false, TException, "unable to disable servo");
+				EL_ERROR(mi.servo->Enabled(false) != false, TException, U"unable to disable servo");
 			mi.stepper->Direction(motor_dir);
 			IStallDetector* const stall_detector = mi.stepper->StallDetector();
 			if(stall_detector != nullptr && stall_detector->Enabled())
@@ -765,7 +765,7 @@ namespace el1::dev::motor
 		WriteDebug(U"TGantry::FindHomeRotaryEncoderHardstop(speed=%d, target_angle=%d)", speed, target_angle);
 		EL_ERROR(!std::isfinite(speed) || speed == 0.0, TInvalidArgumentException, "speed", "speed must be finite and non-zero");
 		EL_ERROR(!std::isfinite(target_angle) || target_angle < 0.0f || target_angle >= 1.0f, TInvalidArgumentException, "target_angle", "target_angle must be in range [0..1)");
-		EL_ERROR(motors.IsEmpty(), TException, "gantry has no motors");
+		EL_ERROR(motors.IsEmpty(), TException, U"gantry has no motors");
 		const TTime t_pulse = motors.Pipe().Aggregate([](TTime& r, const motor_info_t& it) { r = Max(r, it.stepper->MinimumStepPulseLength()); }, TTime());
 		WriteDebug(U"t_pulse=%dµs", t_pulse.ConvertToF(EUnit::MICROSECONDS));
 		const TTime t_delay = TTime(1.0 / Abs(speed)) - t_pulse;
@@ -785,7 +785,7 @@ namespace el1::dev::motor
 				break;
 			}
 
-		EL_ERROR(encoder == nullptr, TException, "no IRotaryEncoder found");
+		EL_ERROR(encoder == nullptr, TException, U"no IRotaryEncoder found");
 
 		// move to hardstop and align axis
 		AlignSquare(speed);
@@ -794,7 +794,7 @@ namespace el1::dev::motor
 		for(motor_info_t& mi : motors)
 		{
 			mi.stepper->Direction(mi.inverted ? InvertDirection(dir_motor_away_from_hardstop) : dir_motor_away_from_hardstop);
-			EL_ERROR(mi.stepper->Enabled(true) != true, TException, "unable to enable stepper");
+			EL_ERROR(mi.stepper->Enabled(true) != true, TException, U"unable to enable stepper");
 			mi.enabled = true;
 			if(mi.servo)
 			{

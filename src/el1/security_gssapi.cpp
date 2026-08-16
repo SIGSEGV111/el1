@@ -24,7 +24,7 @@ namespace el1::security::gssapi
 			if(GSS_ERROR(major))
 				break;
 			if(result.Length() > 0)
-				result += U"; ";
+				result += TStringView(U"; ");
 			if(buffer.length > 0)
 				result += TString((const char*)buffer.value, buffer.length);
 			gss_release_buffer(&minor, &buffer);

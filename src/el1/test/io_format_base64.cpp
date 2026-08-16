@@ -17,7 +17,7 @@ namespace
 
 	TEST(io_format_base64, TBase64Decoder)
 	{
-		const TString b64 = "UG9seWZvbiB6d2l0c2NoZXJuZCBhw59lbiBNw6R4Y2hlbnMgVsO2Z2VsIFLDvGJlbiwgSm9naHVydCB1bmQgUXVhcms=";
+		const TString b64 = U"UG9seWZvbiB6d2l0c2NoZXJuZCBhw59lbiBNw6R4Y2hlbnMgVsO2Z2VsIFLDvGJlbiwgSm9naHVydCB1bmQgUXVhcms=";
 		const char* const expected = "Polyfon zwitschernd aßen Mäxchens Vögel Rüben, Joghurt und Quark";
 		TList<byte_t> decoded = b64.chars.Pipe().Transform(TBase64Decoder()).Collect();
 		EXPECT_TRUE(strncmp(expected, (char*)decoded.ItemPtr(0), decoded.Count()) == 0);
@@ -27,8 +27,8 @@ namespace
 
 	TEST(io_format_base64, TBase64Encoder)
 	{
-		const TString str = "Polyfon zwitschernd aßen Mäxchens Vögel Rüben, Joghurt und Quark";
-		const TString expected = "UG9seWZvbiB6d2l0c2NoZXJuZCBhw59lbiBNw6R4Y2hlbnMgVsO2Z2VsIFLDvGJlbiwgSm9naHVydCB1bmQgUXVhcms=";
+		const TString str = U"Polyfon zwitschernd aßen Mäxchens Vögel Rüben, Joghurt und Quark";
+		const TString expected = U"UG9seWZvbiB6d2l0c2NoZXJuZCBhw59lbiBNw6R4Y2hlbnMgVsO2Z2VsIFLDvGJlbiwgSm9naHVydCB1bmQgUXVhcms=";
 		const TString encoded = str.chars.Pipe().Transform(TUTF8Encoder()).Transform(TBase64Encoder()).Collect();
 		EXPECT_EQ(encoded, expected);
 	}

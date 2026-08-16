@@ -57,7 +57,7 @@ namespace el1::io::text::parser
 			TParseContext context(input, limits);
 			usys_t pos = 0;
 			auto value = TryParse(context, pos);
-			EL_ERROR(!value, TException, "unable to parse");
+			EL_ERROR(!value, TException, U"unable to parse");
 			char32_t extra;
 			EL_ERROR(context.At(pos, extra), TException, TString::Format(U"unable to parse full string - only %d out of %d characters accepted by parser", pos, str.Length()));
 			return std::move(*value);

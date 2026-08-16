@@ -110,7 +110,7 @@ namespace el1::io::serialization::binary::packed
 				if((byte & 0x80) == 0)
 					return value;
 			}
-			EL_THROW(TException, "invalid packed serialization varint");
+			EL_THROW(TException, U"invalid packed serialization varint");
 		}
 
 		u64_t Fixed64()
@@ -125,7 +125,7 @@ namespace el1::io::serialization::binary::packed
 
 		void Enter()
 		{
-			EL_ERROR(depth >= options.max_depth, TException, "maximum serialization nesting depth exceeded");
+			EL_ERROR(depth >= options.max_depth, TException, U"maximum serialization nesting depth exceeded");
 			depth++;
 		}
 		void Leave()
@@ -139,14 +139,14 @@ namespace el1::io::serialization::binary::packed
 		{
 			byte_t magic[4];
 			source->ReadAll(magic, 4);
-			EL_ERROR(magic[0] != 'E' || magic[1] != 'L' || magic[2] != '1' || magic[3] != 'S', TException, "invalid packed serialization magic");
-			EL_ERROR(VarUInt() != FORMAT_VERSION, TException, "unsupported packed serialization format version");
+			EL_ERROR(magic[0] != 'E' || magic[1] != 'L' || magic[2] != '1' || magic[3] != 'S', TException, U"invalid packed serialization magic");
+			EL_ERROR(VarUInt() != FORMAT_VERSION, TException, U"unsupported packed serialization format version");
 		}
 
 		bool BeginOptional()
 		{
 			const byte_t tag = Byte();
-			EL_ERROR(tag > 1, TException, "invalid packed optional tag");
+			EL_ERROR(tag > 1, TException, U"invalid packed optional tag");
 			return tag != 0;
 		}
 		void EndOptional() {}
@@ -154,7 +154,7 @@ namespace el1::io::serialization::binary::packed
 		bool Boolean()
 		{
 			const byte_t value = Byte();
-			EL_ERROR(value > 1, TException, "invalid packed boolean");
+			EL_ERROR(value > 1, TException, U"invalid packed boolean");
 			return value != 0;
 		}
 		s64_t Signed()
@@ -171,7 +171,7 @@ namespace el1::io::serialization::binary::packed
 		TString String()
 		{
 			const u64_t count64 = VarUInt();
-			EL_ERROR(count64 > options.max_string_length || count64 > (u64_t)std::numeric_limits<usys_t>::max(), TException, "maximum serialized string length exceeded");
+			EL_ERROR(count64 > options.max_string_length || count64 > (u64_t)std::numeric_limits<usys_t>::max(), TException, U"maximum serialized string length exceeded");
 			const usys_t count = (usys_t)count64;
 			TList<byte_t> bytes;
 			bytes.SetCount(count);
@@ -184,9 +184,9 @@ namespace el1::io::serialization::binary::packed
 		{
 			Enter();
 			const TTypeId actual{Fixed64(), Fixed64()};
-			EL_ERROR(actual != expected.id, TException, "serialized type does not match requested C++ type");
+			EL_ERROR(actual != expected.id, TException, U"serialized type does not match requested C++ type");
 			const u64_t version = VarUInt();
-			EL_ERROR(version == 0 || version > expected.version, TException, "serialized schema version is not supported by this C++ type");
+			EL_ERROR(version == 0 || version > expected.version, TException, U"serialized schema version is not supported by this C++ type");
 			return (u32_t)version;
 		}
 		void EndObject() { Leave(); }
@@ -196,7 +196,7 @@ namespace el1::io::serialization::binary::packed
 		{
 			Enter();
 			const u64_t count = VarUInt();
-			EL_ERROR(count > options.max_container_items || count > (u64_t)std::numeric_limits<usys_t>::max(), TException, "maximum serialized container size exceeded");
+			EL_ERROR(count > options.max_container_items || count > (u64_t)std::numeric_limits<usys_t>::max(), TException, U"maximum serialized container size exceeded");
 			return (usys_t)count;
 		}
 		void BeginElement(const usys_t) {}
@@ -207,7 +207,7 @@ namespace el1::io::serialization::binary::packed
 		{
 			Enter();
 			const u64_t count = VarUInt();
-			EL_ERROR(count > options.max_container_items || count > (u64_t)std::numeric_limits<usys_t>::max(), TException, "maximum serialized map size exceeded");
+			EL_ERROR(count > options.max_container_items || count > (u64_t)std::numeric_limits<usys_t>::max(), TException, U"maximum serialized map size exceeded");
 			return (usys_t)count;
 		}
 		TString BeginMapEntry(const usys_t) { return String(); }

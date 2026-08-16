@@ -107,11 +107,11 @@ namespace
 
 	TEST(dev_obd2_elm327, ParseReadDataByIdentifierResponse)
 	{
-		const TList<u8_t> data = TELM327::ParseReadDataByIdentifierResponse("0: 62 DD BC 01 91\r>", 0xDDBC);
+		const TList<u8_t> data = TELM327::ParseReadDataByIdentifierResponse(U"0: 62 DD BC 01 91\r>", 0xDDBC);
 		ASSERT_EQ(data.Count(), 2U);
 		EXPECT_EQ(data[0], 0x01);
 		EXPECT_EQ(data[1], 0x91);
-		EXPECT_EQ(TELM327::ParseReadDataByIdentifierResponse("NO DATA\r>", 0xDDBC).Count(), 0U);
+		EXPECT_EQ(TELM327::ParseReadDataByIdentifierResponse(U"NO DATA\r>", 0xDDBC).Count(), 0U);
 	}
 
 	TEST(dev_obd2_elm327, InitializeAndReadDid)

@@ -39,12 +39,12 @@ namespace el1::io::serialization::json
 		void Signed(const s64_t value) { *current = TJsonValue(value); }
 		void Unsigned(const u64_t value)
 		{
-			EL_ERROR(value > (u64_t)std::numeric_limits<s64_t>::max(), TException, "JSON backend only supports integers representable as s64_t");
+			EL_ERROR(value > (u64_t)std::numeric_limits<s64_t>::max(), TException, U"JSON backend only supports integers representable as s64_t");
 			*current = TJsonValue((s64_t)value);
 		}
 		void Floating(const double value)
 		{
-			EL_ERROR(!std::isfinite(value), TException, "JSON serialization does not support NaN or infinity");
+			EL_ERROR(!std::isfinite(value), TException, U"JSON serialization does not support NaN or infinity");
 			*current = TJsonValue(value);
 		}
 		void String(const TStringView value) { *current = TJsonValue(TString(value)); }
@@ -107,7 +107,7 @@ namespace el1::io::serialization::json
 
 		void Push(const TJsonValue& child)
 		{
-			EL_ERROR(depth >= options.max_depth, TException, "maximum serialization nesting depth exceeded");
+			EL_ERROR(depth >= options.max_depth, TException, U"maximum serialization nesting depth exceeded");
 			parents.Append(current);
 			current = &child;
 			depth++;
@@ -123,13 +123,13 @@ namespace el1::io::serialization::json
 
 		const format::json::TConstJsonMap& RequireMap() const
 		{
-			EL_ERROR(!current->IsMap(), TException, "expected JSON object during deserialization");
+			EL_ERROR(!current->IsMap(), TException, U"expected JSON object during deserialization");
 			return current->Map();
 		}
 
 		static s64_t RequireInteger(const TJsonValue& value)
 		{
-			EL_ERROR(!value.IsInteger(), TException, "expected JSON integer during deserialization");
+			EL_ERROR(!value.IsInteger(), TException, U"expected JSON integer during deserialization");
 			return value.Integer();
 		}
 
@@ -141,7 +141,7 @@ namespace el1::io::serialization::json
 
 		bool Boolean()
 		{
-			EL_ERROR(!current->IsBoolean(), TException, "expected JSON boolean during deserialization");
+			EL_ERROR(!current->IsBoolean(), TException, U"expected JSON boolean during deserialization");
 			return current->Boolean();
 		}
 
@@ -153,7 +153,7 @@ namespace el1::io::serialization::json
 		u64_t Unsigned()
 		{
 			const s64_t value = RequireInteger(*current);
-			EL_ERROR(value < 0, TException, "negative JSON integer cannot be deserialized into an unsigned type");
+			EL_ERROR(value < 0, TException, U"negative JSON integer cannot be deserialized into an unsigned type");
 			return (u64_t)value;
 		}
 
@@ -161,32 +161,32 @@ namespace el1::io::serialization::json
 		{
 			if(current->IsNumber()) return current->Number();
 			if(current->IsInteger()) return (double)current->Integer();
-			EL_THROW(TException, "expected JSON number during deserialization");
+			EL_THROW(TException, U"expected JSON number during deserialization");
 		}
 
 		TString String()
 		{
-			EL_ERROR(!current->IsString(), TException, "expected JSON string during deserialization");
-			EL_ERROR(current->String().Length() > options.max_string_length, TException, "maximum serialized string length exceeded");
+			EL_ERROR(!current->IsString(), TException, U"expected JSON string during deserialization");
+			EL_ERROR(current->String().Length() > options.max_string_length, TException, U"maximum serialized string length exceeded");
 			return current->String();
 		}
 
 		u32_t BeginObject(const TTypeInfo& expected)
 		{
 			const auto& object = RequireMap();
-			EL_ERROR(!object.Contains(TString(METADATA_KEY)), TException, "serialized object is missing $el1 metadata");
+			EL_ERROR(!object.Contains(TString(METADATA_KEY)), TException, U"serialized object is missing $el1 metadata");
 			const TJsonValue& metadata_value = object[TString(METADATA_KEY)];
-			EL_ERROR(!metadata_value.IsMap(), TException, "serialized $el1 metadata must be an object");
+			EL_ERROR(!metadata_value.IsMap(), TException, U"serialized $el1 metadata must be an object");
 			const auto& metadata = metadata_value.Map();
 			const TString format_key(U"format");
 			const TString type_id_key(U"type_id");
 			const TString version_key(U"version");
-			EL_ERROR(!metadata.Contains(format_key) || !metadata.Contains(type_id_key) || !metadata.Contains(version_key), TException, "serialized object metadata is incomplete");
-			EL_ERROR(RequireInteger(metadata[format_key]) != (s64_t)FORMAT_VERSION, TException, "unsupported serialization JSON format version");
-			EL_ERROR(!metadata[type_id_key].IsString(), TException, "serialized type_id must be a string");
-			EL_ERROR(TTypeId::FromString(metadata[type_id_key].String().View()) != expected.id, TException, "serialized type does not match requested C++ type");
+			EL_ERROR(!metadata.Contains(format_key) || !metadata.Contains(type_id_key) || !metadata.Contains(version_key), TException, U"serialized object metadata is incomplete");
+			EL_ERROR(RequireInteger(metadata[format_key]) != (s64_t)FORMAT_VERSION, TException, U"unsupported serialization JSON format version");
+			EL_ERROR(!metadata[type_id_key].IsString(), TException, U"serialized type_id must be a string");
+			EL_ERROR(TTypeId::FromString(metadata[type_id_key].String().View()) != expected.id, TException, U"serialized type does not match requested C++ type");
 			const s64_t version = RequireInteger(metadata[version_key]);
-			EL_ERROR(version <= 0 || (u64_t)version > expected.version, TException, "serialized schema version is not supported by this C++ type");
+			EL_ERROR(version <= 0 || (u64_t)version > expected.version, TException, U"serialized schema version is not supported by this C++ type");
 			return (u32_t)version;
 		}
 		void EndObject() {}
@@ -204,9 +204,9 @@ namespace el1::io::serialization::json
 
 		usys_t BeginArray()
 		{
-			EL_ERROR(!current->IsArray(), TException, "expected JSON array during deserialization");
+			EL_ERROR(!current->IsArray(), TException, U"expected JSON array during deserialization");
 			const usys_t count = current->Array().Count();
-			EL_ERROR(count > options.max_container_items, TException, "maximum serialized container size exceeded");
+			EL_ERROR(count > options.max_container_items, TException, U"maximum serialized container size exceeded");
 			return count;
 		}
 		void BeginElement(const usys_t index)
@@ -219,9 +219,9 @@ namespace el1::io::serialization::json
 
 		usys_t BeginMap()
 		{
-			EL_ERROR(!current->IsMap(), TException, "expected JSON object/map during deserialization");
+			EL_ERROR(!current->IsMap(), TException, U"expected JSON object/map during deserialization");
 			const usys_t count = current->Map().Items().Count();
-			EL_ERROR(count > options.max_container_items, TException, "maximum serialized map size exceeded");
+			EL_ERROR(count > options.max_container_items, TException, U"maximum serialized map size exceeded");
 			return count;
 		}
 		TString BeginMapEntry(const usys_t index)

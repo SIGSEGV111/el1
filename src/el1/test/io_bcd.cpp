@@ -228,7 +228,7 @@ namespace
 		TBCD decimal = Parse("123.75");
 		TBCD binary(0, 2, 16, 4);
 		binary = std::move(decimal);
-		EXPECT_EQ(binary, Parse("1111011.11", TString("01")));
+		EXPECT_EQ(binary, Parse("1111011.11", TString(U"01")));
 		EXPECT_TRUE(decimal.IsZero());
 
 		TBCD external = Parse("12345678901234567890.125");
@@ -259,12 +259,12 @@ namespace
 		EXPECT_GT(Parse("-1.20"), Parse("-1.25"));
 		EXPECT_EQ(Parse("12.50"), Parse("12.5"));
 
-		const TBCD binary = Parse("1010.1", TString("01"));
+		const TBCD binary = Parse("1010.1", TString(U"01"));
 		const TBCD decimal = Parse("10.5");
 		EXPECT_EQ(binary, decimal);
 		EXPECT_EQ(binary.Compare(decimal), 0);
 
-		const TBCD base_five = Parse("12.3", TString("01234"));
+		const TBCD base_five = Parse("12.3", TString(U"01234"));
 		const TBCD base_ten = Parse("7.6");
 		EXPECT_EQ(base_five, base_ten);
 	}
@@ -359,7 +359,7 @@ namespace
 
 	TEST(io_bcd, CrossBaseArithmetic)
 	{
-		const TBCD binary = Parse("1010.1", TString("01"));
+		const TBCD binary = Parse("1010.1", TString(U"01"));
 		const TBCD decimal = Parse("2.25");
 		TBCD out(0, 10, 4, 2);
 
@@ -619,8 +619,8 @@ namespace
 
 	TEST(io_bcd, CrossBaseHighPrecisionFractions)
 	{
-		const TBCD one_third = Parse("0.1", TString("012"));
-		const TBCD two_thirds = Parse("0.2", TString("012"));
+		const TBCD one_third = Parse("0.1", TString(U"012"));
+		const TBCD two_thirds = Parse("0.2", TString(U"012"));
 
 		TBCD lower(0.0, 10, 1, 255);
 		TBCD upper(0.0, 10, 1, 255);
@@ -720,10 +720,10 @@ namespace
 
 	TEST(io_bcd, FromStringSignsAndLargeStorage)
 	{
-		ExpectValue(TBCD::FromString(TString("+17.28").Reverse(), DECIMAL_SYMBOLS), "17.28");
-		ExpectValue(TBCD::FromString(TString("-17.28").Reverse(), DECIMAL_SYMBOLS), "-17.28");
-		ExpectValue(TBCD::FromString(TString("17.28+").Reverse(), DECIMAL_SYMBOLS), "17.28");
-		ExpectValue(TBCD::FromString(TString("17.28-").Reverse(), DECIMAL_SYMBOLS), "-17.28");
+		ExpectValue(TBCD::FromString(TString(U"+17.28").Reverse(), DECIMAL_SYMBOLS), "17.28");
+		ExpectValue(TBCD::FromString(TString(U"-17.28").Reverse(), DECIMAL_SYMBOLS), "-17.28");
+		ExpectValue(TBCD::FromString(TString(U"17.28+").Reverse(), DECIMAL_SYMBOLS), "17.28");
+		ExpectValue(TBCD::FromString(TString(U"17.28-").Reverse(), DECIMAL_SYMBOLS), "-17.28");
 
 		const TBCD long_value = Parse("123456789012345678901234567890.12345678901234567890");
 		EXPECT_EQ(long_value.CountInteger(), 30U);
@@ -763,13 +763,13 @@ namespace
 	TEST(io_bcd, FromStringRejectsMalformedInput)
 	{
 		EXPECT_TRUE(TBCD::FromString(TString(), DECIMAL_SYMBOLS).IsInvalid());
-		EXPECT_THROW(TBCD::FromString(TString("+").Reverse(), DECIMAL_SYMBOLS), TInvalidArgumentException);
-		EXPECT_THROW(TBCD::FromString(TString("1.2.3").Reverse(), DECIMAL_SYMBOLS), TInvalidArgumentException);
-		EXPECT_THROW(TBCD::FromString(TString("1x").Reverse(), DECIMAL_SYMBOLS), TInvalidArgumentException);
-		EXPECT_THROW(TBCD::FromString(TString("+-1").Reverse(), DECIMAL_SYMBOLS), TInvalidArgumentException);
-		EXPECT_THROW(TBCD::FromString(TString("1").Reverse(), TString("00123456789")), TInvalidArgumentException);
-		EXPECT_THROW(TBCD::FromString(TString("1").Reverse(), TString("01.")), TInvalidArgumentException);
-		EXPECT_THROW(TBCD::FromString(TString("1").Reverse(), TString("0-1")), TInvalidArgumentException);
+		EXPECT_THROW(TBCD::FromString(TString(U"+").Reverse(), DECIMAL_SYMBOLS), TInvalidArgumentException);
+		EXPECT_THROW(TBCD::FromString(TString(U"1.2.3").Reverse(), DECIMAL_SYMBOLS), TInvalidArgumentException);
+		EXPECT_THROW(TBCD::FromString(TString(U"1x").Reverse(), DECIMAL_SYMBOLS), TInvalidArgumentException);
+		EXPECT_THROW(TBCD::FromString(TString(U"+-1").Reverse(), DECIMAL_SYMBOLS), TInvalidArgumentException);
+		EXPECT_THROW(TBCD::FromString(TString(U"1").Reverse(), TString(U"00123456789")), TInvalidArgumentException);
+		EXPECT_THROW(TBCD::FromString(TString(U"1").Reverse(), TString(U"01.")), TInvalidArgumentException);
+		EXPECT_THROW(TBCD::FromString(TString(U"1").Reverse(), TString(U"0-1")), TInvalidArgumentException);
 	}
 
 	TEST(io_bcd, FromStringSupports256Symbols)
@@ -992,9 +992,9 @@ namespace
 		EXPECT_GT(positive_infinity, one);
 		EXPECT_LT(negative_infinity, positive_infinity);
 
-		EXPECT_EQ(TString::Format(U"%d", positive_infinity), "INF");
-		EXPECT_EQ(TString::Format(U"%d", negative_infinity), "-INF");
-		EXPECT_EQ(TString::Format(U"%d", nan), "NAN");
+		EXPECT_EQ(TString::Format(U"%d", positive_infinity), U"INF");
+		EXPECT_EQ(TString::Format(U"%d", negative_infinity), U"-INF");
+		EXPECT_EQ(TString::Format(U"%d", nan), U"NAN");
 	}
 
 	TEST(io_bcd, DivisionMarksOnlyNonTerminatingExpansionsPeriodic)

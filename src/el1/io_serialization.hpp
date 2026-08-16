@@ -276,13 +276,13 @@ namespace el1::io::serialization
 			if constexpr(std::is_signed_v<U>)
 			{
 				const s64_t raw = archive.Signed();
-				EL_ERROR(raw < (s64_t)std::numeric_limits<U>::min() || raw > (s64_t)std::numeric_limits<U>::max(), TException, "serialized integer outside target range");
+				EL_ERROR(raw < (s64_t)std::numeric_limits<U>::min() || raw > (s64_t)std::numeric_limits<U>::max(), TException, U"serialized integer outside target range");
 				value = (U)raw;
 			}
 			else
 			{
 				const u64_t raw = archive.Unsigned();
-				EL_ERROR(raw > (u64_t)std::numeric_limits<U>::max(), TException, "serialized integer outside target range");
+				EL_ERROR(raw > (u64_t)std::numeric_limits<U>::max(), TException, U"serialized integer outside target range");
 				value = (U)raw;
 			}
 		}

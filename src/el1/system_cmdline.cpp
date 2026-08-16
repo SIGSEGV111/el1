@@ -63,10 +63,10 @@ namespace el1::system::cmdline
 	{
 		argv.ToLower();
 
-		if(argv == "false" || argv == "no" || argv == "disabled" || argv == "0")
+		if(argv == U"false" || argv == U"no" || argv == U"disabled" || argv == U"0")
 			return false;
 
-		if(argv == "true" || argv == "yes" || argv == "enabled" || argv == "1")
+		if(argv == U"true" || argv == U"yes" || argv == U"enabled" || argv == U"1")
 			return true;
 
 		EL_THROW(TInvalidArgumentException, "argv", "only true/false, yes/no, enabled/disabled, 1/0 are supported as values for flags and boolean arguments");
@@ -85,19 +85,19 @@ namespace el1::system::cmdline
 
 	TString TShowVersionArgument::DefaultValue() const
 	{
-		return "false";
+		return U"false";
 	}
 
 	TString TShowVersionArgument::ExpectedType() const
 	{
-		return "boolean";
+		return U"boolean";
 	}
 
-	TShowVersionArgument::TShowVersionArgument(const char32_t shorthand, TString name, const char* const proginfo) : IArgument(shorthand, name, TString(), true, false, "Show copyright and version information and exit.", EArgumentType::FLAG), proginfo(proginfo)
+	TShowVersionArgument::TShowVersionArgument(const char32_t shorthand, TString name, const char* const proginfo) : IArgument(shorthand, name, TString(), true, false, U"Show copyright and version information and exit.", EArgumentType::FLAG), proginfo(proginfo)
 	{
 	}
 
-	TShowVersionArgument::TShowVersionArgument(const char* const proginfo) : TShowVersionArgument('V', "version", proginfo)
+	TShowVersionArgument::TShowVersionArgument(const char* const proginfo) : TShowVersionArgument('V', U"version", proginfo)
 	{
 	}
 
@@ -110,12 +110,12 @@ namespace el1::system::cmdline
 
 	TString TFlagArgument::DefaultValue() const
 	{
-		return "false";
+		return U"false";
 	}
 
 	TString TFlagArgument::ExpectedType() const
 	{
-		return "boolean";
+		return U"boolean";
 	}
 
 	TFlagArgument::TFlagArgument(bool* const var, const char32_t shorthand, TString name, TString env, TString help) : IArgument(shorthand, std::move(name), std::move(env), true, false, std::move(help), EArgumentType::FLAG), var(var)
@@ -132,12 +132,12 @@ namespace el1::system::cmdline
 
 	TString TBooleanArgument::DefaultValue() const
 	{
-		return *var ? "true" : "false";
+		return *var ? U"true" : U"false";
 	}
 
 	TString TBooleanArgument::ExpectedType() const
 	{
-		return "boolean";
+		return U"boolean";
 	}
 
 	TBooleanArgument::TBooleanArgument(bool* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
@@ -158,7 +158,7 @@ namespace el1::system::cmdline
 
 	TString TStringArgument::ExpectedType() const
 	{
-		return "string";
+		return U"string";
 	}
 
 	TStringArgument::TStringArgument(TString* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
@@ -179,7 +179,7 @@ namespace el1::system::cmdline
 
 	TString TIntegerArgument::ExpectedType() const
 	{
-		return "integer";
+		return U"integer";
 	}
 
 	TIntegerArgument::TIntegerArgument(s64_t* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
@@ -200,7 +200,7 @@ namespace el1::system::cmdline
 
 	TString TFloatArgument::ExpectedType() const
 	{
-		return "decimal";
+		return U"decimal";
 	}
 
 	TFloatArgument::TFloatArgument(double* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var)
@@ -224,7 +224,7 @@ namespace el1::system::cmdline
 
 	TString TArrayArgument::ExpectedType() const
 	{
-		return "array";
+		return U"array";
 	}
 
 	TArrayArgument::TArrayArgument(TList<TString>* const var, const TString delimiter, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::ARRAY), var(var), delimiter(delimiter)
@@ -300,17 +300,17 @@ namespace el1::system::cmdline
 		switch(create_mode)
 		{
 			case ECreateMode::OPEN:
-				str_create_mode = "existing";
+				str_create_mode = U"existing";
 				break;
 
 			case ECreateMode::NX:
 			case ECreateMode::TRUNCATE:
 			case ECreateMode::DELETE:
-				str_create_mode = "output";
+				str_create_mode = U"output";
 				break;
 
 			case ECreateMode::EXCLUSIVE:
-				str_create_mode = "not-existing";
+				str_create_mode = U"not-existing";
 				break;
 
 			default:
@@ -320,35 +320,35 @@ namespace el1::system::cmdline
 		switch(expected_type)
 		{
 			case EObjectType::UNKNOWN:
-				str_expected_type = "path";
+				str_expected_type = U"path";
 				break;
 
 			case EObjectType::FILE:
-				str_expected_type = "file";
+				str_expected_type = U"file";
 				break;
 
 			case EObjectType::DIRECTORY:
-				str_expected_type = "directory";
+				str_expected_type = U"directory";
 				break;
 
 			case EObjectType::CHAR_DEVICE:
-				str_expected_type = "chardev";
+				str_expected_type = U"chardev";
 				break;
 
 			case EObjectType::BLOCK_DEVICE:
-				str_expected_type = "blockdev";
+				str_expected_type = U"blockdev";
 				break;
 
 			case EObjectType::FIFO:
-				str_expected_type = "fifo";
+				str_expected_type = U"fifo";
 				break;
 
 			case EObjectType::SYMLINK:
-				str_expected_type = "symlink";
+				str_expected_type = U"symlink";
 				break;
 
 			case EObjectType::SOCKET:
-				str_expected_type = "socket";
+				str_expected_type = U"socket";
 				break;
 
 			case EObjectType::NX:
@@ -356,7 +356,7 @@ namespace el1::system::cmdline
 				EL_THROW(TLogicException);
 		}
 
-		return str_create_mode + " " + str_expected_type;
+		return str_create_mode + TStringView(U" ") + str_expected_type;
 	}
 
 	TPathArgument::TPathArgument(TPath* const var, const char32_t shorthand, TString name, TString env, const bool optional, const bool anonymous, TString help) : IArgument(shorthand, std::move(name), std::move(env), optional, anonymous, std::move(help), EArgumentType::KEY_VALUE), var(var), expected_type(EObjectType::UNKNOWN), create_mode(ECreateMode::OPEN)
@@ -381,15 +381,15 @@ namespace el1::system::cmdline
 
 	TString THelpArgument::DefaultValue() const
 	{
-		return "false";
+		return U"false";
 	}
 
 	TString THelpArgument::ExpectedType() const
 	{
-		return "boolean";
+		return U"boolean";
 	}
 
-	THelpArgument::THelpArgument(TString program_description, TString website_url, TString bugtracker_url, TString scm_url, const char32_t shorthand) : IArgument(shorthand, "help", "", true, false, "Show the command-line help text and exit.", EArgumentType::FLAG)
+	THelpArgument::THelpArgument(TString program_description, TString website_url, TString bugtracker_url, TString scm_url, const char32_t shorthand) : IArgument(shorthand, U"help", U"", true, false, U"Show the command-line help text and exit.", EArgumentType::FLAG)
 	{
 	}
 
@@ -401,7 +401,7 @@ namespace el1::system::cmdline
 
 		const bool multi_line = defs.Count() > 4 || defs.Pipe().Filter([](auto def) { return def->help.Length() > 0; }).Count() > 0;
 		if(multi_line)
-			usage += " ...";
+			usage += TStringView(U" ...");
 
 		TList<TString> lines;
 
@@ -413,7 +413,7 @@ namespace el1::system::cmdline
 
 				if(def->shorthand != U'\0')
 				{
-					line += "-";
+					line += TStringView(U"-");
 					line += def->shorthand;
 				}
 
@@ -422,7 +422,7 @@ namespace el1::system::cmdline
 
 				if(def->name.Length() > 0)
 				{
-					line += "--";
+					line += TStringView(U"--");
 					line += def->name;
 				}
 
@@ -436,7 +436,7 @@ namespace el1::system::cmdline
 					}
 					else
 					{
-						line += "=<";
+						line += TStringView(U"=<");
 						line += def->ExpectedType();
 						line += '>';
 					}
@@ -466,7 +466,7 @@ namespace el1::system::cmdline
 				const TString& current_line = lines[i];
 				const IArgument* def = defs[i];
 
-				usage += "\n  ";
+				usage += TStringView(U"\n  ");
 				usage += current_line;
 
 				if(def->help.Length() > 0)
@@ -542,7 +542,7 @@ namespace el1::system::cmdline
 						{
 							if(def->type == (u8_t)EArgumentType::FLAG)
 							{
-								kv.value = L"true";
+								kv.value = U"true";
 							}
 							else
 							{
@@ -564,7 +564,7 @@ namespace el1::system::cmdline
 
 					if(def->type == (u8_t)EArgumentType::FLAG)
 					{
-						kv.value = L"true";
+						kv.value = U"true";
 					}
 					else
 					{
@@ -576,7 +576,7 @@ namespace el1::system::cmdline
 			else
 			{
 				// anonymous argument amongst named arguments (or past EOF)
-				kv.key = L"<anonymous option>";
+				kv.key = U"<anonymous option>";
 				kv.value = arg;
 
 				for(; idx_anonymous_scan < state.defs.Count(); idx_anonymous_scan++)

@@ -109,7 +109,7 @@ namespace el1::io::graphics::image::format::pnm
 				auto& pixelf = pixelsf[i];
 				auto pixel8 = pixels8[i];
 
-				EL_ERROR(pixel8[0] > max_value || pixel8[1] > max_value || pixel8[2] > max_value, TException, "pixel color value bigger than max-value");
+				EL_ERROR(pixel8[0] > max_value || pixel8[1] > max_value || pixel8[2] > max_value, TException, U"pixel color value bigger than max-value");
 
 				pixelf[0] = static_cast<float>(pixel8[0]) / f_max_value;
 				pixelf[1] = static_cast<float>(pixel8[1]) / f_max_value;
@@ -132,7 +132,7 @@ namespace el1::io::graphics::image::format::pnm
 				pixel16[1] = be16toh(pixel16[1]);
 				pixel16[2] = be16toh(pixel16[2]);
 
-				EL_ERROR(pixel16[0] > max_value || pixel16[1] > max_value || pixel16[2] > max_value, TException, "pixel color value bigger than max-value");
+				EL_ERROR(pixel16[0] > max_value || pixel16[1] > max_value || pixel16[2] > max_value, TException, U"pixel color value bigger than max-value");
 
 				pixelf[0] = static_cast<float>(pixel16[0]) / f_max_value;
 				pixelf[1] = static_cast<float>(pixel16[1]) / f_max_value;

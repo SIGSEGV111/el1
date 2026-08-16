@@ -42,7 +42,7 @@ namespace el1::io::net::bluetooth
 		if(result < 0)
 		{
 			EL_ERROR(errno != EINPROGRESS, TSyscallException, errno);
-			EL_ERROR(!on_tx_ready.WaitFor(connect_timeout), TException, "RFCOMM connection attempt timed out");
+			EL_ERROR(!on_tx_ready.WaitFor(connect_timeout), TException, U"RFCOMM connection attempt timed out");
 			on_tx_ready.Reset();
 
 			int socket_error = 0;

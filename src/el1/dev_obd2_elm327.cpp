@@ -57,7 +57,7 @@ namespace el1::dev::obd2::elm327
 			deadline,
 			true
 		);
-		EL_ERROR(n_written != request.Length(), TException, "ELM327 command write timed out");
+		EL_ERROR(n_written != request.Length(), TException, U"ELM327 command write timed out");
 
 		TList<char> response(1024);
 		for(;;)
@@ -66,7 +66,7 @@ namespace el1::dev::obd2::elm327
 			const usys_t size = source->Read(buffer, sizeof(buffer));
 			if(size > 0)
 			{
-				EL_ERROR(response.Count() + size > 65536, TException, "ELM327 response exceeded 64 KiB");
+				EL_ERROR(response.Count() + size > 65536, TException, U"ELM327 response exceeded 64 KiB");
 				response.Append(reinterpret_cast<const char*>(buffer), size);
 				for(usys_t i = 0; i < size; i++)
 					if(buffer[i] == static_cast<byte_t>('>'))
@@ -82,34 +82,34 @@ namespace el1::dev::obd2::elm327
 
 	TString TELM327::Reset()
 	{
-		return Command("ATZ");
+		return Command(U"ATZ");
 	}
 
 	void TELM327::ExpectOk(const TString& command)
 	{
 		const TString response = Command(command);
-		EL_ERROR(!response.Upper().Contains("OK"), TException, TString::Format(U"ELM327 adapter rejected %q: %q", command, response));
+		EL_ERROR(!response.Upper().Contains(TStringView(U"OK")), TException, TString::Format(U"ELM327 adapter rejected %q: %q", command, response));
 	}
 
 	TString TELM327::Initialize(const EProtocol protocol)
 	{
 		const TString reset_response = Reset();
 		const TList<TString> commands = {
-			"ATE0",
-			"ATL0",
-			"ATS0",
-			"ATH0",
-			"ATAL",
-			"ATAT1",
-			"ATCAF1",
-			"ATCFC1"
+			U"ATE0",
+			U"ATL0",
+			U"ATS0",
+			U"ATH0",
+			U"ATAL",
+			U"ATAT1",
+			U"ATCAF1",
+			U"ATCFC1"
 		};
 		for(const TString& command : commands)
 			ExpectOk(command);
 
 		const char32_t protocol_code = static_cast<char32_t>(protocol);
 		EL_ERROR(!((protocol_code >= '0' && protocol_code <= '9') || (protocol_code >= 'A' && protocol_code <= 'C')), TInvalidArgumentException, "protocol", "invalid ELM327 protocol code");
-		TString protocol_command("ATSP");
+		TString protocol_command(U"ATSP");
 		protocol_command += protocol_code;
 		ExpectOk(protocol_command);
 		return reset_response;
@@ -117,12 +117,12 @@ namespace el1::dev::obd2::elm327
 
 	TString TELM327::CloseProtocol()
 	{
-		return Command("ATPC");
+		return Command(U"ATPC");
 	}
 
 	f64_t TELM327::SupplyVoltage()
 	{
-		const TString response = Command("ATRV").Upper();
+		const TString response = Command(U"ATRV").Upper();
 		const usys_t suffix = response.Find('V');
 		EL_ERROR(suffix == NEG1, TException, TString::Format(U"invalid ELM327 voltage response: %q", response));
 
@@ -145,7 +145,7 @@ namespace el1::dev::obd2::elm327
 
 		// Reset any receive-address filter left by a previous physical ECU request.
 		// ATMA itself is passive on CAN: it does not acknowledge or transmit bus frames.
-		ExpectOk("ATAR");
+		ExpectOk(U"ATAR");
 		FlushInput();
 
 		static constexpr char MONITOR_COMMAND[] = "ATMA\r";
@@ -156,7 +156,7 @@ namespace el1::dev::obd2::elm327
 			monitor_deadline,
 			true
 		);
-		EL_ERROR(n_written != sizeof(MONITOR_COMMAND) - 1, TException, "ELM327 monitor command write timed out");
+		EL_ERROR(n_written != sizeof(MONITOR_COMMAND) - 1, TException, U"ELM327 monitor command write timed out");
 
 		bool activity = false;
 		bool prompt_seen = false;
@@ -181,13 +181,13 @@ namespace el1::dev::obd2::elm327
 				break;
 		}
 
-		EL_ERROR(prompt_seen, TException, "ELM327 left monitor mode unexpectedly");
+		EL_ERROR(prompt_seen, TException, U"ELM327 left monitor mode unexpectedly");
 
 		// Any serial input stops ATMA. CR is harmless and gives us a prompt to
 		// synchronize the byte stream before issuing the next command.
 		static constexpr byte_t STOP_MONITOR = '\r';
 		const TTime stop_deadline = TTime::Now(EClock::MONOTONIC) + command_timeout;
-		EL_ERROR(sink->BlockingWrite(&STOP_MONITOR, 1, stop_deadline, true) != 1, TException, "ELM327 monitor stop write timed out");
+		EL_ERROR(sink->BlockingWrite(&STOP_MONITOR, 1, stop_deadline, true) != 1, TException, U"ELM327 monitor stop write timed out");
 
 		for(;;)
 		{
@@ -199,7 +199,7 @@ namespace el1::dev::obd2::elm327
 
 			const auto* const input_ready = source->OnInputReady();
 			EL_ERROR(input_ready == nullptr, TStreamDryException);
-			EL_ERROR(!input_ready->WaitFor(stop_deadline, true), TException, "ELM327 did not leave monitor mode");
+			EL_ERROR(!input_ready->WaitFor(stop_deadline, true), TException, U"ELM327 did not leave monitor mode");
 		}
 	}
 
@@ -213,7 +213,7 @@ namespace el1::dev::obd2::elm327
 			TString::Format(U"ATCRA%03x", response_can_id).Upper(),
 			TString::Format(U"ATFCSH%03x", request_can_id).Upper(),
 			TString::Format(U"ATFCSD%02x30FF00", target_address).Upper(),
-			"ATFCSM1",
+			U"ATFCSM1",
 			TString::Format(U"ATCEA%02x", target_address).Upper()
 		};
 		for(const TString& command : commands)
@@ -244,9 +244,9 @@ namespace el1::dev::obd2::elm327
 	TList<u8_t> TELM327::ParseReadDataByIdentifierResponse(const TString& response, const u16_t did)
 	{
 		const TString text = response.Upper();
-		if(text.Contains("NO DATA") || text.Contains("STOPPED") || text.Contains("UNABLE TO CONNECT"))
+		if(text.Contains(TStringView(U"NO DATA")) || text.Contains(TStringView(U"STOPPED")) || text.Contains(TStringView(U"UNABLE TO CONNECT")))
 			return {};
-		EL_ERROR(text.Contains("ERROR") || text.Contains('?'), TException, TString::Format(U"ELM327 error for DID %04x: %q", static_cast<u32_t>(did), response));
+		EL_ERROR(text.Contains(TStringView(U"ERROR")) || text.Contains('?'), TException, TString::Format(U"ELM327 error for DID %04x: %q", static_cast<u32_t>(did), response));
 
 		TString hex;
 		TString line;

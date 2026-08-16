@@ -22,12 +22,12 @@ int main(const int argc, char* argv[])
 		s64_t debounce_us = 0;
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Wait for GPIO edge events through the Linux GPIO character-device API."),
-			TPathArgument(&gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', "gpio-chip", "", true, false, "GPIO character device"),
-			TIntegerArgument(&gpio_line, 'g', "gpio", "", false, false, "GPIO line index"),
-			TIntegerArgument(&timeout_ms, 't', "timeout", "", true, false, "Per-event timeout in milliseconds; -1 waits indefinitely"),
-			TIntegerArgument(&repeat_count, 'n', "count", "", true, false, "Number of events or timeouts to process"),
-			TIntegerArgument(&debounce_us, 'd', "debounce", "", true, false, "Hardware debounce interval in microseconds")
+			THelpArgument(U"Wait for GPIO edge events through the Linux GPIO character-device API."),
+			TPathArgument(&gpio_chip, EObjectType::CHAR_DEVICE, ECreateMode::OPEN, 'G', U"gpio-chip", U"", true, false, U"GPIO character device"),
+			TIntegerArgument(&gpio_line, 'g', U"gpio", U"", false, false, U"GPIO line index"),
+			TIntegerArgument(&timeout_ms, 't', U"timeout", U"", true, false, U"Per-event timeout in milliseconds; -1 waits indefinitely"),
+			TIntegerArgument(&repeat_count, 'n', U"count", U"", true, false, U"Number of events or timeouts to process"),
+			TIntegerArgument(&debounce_us, 'd', U"debounce", U"", true, false, U"Hardware debounce interval in microseconds")
 		);
 
 		EL_ERROR(gpio_line < 0, TInvalidArgumentException, "gpio", "non-negative GPIO line index");

@@ -89,7 +89,7 @@ namespace el1::dev::spi::si446x
 		EL_ERROR(is_shutdown, TLogicException);
 		const TTime effective_timeout = timeout < 0 ? command_timeout : timeout;
 		EL_ERROR(effective_timeout < 0, TInvalidArgumentException, "timeout", "timeout must not be negative");
-		EL_ERROR(!ReadCommandResponse(nullptr, 0, effective_timeout), TException, TString("timeout while waiting for Si446x CTS"));
+		EL_ERROR(!ReadCommandResponse(nullptr, 0, effective_timeout), TException, TString(U"timeout while waiting for Si446x CTS"));
 	}
 
 	void TRadio::SendCommand(const array_t<const byte_t> command)
@@ -103,7 +103,7 @@ namespace el1::dev::spi::si446x
 	{
 		EL_ERROR(response == nullptr && n_response_bytes != 0, TInvalidArgumentException, "response", "response buffer is null");
 		SendCommand(command);
-		EL_ERROR(!ReadCommandResponse(response, n_response_bytes, command_timeout), TException, TString("timeout while waiting for Si446x command response"));
+		EL_ERROR(!ReadCommandResponse(response, n_response_bytes, command_timeout), TException, TString(U"timeout while waiting for Si446x command response"));
 	}
 
 	void TRadio::LoadConfiguration(const TConfiguration& configuration)

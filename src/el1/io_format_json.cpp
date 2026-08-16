@@ -509,15 +509,15 @@ namespace el1::io::format::json
 		switch(this->Type())
 		{
 			case EType::NULLVALUE:
-				str = L"null";
+				str = U"null";
 				sink.WriteAll(str.chars);
 				break;
 
 			case EType::BOOLEAN:
 				if(this->Boolean())
-					str = L"true";
+					str = U"true";
 				else
-					str = L"false";
+					str = U"false";
 				sink.WriteAll(str.chars);
 				break;
 
@@ -537,41 +537,41 @@ namespace el1::io::format::json
 				break;
 
 			case EType::ARRAY:
-				str = L"[";
+				str = U"[";
 				sink.WriteAll(str.chars);
 				for(const TJsonValue& v : this->Array())
 				{
 					if(!first)
 					{
-						str = L",";
+						str = U",";
 						sink.WriteAll(str.chars);
 					}
 					v.ToStream(sink);
 					first = false;
 				}
-				str = L"]";
+				str = U"]";
 				sink.WriteAll(str.chars);
 				break;
 
 			case EType::MAP:
-				str = L"{";
+				str = U"{";
 				sink.WriteAll(str.chars);
 				for(const auto& kv : this->Map().Items())
 				{
 					if(!first)
 					{
-						str = L",";
+						str = U",";
 						sink.WriteAll(str.chars);
 					}
 
 					str = JsonQuote(kv.key);
 					sink.WriteAll(str.chars);
-					str = L":";
+					str = U":";
 					sink.WriteAll(str.chars);
 					kv.value.ToStream(sink);
 					first = false;
 				}
-				str = L"}";
+				str = U"}";
 				sink.WriteAll(str.chars);
 				break;
 		}

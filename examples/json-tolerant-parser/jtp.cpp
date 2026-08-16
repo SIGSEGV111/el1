@@ -19,9 +19,9 @@ int main(const int argc, char* argv[])
 		TPath output_path;
 
 		ParseCmdlineArguments(argc, argv,
-			THelpArgument("Parse tolerant JSON and write normalized JSON."),
-			TPathArgument(&input_path, EObjectType::FILE, ECreateMode::OPEN, 'i', "input-file", "", false, false, "JSON input file"),
-			TPathArgument(&output_path, EObjectType::FILE, ECreateMode::TRUNCATE, 'o', "output-file", "", false, false, "Normalized JSON output file")
+			THelpArgument(U"Parse tolerant JSON and write normalized JSON."),
+			TPathArgument(&input_path, EObjectType::FILE, ECreateMode::OPEN, 'i', U"input-file", U"", false, false, U"JSON input file"),
+			TPathArgument(&output_path, EObjectType::FILE, ECreateMode::TRUNCATE, 'o', U"output-file", U"", false, false, U"Normalized JSON output file")
 		);
 
 		const el1::io::text::string::TString input = TFile::ReadText(input_path, false);

@@ -152,7 +152,7 @@ namespace el1::io::net::http
 			struct request_t
 			{
 				EMethod method = EMethod::GET;
-				text::string::TString url = L"/";
+				text::string::TString url = U"/";
 				THttpHeaderFields header_fields;
 				stream::ISource<byte_t>* body = nullptr;
 				usys_t content_length = 0;

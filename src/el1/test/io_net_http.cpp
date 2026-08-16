@@ -40,10 +40,10 @@ namespace
 		THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			handler_called = true;
 			response.status = EStatus::OK;
-			response.header_fields.Add(L"Content-Length", L"0");
+			response.header_fields.Add(U"Content-Length", U"0");
 			EXPECT_EQ(request.method, EMethod::GET);
 			EXPECT_EQ(request.version, EVersion::HTTP11);
-			EXPECT_EQ(request.url, L"/");
+			EXPECT_EQ(request.url, U"/");
 			EXPECT_EQ(request.header_fields.ContentLength(), 0U);
 		});
 
@@ -51,7 +51,7 @@ namespace
 
 		fifo_s2c.CloseOutput();
 		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
-		EXPECT_EQ(str_response, L"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+		EXPECT_EQ(str_response, U"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
 	}
 
 	TEST(io_net_http, HandleSingleRequest_realworld_http2)
@@ -67,18 +67,18 @@ namespace
 		THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			handler_called = true;
 			response.status = EStatus::OK;
-			response.header_fields.Add(L"Content-Length", L"0");
+			response.header_fields.Add(U"Content-Length", U"0");
 			EXPECT_EQ(request.method, EMethod::GET);
 			EXPECT_EQ(request.version, EVersion::HTTP20);
-			EXPECT_EQ(request.url, L"/wiki/COBOL");
-			EXPECT_EQ(request.header_fields[L"accept-encoding"], L"gzip, deflate, br");
+			EXPECT_EQ(request.url, U"/wiki/COBOL");
+			EXPECT_EQ(request.header_fields[U"accept-encoding"], U"gzip, deflate, br");
 		});
 
 		EXPECT_TRUE(handler_called);
 
 		fifo_s2c.CloseOutput();
 		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
-		EXPECT_EQ(str_response, L"HTTP/2 200 OK\r\nContent-Length: 0\r\n\r\n");
+		EXPECT_EQ(str_response, U"HTTP/2 200 OK\r\nContent-Length: 0\r\n\r\n");
 	}
 
 	TEST(io_net_http, HandleSingleRequest_content_length_and_remote_address)
@@ -89,11 +89,11 @@ namespace
 		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
 		fifo_c2s.CloseOutput();
 
-		const ipport_t remote_address = { ipaddr_t(TString(L"127.0.0.42")), 4242 };
+		const ipport_t remote_address = { ipaddr_t(TString(U"127.0.0.42")), 4242 };
 		THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			EXPECT_EQ(request.method, EMethod::POST);
 			EXPECT_EQ(request.header_fields.ContentLength(), 4U);
-			EXPECT_EQ(request.remote_address.ip, ipaddr_t(TString(L"127.0.0.42")));
+			EXPECT_EQ(request.remote_address.ip, ipaddr_t(TString(U"127.0.0.42")));
 			EXPECT_EQ(request.remote_address.port, 4242);
 			byte_t body[8] = {};
 			EXPECT_EQ(request.body->Read(body, sizeof(body)), 4U);
@@ -102,6 +102,52 @@ namespace
 			response.status = EStatus::OK;
 		}, remote_address);
 
+	}
+
+	TEST(io_net_http, HandleSingleRequest_chunked_request)
+	{
+		const char* str_src =
+			"PATCH /upload HTTP/1.1\r\n"
+			"Transfer-Encoding: chunked\r\n"
+			"\r\n"
+			"4\r\nWiki\r\n"
+			"5;extension=yes\r\npedia\r\n"
+			"0\r\nX-Trailer: done\r\n\r\n";
+		TFifo<byte_t, 1024> fifo_c2s;
+		TFifo<byte_t, 1024> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		TString body;
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&body](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			EXPECT_EQ(request.method, EMethod::PATCH);
+			EXPECT_EQ(request.url, U"/upload");
+			body = TString(request.body->Pipe().Transform(TUTF8Decoder()).Collect());
+			response.status = EStatus::ACCEPTED;
+		});
+		EXPECT_EQ(status, EStatus::ACCEPTED);
+		EXPECT_EQ(body, U"Wikipedia");
+	}
+
+	TEST(io_net_http, HandleSingleRequest_rejects_content_length_with_transfer_encoding)
+	{
+		const char* str_src =
+			"POST /upload HTTP/1.1\r\n"
+			"Content-Length: 4\r\n"
+			"Transfer-Encoding: chunked\r\n"
+			"\r\n"
+			"0\r\n\r\n";
+		TFifo<byte_t, 1024> fifo_c2s;
+		TFifo<byte_t, 1024> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		bool handler_called = false;
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t&, THttpServer::response_t&) {
+			handler_called = true;
+		});
+		EXPECT_EQ(status, EStatus::BAD_REQUEST);
+		EXPECT_FALSE(handler_called);
 	}
 
 	TEST(io_net_http, HandleSingleRequest_unknown_length_response_closes_stream)
@@ -122,7 +168,7 @@ namespace
 
 		EXPECT_EQ(fifo_s2c.OnInputReady(), nullptr);
 		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
-		EXPECT_EQ(str_response, L"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nstream");
+		EXPECT_EQ(str_response, U"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nstream");
 	}
 
 	TEST(io_net_http, THttpServer_curl_simple)
@@ -130,15 +176,15 @@ namespace
 		TTcpServer tcp_server;
 		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto file = el1::New<TFile>(L"gen/testdata/test1.json");
+			auto file = el1::New<TFile>(U"gen/testdata/test1.json");
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
 
 		const TString url = TString::Format(U"http://localhost:%d/", tcp_server.LocalAddress().port);
-		TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", url, url, url });
+		TString str_curl = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", url, url, url });
 		str_curl.Cut(0, str_curl.Length() / 3 * 2);
-		TFile reference_file(L"gen/testdata/test1.json");
+		TFile reference_file(U"gen/testdata/test1.json");
 		const TString str_ref = reference_file.Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
 	}
@@ -146,18 +192,18 @@ namespace
 	TEST(io_net_http, THttpServer_curl_https)
 	{
 		TTcpServer tcp_server;
-		tls::TServer tls_server(&tcp_server, L"support/tls-test-cert.pem", L"support/tls-test-key.pem");
+		tls::TServer tls_server(&tcp_server, U"support/tls-test-cert.pem", U"support/tls-test-key.pem");
 		THttpServer http_server(&tls_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
-			EXPECT_EQ(request.url, L"/secure");
+			EXPECT_EQ(request.url, U"/secure");
 			response.status = EStatus::OK;
-			auto file = el1::New<TFile>(L"gen/testdata/freecad_v1_0_0.gcode");
+			auto file = el1::New<TFile>(U"gen/testdata/freecad_v1_0_0.gcode");
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
 
 		const TString url = TString::Format(U"https://localhost:%d/secure", tls_server.LocalAddress().port);
-		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--cacert", L"support/tls-test-cert.pem", L"--tlsv1.2", url });
-		TFile reference_file(L"gen/testdata/freecad_v1_0_0.gcode");
+		const TString str_curl = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", U"--cacert", U"support/tls-test-cert.pem", U"--tlsv1.2", url });
+		TFile reference_file(U"gen/testdata/freecad_v1_0_0.gcode");
 		const TString str_ref = reference_file.Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
 	}
@@ -165,7 +211,7 @@ namespace
 	TEST(io_net_http, THttpServer_curl_https_unknown_length)
 	{
 		TTcpServer tcp_server;
-		tls::TServer tls_server(&tcp_server, L"support/tls-test-cert.pem", L"support/tls-test-key.pem");
+		tls::TServer tls_server(&tcp_server, U"support/tls-test-cert.pem", U"support/tls-test-key.pem");
 		THttpServer http_server(&tls_server, [](const THttpServer::request_t&, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
 			auto body = el1::New<TFifo<byte_t>>();
@@ -175,8 +221,8 @@ namespace
 		});
 
 		const TString url = TString::Format(U"https://localhost:%d/stream", tls_server.LocalAddress().port);
-		const TString str_curl = TProcess::Execute(L"/usr/bin/curl", { L"--silent", L"--fail", L"--cacert", L"support/tls-test-cert.pem", url });
-		EXPECT_EQ(str_curl, L"secure-stream");
+		const TString str_curl = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", U"--cacert", U"support/tls-test-cert.pem", url });
+		EXPECT_EQ(str_curl, U"secure-stream");
 	}
 
 	TEST(io_net_http, THttpServer_curl_error)
@@ -185,14 +231,14 @@ namespace
 		TTcpServer tcp_server;
 		THttpServer http_server(&tcp_server, [&fail](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto file = el1::New<TFile>(L"non-existent file"); // this should throw
+			auto file = el1::New<TFile>(U"non-existent file"); // this should throw
 			fail = true; // this should never be reached
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
 
 		const TString url = TString::Format(U"http://localhost:%d/", tcp_server.LocalAddress().port);
-		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url }), TProcess::TNonZeroExitException);
+		EXPECT_THROW(TProcess::Execute(U"/usr/bin/curl", { U"--verbose", U"--fail", url }), TProcess::TNonZeroExitException);
 		EXPECT_FALSE(fail);
 	}
 
@@ -200,16 +246,16 @@ namespace
 	{
 		TTcpServer tcp_server;
 		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
-			EXPECT_EQ(request.url, "/test");
+			EXPECT_EQ(request.url, U"/test");
 			EXPECT_EQ(request.args.Items().Count(), 2U);
-			EXPECT_TRUE(request.args.Contains("abc"));
-			EXPECT_TRUE(request.args.Contains("foo"));
-			EXPECT_EQ(request.args["foo"], "bar");
+			EXPECT_TRUE(request.args.Contains(U"abc"));
+			EXPECT_TRUE(request.args.Contains(U"foo"));
+			EXPECT_EQ(request.args[U"foo"], U"bar");
 			response.status = EStatus::OK;
 		});
 
 		const TString url = TString::Format(U"http://localhost:%d/test?foo=bar&abc", tcp_server.LocalAddress().port);
-		TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url });
+		TProcess::Execute(U"/usr/bin/curl", { U"--verbose", U"--fail", url });
 	}
 
 	TEST(io_net_http, THttpServer_empty_arg)
@@ -222,7 +268,7 @@ namespace
 		});
 
 		const TString url = TString::Format(U"http://localhost:%d/test?foo=bar&abc&", tcp_server.LocalAddress().port);
-		EXPECT_THROW(TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url }), TProcess::TNonZeroExitException);
+		EXPECT_THROW(TProcess::Execute(U"/usr/bin/curl", { U"--verbose", U"--fail", url }), TProcess::TNonZeroExitException);
 		EXPECT_FALSE(fail);
 	}
 
@@ -231,15 +277,15 @@ namespace
 		THttpServer::DEBUG = true;
 		TTcpServer tcp_server;
 		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
-			EXPECT_EQ(request.url, "/test/");
+			EXPECT_EQ(request.url, U"/test/");
 			EXPECT_EQ(request.args.Items().Count(), 1U);
-			EXPECT_TRUE(request.args.Contains("ü"));
-			EXPECT_EQ(request.args["ü"], "1/_?");
+			EXPECT_TRUE(request.args.Contains(U"ü"));
+			EXPECT_EQ(request.args[U"ü"], U"1/_?");
 			response.status = EStatus::OK;
 		});
 
 		const TString url = TString::Format(U"http://localhost:%d/test%%2f?ü=1%%2f%%5f%%3f", tcp_server.LocalAddress().port);
-		TProcess::Execute(L"/usr/bin/curl", { L"--verbose", L"--fail", url });
+		TProcess::Execute(U"/usr/bin/curl", { U"--verbose", U"--fail", url });
 		THttpServer::DEBUG = false;
 	}
 
@@ -256,21 +302,21 @@ namespace
 			if(client_port == 0)
 				client_port = request.remote_address.port;
 			EXPECT_EQ(request.remote_address.port, client_port);
-			EXPECT_EQ(request.header_fields[L"x-default"], L"persistent");
+			EXPECT_EQ(request.header_fields[U"x-default"], U"persistent");
 
 			if(request_index == 1)
 			{
 				EXPECT_EQ(request.method, EMethod::POST);
-				EXPECT_EQ(request.url, L"/login");
-				EXPECT_EQ(request.header_fields[L"x-once"], L"one");
+				EXPECT_EQ(request.url, U"/login");
+				EXPECT_EQ(request.header_fields[U"x-once"], U"one");
 				EXPECT_EQ(request.header_fields.ContentLength(), sizeof(upload));
 				byte_t received[sizeof(upload)] = {};
 				request.body->ReadAll(received, sizeof(received));
 				EXPECT_EQ(memcmp(received, upload, sizeof(upload)), 0);
 
 				response.status = EStatus::CREATED;
-				response.header_fields.Set(L"Set-Cookie", L"session=abc; Path=/api; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Max-Age=3600");
-				response.header_fields.Set(L"X-Reply", L"first");
+				response.header_fields.Set(U"Set-Cookie", U"session=abc; Path=/api; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; Max-Age=3600");
+				response.header_fields.Set(U"X-Reply", U"first");
 				response.header_fields.ContentLength(sizeof(download));
 				auto body = el1::New<TFifo<byte_t>>();
 				body->WriteAll(download, sizeof(download));
@@ -279,55 +325,55 @@ namespace
 			}
 			else if(request_index == 2)
 			{
-				EXPECT_EQ(request.url, L"/outside");
-				EXPECT_EQ(request.header_fields.Get(L"cookie"), nullptr);
-				EXPECT_EQ(request.header_fields.Get(L"x-once"), nullptr);
+				EXPECT_EQ(request.url, U"/outside");
+				EXPECT_EQ(request.header_fields.Get(U"cookie"), nullptr);
+				EXPECT_EQ(request.header_fields.Get(U"x-once"), nullptr);
 				response.status = EStatus::OK;
 			}
 			else if(request_index == 3)
 			{
-				EXPECT_EQ(request.url, L"/api/data");
-				ASSERT_NE(request.header_fields.Get(L"cookie"), nullptr);
-				EXPECT_EQ(*request.header_fields.Get(L"cookie"), L"session=abc");
+				EXPECT_EQ(request.url, U"/api/data");
+				ASSERT_NE(request.header_fields.Get(U"cookie"), nullptr);
+				EXPECT_EQ(*request.header_fields.Get(U"cookie"), U"session=abc");
 				response.status = EStatus::OK;
-				response.header_fields.Set(L"Set-Cookie", L"session=deleted; Path=/api; Max-Age=0");
+				response.header_fields.Set(U"Set-Cookie", U"session=deleted; Path=/api; Max-Age=0");
 			}
 			else if(request_index == 4)
 			{
-				EXPECT_EQ(request.url, L"/api/data");
-				EXPECT_EQ(request.header_fields.Get(L"cookie"), nullptr);
+				EXPECT_EQ(request.url, U"/api/data");
+				EXPECT_EQ(request.header_fields.Get(U"cookie"), nullptr);
 				response.status = EStatus::OK;
 			}
 		});
 
-		THttpClient client(L"localhost", tcp_server.LocalAddress().port);
-		client.SetHeader(L"X-Default", L"persistent");
-		ASSERT_NE(client.FindHeader(L"x-default"), nullptr);
-		EXPECT_EQ(*client.FindHeader(L"x-default"), L"persistent");
+		THttpClient client(U"localhost", tcp_server.LocalAddress().port);
+		client.SetHeader(U"X-Default", U"persistent");
+		ASSERT_NE(client.FindHeader(U"x-default"), nullptr);
+		EXPECT_EQ(*client.FindHeader(U"x-default"), U"persistent");
 
 		TFifo<byte_t> upload_source;
 		upload_source.WriteAll(upload, sizeof(upload));
 		upload_source.CloseOutput();
 		THttpClient::request_t request;
 		request.method = EMethod::POST;
-		request.url = L"/login";
-		request.header_fields.Set(L"X-Once", L"one");
+		request.url = U"/login";
+		request.header_fields.Set(U"X-Once", U"one");
 		request.body = &upload_source;
 		request.content_length = sizeof(upload);
 		auto response = client.Request(std::move(request));
 		EXPECT_EQ(response.status, EStatus::CREATED);
-		ASSERT_NE(response.FindHeader(L"x-reply"), nullptr);
-		EXPECT_EQ(*response.FindHeader(L"x-reply"), L"first");
+		ASSERT_NE(response.FindHeader(U"x-reply"), nullptr);
+		EXPECT_EQ(*response.FindHeader(U"x-reply"), U"first");
 		ASSERT_EQ(response.body.Count(), sizeof(download));
 		EXPECT_EQ(memcmp(response.body.ItemPtr(0), download, sizeof(download)), 0);
 		ASSERT_EQ(client.ListCookies().Count(), 1U);
-		EXPECT_EQ(client.ListCookies()[0].name, L"session");
+		EXPECT_EQ(client.ListCookies()[0].name, U"session");
 		EXPECT_TRUE(client.ListCookies()[0].http_only);
 
-		client.Get(L"/outside");
-		client.Get(L"/api/data");
+		client.Get(U"/outside");
+		client.Get(U"/api/data");
 		EXPECT_EQ(client.ListCookies().Count(), 0U);
-		client.Get(L"/api/data");
+		client.Get(U"/api/data");
 		EXPECT_EQ(request_index, 4U);
 	}
 
@@ -345,12 +391,12 @@ namespace
 			if(request_index == 1)
 			{
 				EXPECT_EQ(request.method, EMethod::POST);
-				EXPECT_EQ(request.url, L"/post");
-				EXPECT_EQ(request.header_fields[L"x-test"], L"yes");
+				EXPECT_EQ(request.url, U"/post");
+				EXPECT_EQ(request.header_fields[U"x-test"], U"yes");
 				byte_t received[sizeof(upload)] = {};
 				request.body->ReadAll(received, sizeof(received));
 				EXPECT_EQ(memcmp(received, upload, sizeof(upload)), 0);
-				response.header_fields.Set(L"X-Reply", L"post");
+				response.header_fields.Set(U"X-Reply", U"post");
 				response.header_fields.ContentLength(sizeof(download));
 				auto body = el1::New<TFifo<byte_t>>();
 				body->WriteAll(download, sizeof(download));
@@ -360,8 +406,8 @@ namespace
 			else if(request_index == 2)
 			{
 				EXPECT_EQ(request.method, EMethod::GET);
-				EXPECT_EQ(request.url, L"/get");
-				response.header_fields.Set(L"X-Reply", L"get");
+				EXPECT_EQ(request.url, U"/get");
+				response.header_fields.Set(U"X-Reply", U"get");
 				response.header_fields.ContentLength(sizeof(download));
 				auto body = el1::New<TFifo<byte_t>>();
 				body->WriteAll(download, sizeof(download));
@@ -379,39 +425,39 @@ namespace
 			}
 		});
 
-		THttpClient client(L"localhost", tcp_server.LocalAddress().port);
+		THttpClient client(U"localhost", tcp_server.LocalAddress().port);
 		THttpHeaderFields request_headers;
-		request_headers.Set(L"X-Test", L"yes");
-		auto post_response = client.Post(L"/post", array_t<const byte_t>::FromUnsafePointer(upload, sizeof(upload)), std::move(request_headers));
-		ASSERT_NE(post_response.FindHeader(L"x-reply"), nullptr);
-		EXPECT_EQ(*post_response.FindHeader(L"x-reply"), L"post");
+		request_headers.Set(U"X-Test", U"yes");
+		auto post_response = client.Post(U"/post", array_t<const byte_t>::FromUnsafePointer(upload, sizeof(upload)), std::move(request_headers));
+		ASSERT_NE(post_response.FindHeader(U"x-reply"), nullptr);
+		EXPECT_EQ(*post_response.FindHeader(U"x-reply"), U"post");
 		ASSERT_EQ(post_response.body.Count(), sizeof(download));
 		EXPECT_EQ(memcmp(post_response.body.ItemPtr(0), download, sizeof(download)), 0);
 
 		THttpClient::response_header_t response_header;
-		auto source = client.Get(L"/get", &response_header);
-		ASSERT_NE(response_header.FindHeader(L"x-reply"), nullptr);
-		EXPECT_EQ(*response_header.FindHeader(L"x-reply"), L"get");
+		auto source = client.Get(U"/get", &response_header);
+		ASSERT_NE(response_header.FindHeader(U"x-reply"), nullptr);
+		EXPECT_EQ(*response_header.FindHeader(U"x-reply"), U"get");
 		TList<byte_t> source_body = source->Pipe().Collect();
 		ASSERT_EQ(source_body.Count(), sizeof(download));
 		EXPECT_EQ(memcmp(source_body.ItemPtr(0), download, sizeof(download)), 0);
 
-		EXPECT_THROW(client.Get(L"/too-large", static_cast<ISink<byte_t>*>(nullptr), 32), TException);
+		EXPECT_THROW(client.Get(U"/too-large", static_cast<ISink<byte_t>*>(nullptr), 32), TException);
 		EXPECT_EQ(THttpClient::DEFAULT_RESPONSE_BODY_LIMIT, 16U * 1024U * 1024U);
 	}
 
 	TEST(io_net_http, THttpClient_rejects_request_injection)
 	{
-		THttpClient client(L"localhost", 1);
-		EXPECT_THROW(client.SetHeader(L"X-Test", L"valid\r\nInjected: yes"), TInvalidArgumentException);
-		EXPECT_THROW(client.SetHeader(L"Bad Header", L"value"), TInvalidArgumentException);
+		THttpClient client(U"localhost", 1);
+		EXPECT_THROW(client.SetHeader(U"X-Test", U"valid\r\nInjected: yes"), TInvalidArgumentException);
+		EXPECT_THROW(client.SetHeader(U"Bad Header", U"value"), TInvalidArgumentException);
 
 		THttpClient::request_t request;
-		request.url = L"/test\r\nInjected: yes";
+		request.url = U"/test\r\nInjected: yes";
 		EXPECT_THROW(client.Request(std::move(request)), TInvalidArgumentException);
 
 		THttpClient::request_t request_header;
-		request_header.header_fields.Set(L"X-Test", L"valid\nInjected: yes");
+		request_header.header_fields.Set(U"X-Test", U"valid\nInjected: yes");
 		EXPECT_THROW(client.Request(std::move(request_header)), TInvalidArgumentException);
 	}
 
@@ -431,10 +477,10 @@ namespace
 			response.body = std::move(body);
 		});
 
-		THttpClient client(L"localhost", tcp_server.LocalAddress().port);
+		THttpClient client(U"localhost", tcp_server.LocalAddress().port);
 		TList<byte_t> received;
 		TListSink<byte_t> sink(&received);
-		auto response = client.Get(L"/large.bin", &sink);
+		auto response = client.Get(U"/large.bin", &sink);
 		EXPECT_EQ(response.status, EStatus::OK);
 		EXPECT_EQ(response.body.Count(), 0U);
 		ASSERT_EQ(received.Count(), expected.Count());
@@ -444,34 +490,34 @@ namespace
 	TEST(io_net_http, THttpClient_https)
 	{
 		TTcpServer tcp_server;
-		tls::TServer tls_server(&tcp_server, L"support/tls-test-cert.pem", L"support/tls-test-key.pem");
+		tls::TServer tls_server(&tcp_server, U"support/tls-test-cert.pem", U"support/tls-test-key.pem");
 		usys_t request_index = 0;
 		THttpServer http_server(&tls_server, [&](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			request_index++;
 			response.status = EStatus::OK;
 			if(request_index == 1)
 			{
-				response.header_fields.Set(L"Set-Cookie", L"secure=yes; Path=/; Secure");
+				response.header_fields.Set(U"Set-Cookie", U"secure=yes; Path=/; Secure");
 			}
 			else
 			{
-				ASSERT_NE(request.header_fields.Get(L"cookie"), nullptr);
-				EXPECT_EQ(*request.header_fields.Get(L"cookie"), L"secure=yes");
+				ASSERT_NE(request.header_fields.Get(U"cookie"), nullptr);
+				EXPECT_EQ(*request.header_fields.Get(U"cookie"), U"secure=yes");
 			}
 		});
 
 		tls::client_config_t config;
-		config.ca_certificates = tls::TPemSource(TPath(L"support/tls-test-cert.pem"));
-		THttpClient client(L"localhost", tls_server.LocalAddress().port, std::move(config));
-		EXPECT_EQ(client.Get(L"/one").status, EStatus::OK);
-		EXPECT_EQ(client.Get(L"/two").status, EStatus::OK);
+		config.ca_certificates = tls::TPemSource(TPath(U"support/tls-test-cert.pem"));
+		THttpClient client(U"localhost", tls_server.LocalAddress().port, std::move(config));
+		EXPECT_EQ(client.Get(U"/one").status, EStatus::OK);
+		EXPECT_EQ(client.Get(U"/two").status, EStatus::OK);
 		EXPECT_EQ(request_index, 2U);
 	}
 
 	TEST(io_net_http, THttpClient_https_credentials_from_memory)
 	{
-		TFile certificate_file(L"support/tls-test-cert.pem");
-		TFile private_key_file(L"support/tls-test-key.pem");
+		TFile certificate_file(U"support/tls-test-cert.pem");
+		TFile private_key_file(U"support/tls-test-key.pem");
 		TList<byte_t> certificate = certificate_file.Pipe().Collect();
 		TList<byte_t> private_key = private_key_file.Pipe().Collect();
 
@@ -486,8 +532,8 @@ namespace
 
 		tls::client_config_t client_config;
 		client_config.ca_certificates = tls::TPemSource(std::move(certificate));
-		THttpClient client(L"localhost", tls_server.LocalAddress().port, std::move(client_config));
-		EXPECT_EQ(client.Get(L"/").status, EStatus::OK);
+		THttpClient client(U"localhost", tls_server.LocalAddress().port, std::move(client_config));
+		EXPECT_EQ(client.Get(U"/").status, EStatus::OK);
 	}
 
 	TEST(io_net_http, THttpClient_chunked_upload_download_and_trailer)
@@ -515,7 +561,7 @@ namespace
 				else
 					matched = byte == (byte_t)terminator[0] ? 1U : 0U;
 			}
-			EXPECT_TRUE(request_header.Contains(L"Transfer-Encoding: chunked"));
+			EXPECT_TRUE(request_header.Contains(TStringView(U"Transfer-Encoding: chunked")));
 
 			auto read_line = [&](TTcpClient& stream) {
 				TString line;
@@ -541,14 +587,14 @@ namespace
 				const usys_t chunk_size = strtoul(size_cstr.get(), nullptr, 16);
 				if(chunk_size == 0)
 				{
-					EXPECT_EQ(read_line(*client), L"");
+					EXPECT_EQ(read_line(*client), U"");
 					break;
 				}
 
 				const usys_t offset = received.Count();
 				received.Inflate(chunk_size, 0);
 				client->ReadAll(received.ItemPtr(offset), chunk_size);
-				EXPECT_EQ(read_line(*client), L"");
+				EXPECT_EQ(read_line(*client), U"");
 			}
 
 			ASSERT_EQ(received.Count(), upload.Count());
@@ -572,14 +618,14 @@ namespace
 		upload_source.WriteAll(upload.ItemPtr(0), upload.Count());
 		upload_source.CloseOutput();
 
-		THttpClient client(L"localhost", tcp_server.LocalAddress().port);
-		auto response = client.Post(L"/chunked", upload_source);
+		THttpClient client(U"localhost", tcp_server.LocalAddress().port);
+		auto response = client.Post(U"/chunked", upload_source);
 
 		const char expected[] = "Wikipedia";
 		ASSERT_EQ(response.body.Count(), sizeof(expected) - 1);
 		EXPECT_EQ(memcmp(response.body.ItemPtr(0), expected, sizeof(expected) - 1), 0);
-		ASSERT_NE(response.FindHeader(L"x-trailer"), nullptr);
-		EXPECT_EQ(*response.FindHeader(L"x-trailer"), L"done");
+		ASSERT_NE(response.FindHeader(U"x-trailer"), nullptr);
+		EXPECT_EQ(*response.FindHeader(U"x-trailer"), U"done");
 		EXPECT_EQ(raw_server.Join(), nullptr);
 	}
 

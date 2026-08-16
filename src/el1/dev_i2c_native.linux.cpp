@@ -89,7 +89,7 @@ namespace el1::dev::i2c::native
 
 	ESpeedClass TBus::MaxSupportedSpeed() const
 	{
-		TPath path = TString("/sys/bus/i2c/devices/") + device.FullName() + "/of_node/clock-frequency";
+		TPath path = TString(U"/sys/bus/i2c/devices/") + device.FullName() + TStringView(U"/of_node/clock-frequency");
 		if(path.Exists())
 		{
 			TFile file(path);

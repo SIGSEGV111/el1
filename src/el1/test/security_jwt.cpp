@@ -20,7 +20,7 @@ namespace
 		const TValidationResult result = keys.Validate(TEST_TOKEN, policy);
 		EXPECT_TRUE(result.valid);
 		EXPECT_EQ(result.error, EValidationError::NONE);
-		EXPECT_EQ(result.claims("preferred_username").String(), U"writer");
+		EXPECT_EQ(result.claims(U"preferred_username").String(), U"writer");
 	}
 
 	TEST(security_jwt, reports_policy_and_key_failures)

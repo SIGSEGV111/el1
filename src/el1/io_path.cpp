@@ -172,7 +172,7 @@ namespace el1::io::path
 	TPath::operator TString() const
 	{
 		if(components.Count() == 0)
-			return "";
+			return U"";
 
 		TString str = components[0];
 		for(usys_t i = 1; i < components.Count(); i++)
@@ -222,6 +222,10 @@ namespace el1::io::path
 	}
 
 	TPath::TPath(const wchar_t* const str, const char32_t separator) : TPath(TString(str), separator)
+	{
+	}
+
+	TPath::TPath(const char32_t* const str, const char32_t separator) : TPath(TString(str), separator)
 	{
 	}
 

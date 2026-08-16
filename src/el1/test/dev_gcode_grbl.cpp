@@ -16,7 +16,7 @@ namespace
 	static parser_state_t InitState()
 	{
 		parser_state_t state;
-		state.comment = "";
+		state.comment = U"";
 		state.fr_rapid_xy = 2000;
 		state.fr_rapid_z = 200;
 		state.tool_change_pos = {0,0,0};
@@ -42,7 +42,7 @@ namespace
 		auto state = InitState();
 		TGrblParser p(&state);
 
-		auto cmd1 = p.ParseCommand("G00 X1 Y2 Z3 F10");
+		auto cmd1 = p.ParseCommand(U"G00 X1 Y2 Z3 F10");
 		TLinearMoveCommand& lmov1 = dynamic_cast<TLinearMoveCommand&>(*cmd1.get());
 		EXPECT_EQ(lmov1.target[0], 1);
 		EXPECT_EQ(lmov1.target[1], 2);
@@ -53,9 +53,9 @@ namespace
 		EXPECT_EQ(state.pos[1], 2);
 		EXPECT_EQ(state.pos[2], 3);
 
-		p.ParseCommand("G91");
+		p.ParseCommand(U"G91");
 
-		auto cmd2 = p.ParseCommand("G1 X1 Y-2 Z5 F100");
+		auto cmd2 = p.ParseCommand(U"G1 X1 Y-2 Z5 F100");
 		TLinearMoveCommand& lmov2 = dynamic_cast<TLinearMoveCommand&>(*cmd2.get());
 		EXPECT_EQ(lmov2.target[0], 2);
 		EXPECT_EQ(lmov2.target[1], 0);
@@ -73,10 +73,10 @@ namespace
 		TFile input("testdata/freecad_v1_0_0.gcode");
 		auto cmds = input.Pipe().Transform(TUTF8Decoder()).Transform(TLineReader()).Transform(TGrblParser(&state)).Collect();
 
-		TString expected_x_string("114.121");
-		TString expected_y_string("278.121");
-		TString expected_z_string("4.000");
-		TString expected_feed_string("750.000");
+		TString expected_x_string(U"114.121");
+		TString expected_y_string(U"278.121");
+		TString expected_z_string(U"4.000");
+		TString expected_feed_string(U"750.000");
 		EXPECT_EQ(state.pos[0], TDecimal(expected_x_string));
 		EXPECT_EQ(state.pos[1], TDecimal(expected_y_string));
 		EXPECT_EQ(state.pos[2], TDecimal(expected_z_string));
@@ -87,8 +87,8 @@ namespace
 	{
 		auto state = InitState();
 		TGrblParser p(&state);
-		auto cmd1 = p.ParseCommand("G0 X1.000 Y02.00 Z3 F10");
+		auto cmd1 = p.ParseCommand(U"G0 X1.000 Y02.00 Z3 F10");
 		TString cmd1_str = cmd1->ToString();
-		EXPECT_EQ(cmd1_str, "G01 X1 Y2 Z3 F10");
+		EXPECT_EQ(cmd1_str, U"G01 X1 Y2 Z3 F10");
 	}
 }

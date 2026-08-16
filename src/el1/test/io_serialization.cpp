@@ -124,7 +124,7 @@ namespace
 		EXPECT_EQ(child.Map()[metadata_key].Map()[TString(U"version")].Integer(), 1);
 
 		const TString encoded = json.ToString();
-		EXPECT_NE(encoded.Find(U"9223372036854775807"), NEG1);
+		EXPECT_NE(encoded.Find(TStringView(U"9223372036854775807")), NEG1);
 		const auto decoded = json::FromString<serialization_test::TRoot>(encoded);
 		EXPECT_EQ(decoded.big, source.big);
 		EXPECT_EQ(decoded.count, source.count);

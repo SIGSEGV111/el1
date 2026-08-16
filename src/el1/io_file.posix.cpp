@@ -11,8 +11,8 @@
 namespace el1::io::file
 {
 	const char32_t TPath::SEPERATOR('/');
-	const char* const TPath::PARENT_DIR = "..";
-	const char* const TPath::CURRENT_DIR = ".";
+	const TString TPath::PARENT_DIR = U"..";
+	const TString TPath::CURRENT_DIR = U".";
 
 	int TAccess::FileOpenFlags() const
 	{

@@ -151,9 +151,9 @@ namespace el1::io::net::ip
 
 	netmask_t::netmask_t(const text::string::TString& str, const EIP version)
 	{
-		if(str.Contains("/"))
+		if(str.Contains(TStringView(U"/")))
 		{
-			auto arr = str.Split("/", 2);
+			auto arr = str.Split(TStringView(U"/"), 2);
 			ip = ipaddr_t(arr[0], version);
 			cidr = arr[1].ToInteger();
 		}

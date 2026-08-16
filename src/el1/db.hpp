@@ -136,8 +136,8 @@ namespace el1::db
 		try
 		{
 			const auto n_columns = CountColumns();
-			EL_ERROR(End(), TException, "EOF reached");
-			EL_ERROR(n_columns == 0, TException, "query did not produce any output");
+			EL_ERROR(End(), TException, U"EOF reached");
+			EL_ERROR(n_columns == 0, TException, U"query did not produce any output");
 			EL_ERROR(sizeof...(A) != n_columns, TInvalidArgumentException, "A...", "the number of template arguments does not match with the number of columns in the query result");
 			return _RowToTuple<std::tuple<const A* ...> >(std::make_index_sequence<sizeof...(A)>());
 		}
