@@ -2,150 +2,153 @@
 
 #include "def.hpp"
 #include "error.hpp"
-#include "system_task.hpp"
-#include "system_waitable.hpp"
+#include "io_collection_list.hpp"
+#include "io_stream.hpp"
 #include "util.hpp"
 #include <atomic>
-#include <cstring>
-#include <limits>
-#include <memory>
 #include <type_traits>
 
 namespace el1::io::collection::ringbuffer
 {
 	using namespace io::types;
-	using namespace io::text::string;
-	using namespace system::task;
-	using namespace system::waitable;
+	using namespace io::collection::list;
+	using namespace io::stream;
 
-	struct TRingBufferOverrunException : error::IException
-	{
-		const usys_t dropped_samples;
-
-		TString Message() const final override
-		{
-			return TString::Format(U"ring buffer consumer was overrun by producer; %d samples were dropped", dropped_samples);
-		}
-
-		error::IException* Clone() const final override
-		{
-			return new TRingBufferOverrunException(*this);
-		}
-
-		TRingBufferOverrunException(const usys_t dropped_samples) : dropped_samples(dropped_samples)
-		{
-		}
-	};
-
-	template<typename T>
-	class TRingBufferConsumer;
-
-	// Single-producer/multi-consumer overwriting ring buffer.
+	// Single-writer/multi-reader overwriting ring buffer.
 	//
-	// The producer never waits for consumers. Each consumer owns an independent
-	// read position. A slow consumer either skips overwritten records or throws
-	// TRingBufferOverrunException when Read(..., true) is used.
+	// The buffer deliberately does not synchronize individual slots. The writer
+	// owns all writes and publishes completed writes by advancing write_position.
+	// Readers own their read position independently. If a reader falls more than
+	// Capacity() entries behind, the overwritten entries are skipped. A reader
+	// checks write_position before and after copying a slot; if the producer wrapped
+	// over that slot while it was being copied, the copy is discarded and retried.
 	//
-	// Slot generations let consumers detect whether the producer wrapped while a
-	// record was copied. T must be safe to transfer as raw bytes. A concurrent
-	// overwrite may overlap the memcpy; the second generation check rejects that
-	// copy. This deliberate lock-free trade-off keeps the producer non-blocking.
+	// T must therefore be a cheap, trivially-copyable record type. This class is
+	// intended for telemetry/sample streams where dropping old data is preferable
+	// to blocking the producer.
 	template<typename T>
-	class TRingBufferProducer
+	class TRingBuffer
 	{
-		friend class TRingBufferConsumer<T>;
-
 		static_assert(std::is_trivially_copyable_v<T>, "ring buffer records must be trivially copyable");
-		static_assert(std::is_trivially_move_constructible_v<T>, "ring buffer records must be trivially move constructible");
-		static_assert(std::is_trivially_move_assignable_v<T>, "ring buffer records must be trivially move assignable");
+		static_assert(std::is_default_constructible_v<T>, "ring buffer records must be default constructible");
+		static_assert(std::is_copy_constructible_v<T>, "ring buffer records must be copy constructible");
+		static_assert(std::is_copy_assignable_v<T>, "ring buffer records must be copy assignable");
+
+		public:
+			using position_t = u32_t;
+			static_assert(std::atomic<position_t>::is_always_lock_free, "ring buffer write position must be lock-free");
 
 		private:
-			using position_t = u32_t;
-			static constexpr position_t INVALID_GENERATION = std::numeric_limits<position_t>::max();
+			static constexpr position_t WRITE_BUSY = 0x80000000U;
+			static constexpr position_t POSITION_MASK = 0x7fffffffU;
 
-			struct TSlot
+			static position_t Distance(const position_t newer, const position_t older)
 			{
-				std::atomic<position_t> generation;
-				alignas(T) byte_t storage[sizeof(T)];
-
-				TSlot() : generation(INVALID_GENERATION)
-				{
-				}
-			};
-
-			enum class ERegistrationState : u8_t
-			{
-				INACTIVE,
-				RESERVED,
-				ACTIVE,
-			};
-
-			struct TConsumerRegistration
-			{
-				TSignal data_available;
-				std::atomic<ERegistrationState> state;
-				TConsumerRegistration* next;
-
-				TConsumerRegistration(TConsumerRegistration* const next) :
-					data_available(),
-					state(ERegistrationState::RESERVED),
-					next(next)
-				{
-				}
-			};
-
-			const position_t capacity;
-			std::unique_ptr<TSlot[]> slots;
-			std::atomic<position_t> write_position;
-			std::atomic<TConsumerRegistration*> consumer_registrations;
-
-			TConsumerRegistration* RegisterConsumer()
-			{
-				for(TConsumerRegistration* registration = consumer_registrations.load(std::memory_order_acquire); registration != nullptr; registration = registration->next)
-				{
-					ERegistrationState expected = ERegistrationState::INACTIVE;
-					if(registration->state.compare_exchange_strong(expected, ERegistrationState::RESERVED, std::memory_order_acq_rel))
-					{
-						registration->data_available.Reset();
-						registration->state.store(ERegistrationState::ACTIVE, std::memory_order_release);
-						return registration;
-					}
-				}
-
-				TConsumerRegistration* head = consumer_registrations.load(std::memory_order_acquire);
-				auto* const registration = new TConsumerRegistration(head);
-				while(!consumer_registrations.compare_exchange_weak(head, registration, std::memory_order_release, std::memory_order_acquire))
-					registration->next = head;
-
-				registration->state.store(ERegistrationState::ACTIVE, std::memory_order_release);
-				return registration;
-			}
-
-			void NotifyConsumers()
-			{
-				for(TConsumerRegistration* registration = consumer_registrations.load(std::memory_order_acquire); registration != nullptr; registration = registration->next)
-					if(registration->state.load(std::memory_order_acquire) == ERegistrationState::ACTIVE)
-						registration->data_available.Raise();
+				return (newer - older) & POSITION_MASK;
 			}
 
 		public:
-			TRingBufferProducer(const TRingBufferProducer&) = delete;
-			TRingBufferProducer(TRingBufferProducer&&) = delete;
-			TRingBufferProducer& operator=(const TRingBufferProducer&) = delete;
-			TRingBufferProducer& operator=(TRingBufferProducer&&) = delete;
+
+			class TReader final : public ISource<T>
+			{
+				private:
+					const TRingBuffer* buffer;
+					position_t read_position;
+					usys_t dropped_samples;
+
+					void HandleOverrun(const position_t write_position)
+					{
+						const position_t available = TRingBuffer::Distance(write_position, read_position);
+						if(available <= buffer->capacity)
+							return;
+
+						const position_t dropped = available - buffer->capacity;
+						read_position = (read_position + dropped) & TRingBuffer::POSITION_MASK;
+						dropped_samples += dropped;
+					}
+
+				public:
+					TReader(const TReader&) = default;
+					TReader(TReader&&) = default;
+					TReader& operator=(const TReader&) = default;
+					TReader& operator=(TReader&&) = default;
+
+					usys_t Read(T* const arr_items, const usys_t n_items_max) final override
+					{
+						usys_t n_read = 0;
+						while(n_read < n_items_max)
+						{
+							const position_t counter_before = buffer->write_position.load(std::memory_order_acquire);
+							if((counter_before & TRingBuffer::WRITE_BUSY) != 0)
+								break;
+
+							const position_t write_before = counter_before & TRingBuffer::POSITION_MASK;
+							HandleOverrun(write_before);
+							if(read_position == write_before)
+								break;
+
+							const position_t position = read_position;
+							arr_items[n_read] = buffer->items[position % buffer->capacity];
+							std::atomic_thread_fence(std::memory_order_acquire);
+
+							const position_t counter_after = buffer->write_position.load(std::memory_order_acquire);
+							if(counter_after != counter_before)
+							{
+								if((counter_after & TRingBuffer::WRITE_BUSY) == 0)
+									HandleOverrun(counter_after & TRingBuffer::POSITION_MASK);
+								continue;
+							}
+
+							read_position = (position + 1) & TRingBuffer::POSITION_MASK;
+							n_read++;
+						}
+						return n_read;
+					}
+
+					bool Read(T& value)
+					{
+						return Read(&value, 1) == 1;
+					}
+
+					usys_t Available() const EL_GETTER
+					{
+						const position_t counter = buffer->write_position.load(std::memory_order_acquire);
+						if((counter & TRingBuffer::WRITE_BUSY) != 0)
+							return 0;
+						const position_t available = TRingBuffer::Distance(counter & TRingBuffer::POSITION_MASK, read_position);
+						return util::Min<usys_t>(available, buffer->capacity);
+					}
+
+					usys_t DroppedSamples() const EL_GETTER
+					{
+						return dropped_samples;
+					}
+
+					explicit TReader(const TRingBuffer& buffer) :
+						buffer(&buffer),
+						read_position(buffer.write_position.load(std::memory_order_acquire) & TRingBuffer::POSITION_MASK),
+						dropped_samples(0)
+					{
+					}
+			};
+
+		private:
+			const position_t capacity;
+			TList<T> items;
+			std::atomic<position_t> write_position;
+
+		public:
+			TRingBuffer(const TRingBuffer&) = delete;
+			TRingBuffer(TRingBuffer&&) = delete;
+			TRingBuffer& operator=(const TRingBuffer&) = delete;
+			TRingBuffer& operator=(TRingBuffer&&) = delete;
 
 			void Write(const T& value)
 			{
-				const position_t position = write_position.load(std::memory_order_relaxed);
-				TSlot& slot = slots[position % capacity];
-
-				std::memcpy(slot.storage, &value, sizeof(T));
-
-				// Publishing the generation makes the complete record visible. Publishing
-				// write_position afterwards makes the new record visible to consumers.
-				slot.generation.store(position, std::memory_order_release);
-				write_position.store(position + 1, std::memory_order_release);
-				NotifyConsumers();
+				const position_t position = write_position.load(std::memory_order_relaxed) & POSITION_MASK;
+				write_position.store(position | WRITE_BUSY, std::memory_order_release);
+				items[position % capacity] = value;
+				write_position.store((position + 1) & POSITION_MASK, std::memory_order_release);
 			}
 
 			usys_t Capacity() const EL_GETTER
@@ -153,157 +156,32 @@ namespace el1::io::collection::ringbuffer
 				return capacity;
 			}
 
-			TRingBufferProducer(const usys_t requested_capacity) :
+			position_t WritePosition() const EL_GETTER
+			{
+				return write_position.load(std::memory_order_acquire) & POSITION_MASK;
+			}
+
+			TReader Reader() const
+			{
+				return TReader(*this);
+			}
+
+			explicit TRingBuffer(const usys_t requested_capacity) :
 				capacity(static_cast<position_t>(requested_capacity)),
-				slots(requested_capacity > 0 ? std::make_unique<TSlot[]>(requested_capacity) : nullptr),
-				write_position(0),
-				consumer_registrations(nullptr)
+				items(requested_capacity),
+				write_position(0)
 			{
 				EL_ERROR(requested_capacity == 0, error::TInvalidArgumentException, "capacity", "ring buffer capacity must be greater than zero");
-				EL_ERROR(requested_capacity > std::numeric_limits<position_t>::max() / 2U, error::TInvalidArgumentException, "capacity", "ring buffer capacity is too large for generation arithmetic");
-			}
-
-			~TRingBufferProducer()
-			{
-				TConsumerRegistration* registration = consumer_registrations.load(std::memory_order_acquire);
-				while(registration != nullptr)
-				{
-					EL_WARN(registration->state.load(std::memory_order_acquire) != ERegistrationState::INACTIVE, error::TException, U"ring buffer producer destroyed while consumers were still registered");
-					TConsumerRegistration* const next = registration->next;
-					delete registration;
-					registration = next;
-				}
+				EL_ERROR(requested_capacity > POSITION_MASK / 2U, error::TInvalidArgumentException, "capacity", "ring buffer capacity is too large for write-position arithmetic");
+				items.SetCount(requested_capacity);
 			}
 	};
+
+	// Compatibility names for existing users. Consumers no longer register with
+	// the producer; constructing a reader simply snapshots the current write position.
+	template<typename T>
+	using TRingBufferProducer = TRingBuffer<T>;
 
 	template<typename T>
-	class TRingBufferConsumer
-	{
-		static_assert(std::is_trivially_copyable_v<T>, "ring buffer records must be trivially copyable");
-		static_assert(std::is_trivially_move_constructible_v<T>, "ring buffer records must be trivially move constructible");
-		static_assert(std::is_trivially_move_assignable_v<T>, "ring buffer records must be trivially move assignable");
-
-		private:
-			using TProducer = TRingBufferProducer<T>;
-			using position_t = typename TProducer::position_t;
-
-			class TDataAvailableWaitable final : public IWaitable
-			{
-				private:
-					TRingBufferConsumer* const consumer;
-
-				public:
-					bool IsReady() const final override
-					{
-						return consumer->Available() != 0 || consumer->registration->data_available.IsReady();
-					}
-
-					void Reset() const final override
-					{
-						consumer->registration->data_available.Reset();
-					}
-
-					const THandleWaitable* HandleWaitable() const final override
-					{
-						return consumer->registration->data_available.HandleWaitable();
-					}
-
-					TDataAvailableWaitable(TRingBufferConsumer* const consumer) : consumer(consumer)
-					{
-					}
-			};
-
-			TProducer* const producer;
-			position_t read_position;
-			typename TProducer::TConsumerRegistration* const registration;
-			usys_t dropped_samples;
-			TDataAvailableWaitable data_available;
-
-			void HandleOverrun(const position_t observed_write_position, const bool throw_on_overrun)
-			{
-				const position_t available = observed_write_position - read_position;
-				if(available <= producer->capacity)
-					return;
-
-				const position_t n_dropped = available - producer->capacity;
-				read_position += n_dropped;
-				dropped_samples += n_dropped;
-
-				if(throw_on_overrun)
-					EL_THROW(TRingBufferOverrunException, static_cast<usys_t>(n_dropped));
-			}
-
-		public:
-			TRingBufferConsumer(const TRingBufferConsumer&) = delete;
-			TRingBufferConsumer(TRingBufferConsumer&&) = delete;
-			TRingBufferConsumer& operator=(const TRingBufferConsumer&) = delete;
-			TRingBufferConsumer& operator=(TRingBufferConsumer&&) = delete;
-
-			bool Read(T& value, const bool throw_on_overrun = false)
-			{
-				for(;;)
-				{
-					position_t observed_write_position = producer->write_position.load(std::memory_order_acquire);
-					if(observed_write_position == read_position)
-						return false;
-
-					HandleOverrun(observed_write_position, throw_on_overrun);
-
-					const position_t expected_generation = read_position;
-					typename TProducer::TSlot& slot = producer->slots[expected_generation % producer->capacity];
-					const position_t generation_before = slot.generation.load(std::memory_order_acquire);
-
-					if(generation_before != expected_generation)
-					{
-						HandleOverrun(producer->write_position.load(std::memory_order_acquire), throw_on_overrun);
-						continue;
-					}
-
-					std::memcpy(&value, slot.storage, sizeof(T));
-					std::atomic_thread_fence(std::memory_order_acquire);
-
-					const position_t generation_after = slot.generation.load(std::memory_order_acquire);
-					observed_write_position = producer->write_position.load(std::memory_order_acquire);
-
-					if(generation_after != expected_generation || observed_write_position - expected_generation > producer->capacity)
-					{
-						HandleOverrun(observed_write_position, throw_on_overrun);
-						continue;
-					}
-
-					read_position = expected_generation + 1;
-					return true;
-				}
-			}
-
-			usys_t Available() const EL_GETTER
-			{
-				const position_t available = producer->write_position.load(std::memory_order_acquire) - read_position;
-				return util::Min<usys_t>(available, producer->capacity);
-			}
-
-			usys_t DroppedSamples() const EL_GETTER
-			{
-				return dropped_samples;
-			}
-
-			const IWaitable& OnDataAvailable() const EL_GETTER
-			{
-				return data_available;
-			}
-
-			TRingBufferConsumer(TProducer& producer) :
-				producer(&producer),
-				read_position(producer.write_position.load(std::memory_order_acquire)),
-				registration(producer.RegisterConsumer()),
-				dropped_samples(0),
-				data_available(this)
-			{
-			}
-
-			~TRingBufferConsumer()
-			{
-				registration->state.store(TProducer::ERegistrationState::INACTIVE, std::memory_order_release);
-			}
-	};
+	using TRingBufferConsumer = typename TRingBuffer<T>::TReader;
 }

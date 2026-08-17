@@ -1,13 +1,14 @@
 #include <gtest/gtest.h>
 #include <el1/io_collection_ringbuffer.hpp>
-#include <el1/system_task.hpp>
+#include <type_traits>
+#include <atomic>
+#include <thread>
 
 using namespace ::testing;
 
 namespace
 {
 	using namespace el1::io::collection::ringbuffer;
-	using namespace el1::system::task;
 
 	struct TRecord
 	{
@@ -16,86 +17,59 @@ namespace
 	};
 
 	static_assert(std::is_trivially_copyable_v<TRecord>);
-	static_assert(std::is_trivially_move_constructible_v<TRecord>);
-	static_assert(std::is_trivially_move_assignable_v<TRecord>);
 
-	TEST(io_collection_ringbuffer, consumer_receives_data_and_waitable_wakes)
+	TEST(io_collection_ringbuffer, reader_receives_data)
 	{
-		TRingBufferProducer<int> producer(8);
-		TRingBufferConsumer<int> consumer(producer);
+		TRingBuffer<int> buffer(8);
+		auto reader = buffer.Reader();
+		buffer.Write(42);
 
-		TThread writer(
-			U"ring-writer",
-			[&]()
-			{
-				TFiber::Sleep(0.01);
-				producer.Write(42);
-			}
-		);
-
-		consumer.OnDataAvailable().WaitFor();
 		int value = 0;
-		EXPECT_TRUE(consumer.Read(value));
+		EXPECT_TRUE(reader.Read(value));
 		EXPECT_EQ(value, 42);
-		EXPECT_FALSE(consumer.Read(value));
-
-		auto exception = writer.Join();
-		EXPECT_EQ(exception, nullptr);
+		EXPECT_FALSE(reader.Read(value));
 	}
 
-	TEST(io_collection_ringbuffer, slow_consumer_skips_overwritten_samples)
+	TEST(io_collection_ringbuffer, reader_is_an_isource)
 	{
-		TRingBufferProducer<int> producer(4);
-		TRingBufferConsumer<int> consumer(producer);
+		TRingBuffer<int> buffer(8);
+		auto reader = buffer.Reader();
+		el1::io::stream::ISource<int>& source = reader;
+
+		buffer.Write(11);
+		buffer.Write(12);
+		int values[4] = {};
+		EXPECT_EQ(source.Read(values, 4), 2U);
+		EXPECT_EQ(values[0], 11);
+		EXPECT_EQ(values[1], 12);
+	}
+
+	TEST(io_collection_ringbuffer, slow_reader_skips_overwritten_samples)
+	{
+		TRingBuffer<int> buffer(4);
+		auto reader = buffer.Reader();
 
 		for(int i = 0; i < 10; i++)
-			producer.Write(i);
+			buffer.Write(i);
 
 		int value = 0;
 		for(int expected = 6; expected < 10; expected++)
 		{
-			ASSERT_TRUE(consumer.Read(value));
+			ASSERT_TRUE(reader.Read(value));
 			EXPECT_EQ(value, expected);
 		}
 
-		EXPECT_FALSE(consumer.Read(value));
-		EXPECT_EQ(consumer.DroppedSamples(), 6U);
+		EXPECT_FALSE(reader.Read(value));
+		EXPECT_EQ(reader.DroppedSamples(), 6U);
 	}
 
-	TEST(io_collection_ringbuffer, consumer_can_throw_on_overrun_and_continue)
+	TEST(io_collection_ringbuffer, readers_keep_independent_positions_without_registration)
 	{
-		TRingBufferProducer<int> producer(4);
-		TRingBufferConsumer<int> consumer(producer);
+		TRingBuffer<TRecord> buffer(8);
+		auto first = buffer.Reader();
+		auto second = buffer.Reader();
 
-		for(int i = 0; i < 10; i++)
-			producer.Write(i);
-
-		int value = 0;
-		try
-		{
-			consumer.Read(value, true);
-			FAIL() << "expected TRingBufferOverrunException";
-		}
-		catch(const TRingBufferOverrunException& exception)
-		{
-			EXPECT_EQ(exception.dropped_samples, 6U);
-		}
-
-		EXPECT_EQ(consumer.DroppedSamples(), 6U);
-		ASSERT_TRUE(consumer.Read(value, true));
-		EXPECT_EQ(value, 6);
-	}
-
-	TEST(io_collection_ringbuffer, multiple_consumers_keep_independent_read_positions)
-	{
-		TRingBufferProducer<TRecord> producer(8);
-		TRingBufferConsumer<TRecord> first(producer);
-		TRingBufferConsumer<TRecord> second(producer);
-
-		producer.Write({ 7, ~7U });
-
-		EXPECT_TRUE(first.OnDataAvailable().IsReady());
-		EXPECT_TRUE(second.OnDataAvailable().IsReady());
+		buffer.Write({ 7, ~7U });
 
 		TRecord value {};
 		ASSERT_TRUE(first.Read(value));
@@ -107,69 +81,51 @@ namespace
 		EXPECT_EQ(value.inverse, ~7U);
 	}
 
-	TEST(io_collection_ringbuffer, one_write_wakes_multiple_consumer_fibers)
+
+	TEST(io_collection_ringbuffer, concurrent_reader_never_accepts_overwritten_record)
 	{
-		TRingBufferProducer<int> producer(8);
-		TRingBufferConsumer<int> first(producer);
-		TRingBufferConsumer<int> second(producer);
-		int first_value = 0;
-		int second_value = 0;
+		TRingBuffer<TRecord> buffer(64);
+		auto reader = buffer.Reader();
+		std::atomic<bool> writer_done(false);
 
-		TFiber first_reader([&]()
-		{
-			first.OnDataAvailable().WaitFor();
-			EXPECT_TRUE(first.Read(first_value));
-		});
-
-		TFiber second_reader([&]()
-		{
-			second.OnDataAvailable().WaitFor();
-			EXPECT_TRUE(second.Read(second_value));
-		});
-
-		producer.Write(23);
-
-		EXPECT_EQ(first_reader.Join(), nullptr);
-		EXPECT_EQ(second_reader.Join(), nullptr);
-		EXPECT_EQ(first_value, 23);
-		EXPECT_EQ(second_value, 23);
-	}
-	TEST(io_collection_ringbuffer, one_write_wakes_consumers_on_different_threads)
-	{
-		TRingBufferProducer<int> producer(8);
-		TRingBufferConsumer<int> first(producer);
-		TRingBufferConsumer<int> second(producer);
-		std::atomic<int> first_value(0);
-		std::atomic<int> second_value(0);
-
-		TThread first_reader(
-			U"ring-reader-1",
+		std::thread writer(
 			[&]()
 			{
-				first.OnDataAvailable().WaitFor();
-				int value = 0;
-				if(first.Read(value))
-					first_value.store(value, std::memory_order_release);
+				for(u32_t i = 1; i <= 250000; i++)
+					buffer.Write({ i, ~i });
+				writer_done.store(true, std::memory_order_release);
 			}
 		);
 
-		TThread second_reader(
-			U"ring-reader-2",
-			[&]()
+		TRecord value {};
+		usys_t n_read = 0;
+		while(!writer_done.load(std::memory_order_acquire) || reader.Available() != 0)
+		{
+			if(!reader.Read(value))
 			{
-				second.OnDataAvailable().WaitFor();
-				int value = 0;
-				if(second.Read(value))
-					second_value.store(value, std::memory_order_release);
+				std::this_thread::yield();
+				continue;
 			}
-		);
 
-		producer.Write(31);
+			EXPECT_EQ(value.inverse, ~value.sequence);
+			n_read++;
+		}
 
-		EXPECT_EQ(first_reader.Join(), nullptr);
-		EXPECT_EQ(second_reader.Join(), nullptr);
-		EXPECT_EQ(first_value.load(std::memory_order_acquire), 31);
-		EXPECT_EQ(second_value.load(std::memory_order_acquire), 31);
+		writer.join();
+		EXPECT_GT(n_read, 0U);
 	}
 
+	TEST(io_collection_ringbuffer, new_reader_starts_at_current_write_position)
+	{
+		TRingBuffer<int> buffer(4);
+		buffer.Write(1);
+		buffer.Write(2);
+		auto reader = buffer.Reader();
+
+		int value = 0;
+		EXPECT_FALSE(reader.Read(value));
+		buffer.Write(3);
+		ASSERT_TRUE(reader.Read(value));
+		EXPECT_EQ(value, 3);
+	}
 }
