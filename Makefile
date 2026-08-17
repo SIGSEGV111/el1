@@ -291,7 +291,7 @@ lifetime-check:
 	@echo "Additional lifetime-check flags: $(strip $(LIFETIME_CHECK_CXXFLAGS))"
 
 clean:
-	rm -rf -- "$(OUT_DIR)" "$(LIFETIME_OUT_DIR)" *.rpm
+	rm -rf -- "$(OUT_DIR)" "$(LIFETIME_OUT_DIR)" *.rpm vgcore.*
 
 # -----------------------------------------------------------------------------
 # Library and test build rules
