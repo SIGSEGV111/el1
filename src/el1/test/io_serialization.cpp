@@ -112,16 +112,16 @@ namespace
 
 		const TString metadata_key(U"$el1");
 		const auto& metadata = json.Map()[metadata_key].Map();
-		EXPECT_EQ(metadata[TString(U"format")].Integer(), 1);
-		EXPECT_EQ(metadata[TString(U"version")].Integer(), 2);
+		EXPECT_EQ(metadata[TString(U"format")].ToInteger<u32_t>(), 1);
+		EXPECT_EQ(metadata[TString(U"version")].ToInteger<u32_t>(), 2);
 		EXPECT_EQ(metadata[TString(U"type")].String(), TString(U"serialization_test::TRoot"));
 		EXPECT_EQ(metadata[TString(U"type_id")].String().Length(), 32U);
-		EXPECT_TRUE(json.Map()[TString(U"big")].IsInteger());
-		EXPECT_EQ(json.Map()[TString(U"big")].Integer(), std::numeric_limits<s64_t>::max());
+		EXPECT_TRUE(json.Map()[TString(U"big")].IsNumber());
+		EXPECT_EQ(json.Map()[TString(U"big")].ToInteger<s64_t>(), std::numeric_limits<s64_t>::max());
 
 		const auto& child = json.Map()[TString(U"children")].Array()[0];
 		ASSERT_TRUE(child.IsMap());
-		EXPECT_EQ(child.Map()[metadata_key].Map()[TString(U"version")].Integer(), 1);
+		EXPECT_EQ(child.Map()[metadata_key].Map()[TString(U"version")].ToInteger<u32_t>(), 1);
 
 		const TString encoded = json.ToString();
 		EXPECT_NE(encoded.Find(TStringView(U"9223372036854775807")), NEG1);
@@ -163,8 +163,8 @@ namespace
 	{
 		const serialization_test::TCompact source{123};
 		const TJsonValue json = json::ToValue(source);
-		ASSERT_TRUE(json.IsInteger());
-		EXPECT_EQ(json.Integer(), 123);
+		ASSERT_TRUE(json.IsNumber());
+		EXPECT_EQ(json.ToInteger<s64_t>(), 123);
 		EXPECT_EQ(json::FromValue<serialization_test::TCompact>(json).value, 123);
 	}
 

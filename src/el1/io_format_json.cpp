@@ -35,9 +35,6 @@ namespace el1::io::format::json
 			case EType::NUMBER:
 				return "number";
 
-			case EType::INTEGER:
-				return "integer";
-
 			case EType::STRING:
 				return "string";
 
@@ -55,12 +52,11 @@ namespace el1::io::format::json
 
 	void TJsonValue::Destruct() noexcept
 	{
-		switch(type)
+		switch(Type())
 		{
 			case EType::NULLVALUE:
 			case EType::BOOLEAN:
 			case EType::NUMBER:
-			case EType::INTEGER:
 				// nothing to do
 				break;
 
@@ -77,16 +73,16 @@ namespace el1::io::format::json
 				break;
 		}
 
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 	}
 
 	////////////////////////////////////////////////////////////////////
 
 	bool TJsonValue::operator==(const TJsonValue& rhs) const
 	{
-		if(this->type == rhs.type)
+		if(this->Type() == rhs.Type())
 		{
-			switch(this->type)
+			switch(this->Type())
 			{
 				case EType::NULLVALUE:
 					return true;
@@ -95,10 +91,43 @@ namespace el1::io::format::json
 					return this->Boolean() == rhs.Boolean();
 
 				case EType::NUMBER:
-					return this->Number() == rhs.Number();
+				{
+					const auto integer_equals_floating = [](const number_t& integer, const ENumberRepresentation integer_representation, const number_t& floating)
+					{
+						const double value = floating.floating;
+						if(!std::isfinite(value) || std::trunc(value) != value)
+							return false;
 
-				case EType::INTEGER:
-					return this->Integer() == rhs.Integer();
+						if(integer_representation == ENumberRepresentation::SIGNED_INTEGER)
+						{
+							const double limit = std::ldexp(1.0, std::numeric_limits<s64_t>::digits);
+							return value >= -limit && value < limit && static_cast<s64_t>(value) == integer.signed_integer;
+						}
+
+						const double limit = std::ldexp(1.0, std::numeric_limits<u64_t>::digits);
+						return value >= 0.0 && value < limit && static_cast<u64_t>(value) == integer.unsigned_integer;
+					};
+
+					if(NumberRepresentation() == ENumberRepresentation::FLOATING && rhs.NumberRepresentation() == ENumberRepresentation::FLOATING)
+						return number.floating == rhs.number.floating;
+
+					if(NumberRepresentation() == ENumberRepresentation::FLOATING)
+						return integer_equals_floating(rhs.number, rhs.NumberRepresentation(), number);
+
+					if(rhs.NumberRepresentation() == ENumberRepresentation::FLOATING)
+						return integer_equals_floating(number, NumberRepresentation(), rhs.number);
+
+					if(NumberRepresentation() == ENumberRepresentation::SIGNED_INTEGER && rhs.NumberRepresentation() == ENumberRepresentation::SIGNED_INTEGER)
+						return number.signed_integer == rhs.number.signed_integer;
+
+					if(NumberRepresentation() == ENumberRepresentation::UNSIGNED_INTEGER && rhs.NumberRepresentation() == ENumberRepresentation::UNSIGNED_INTEGER)
+						return number.unsigned_integer == rhs.number.unsigned_integer;
+
+					if(NumberRepresentation() == ENumberRepresentation::SIGNED_INTEGER)
+						return number.signed_integer >= 0 && static_cast<u64_t>(number.signed_integer) == rhs.number.unsigned_integer;
+
+					return rhs.number.signed_integer >= 0 && number.unsigned_integer == static_cast<u64_t>(rhs.number.signed_integer);
+				}
 
 				case EType::STRING:
 					return this->String() == rhs.String();
@@ -147,7 +176,7 @@ namespace el1::io::format::json
 
 	bool TJsonValue::IsNull() const
 	{
-		return type == EType::NULLVALUE;
+		return type == EStorageType::NULLVALUE;
 	}
 
 	void TJsonValue::SetNull()
@@ -175,42 +204,31 @@ namespace el1::io::format::json
 
 	////////////////////////////////////////////////////////////////////
 
-	s64_t& TJsonValue::Integer()
-	{
-		EL_ERROR(Type() != EType::INTEGER, TException, TString::Format(U"requested integer value, but contains %s", JsonTypeToString(Type())));
-		return integer;
-	}
-
-	const s64_t& TJsonValue::Integer() const
-	{
-		return const_cast<TJsonValue*>(this)->Integer();
-	}
-
-	const s64_t& TJsonValue::Integer(const s64_t& _default) const
-	{
-		return IsInteger() ? Integer() : _default;
-	}
-
-	////////////////////////////////////////////////////////////////////
-
 	double TJsonValue::ToDouble() const
 	{
-		EL_ERROR(!IsNumeric(), TException, TString::Format(U"requested numeric value, but contains %s", JsonTypeToString(Type())));
-		return IsInteger() ? (double)Integer() : Number();
+		return Number();
 	}
 
-	double& TJsonValue::Number()
+	double TJsonValue::Number() const
 	{
 		EL_ERROR(Type() != EType::NUMBER, TException, TString::Format(U"requested number value, but contains %s", JsonTypeToString(Type())));
-		return number;
+
+		switch(NumberRepresentation())
+		{
+			case ENumberRepresentation::SIGNED_INTEGER:
+				return static_cast<double>(number.signed_integer);
+
+			case ENumberRepresentation::UNSIGNED_INTEGER:
+				return static_cast<double>(number.unsigned_integer);
+
+			case ENumberRepresentation::FLOATING:
+				return number.floating;
+		}
+
+		EL_THROW(TLogicException);
 	}
 
-	const double& TJsonValue::Number() const
-	{
-		return const_cast<TJsonValue*>(this)->Number();
-	}
-
-	const double& TJsonValue::Number(const double& _default) const
+	double TJsonValue::Number(const double _default) const
 	{
 		return IsNumber() ? Number() : _default;
 	}
@@ -277,7 +295,7 @@ namespace el1::io::format::json
 			return *this;
 		Destruct();
 
-		switch(rhs.type)
+		switch(rhs.Type())
 		{
 			case EType::NULLVALUE:
 				break;
@@ -288,10 +306,6 @@ namespace el1::io::format::json
 
 			case EType::NUMBER:
 				this->number = rhs.number;
-				break;
-
-			case EType::INTEGER:
-				this->integer = rhs.integer;
 				break;
 
 			case EType::STRING:
@@ -317,7 +331,7 @@ namespace el1::io::format::json
 			return *this;
 		Destruct();
 
-		switch(rhs.type)
+		switch(rhs.Type())
 		{
 			case EType::NULLVALUE:
 				break;
@@ -328,10 +342,6 @@ namespace el1::io::format::json
 
 			case EType::NUMBER:
 				this->number = rhs.number;
-				break;
-
-			case EType::INTEGER:
-				this->integer = rhs.integer;
 				break;
 
 			case EType::STRING:
@@ -355,95 +365,89 @@ namespace el1::io::format::json
 
 	TJsonValue::TJsonValue(const bool boolean)
 	{
-		type = EType::BOOLEAN;
+		type = EStorageType::BOOLEAN;
 		this->boolean = boolean;
-	}
-
-	TJsonValue::TJsonValue(const s64_t integer)
-	{
-		type = EType::INTEGER;
-		this->integer = integer;
 	}
 
 	TJsonValue::TJsonValue(const double number)
 	{
-		type = EType::NUMBER;
-		this->number = number;
+		type = EStorageType::NUMBER_FLOATING;
+		this->number.floating = number;
 	}
 
 	TJsonValue::TJsonValue(const TString& string)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		new (__placeholder) TString(string);
-		type = EType::STRING;
+		type = EStorageType::STRING;
 	}
 
 	TJsonValue::TJsonValue(TString&& string)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		new (__placeholder) TString(std::move(string));
-		type = EType::STRING;
+		type = EStorageType::STRING;
 	}
 
 	TJsonValue::TJsonValue(const char* const string)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		new (__placeholder) TString(string);
-		type = EType::STRING;
+		type = EStorageType::STRING;
 	}
 
 	TJsonValue::TJsonValue(const TJsonArray& array)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		new (__placeholder) TJsonArray(array);
-		type = EType::ARRAY;
+		type = EStorageType::ARRAY;
 	}
 
 	TJsonValue::TJsonValue(const array_t<const TJsonValue> array)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		new (__placeholder) TJsonArray(array);
-		type = EType::ARRAY;
+		type = EStorageType::ARRAY;
 	}
 
 	TJsonValue::TJsonValue(TJsonArray&& array)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		new (__placeholder) TJsonArray(std::move(array));
-		type = EType::ARRAY;
+		type = EStorageType::ARRAY;
 	}
 
 	TJsonValue::TJsonValue(const TConstJsonMap& map)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		new (__placeholder) TJsonMap(map);
-		type = EType::MAP;
+		type = EStorageType::MAP;
 	}
 
 	TJsonValue::TJsonValue(TJsonMap&& map)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		new (__placeholder) TJsonMap(std::move(map));
-		type = EType::MAP;
+		type = EStorageType::MAP;
 	}
 
 	////////////////////////////////////////////////////////////////////
 
 	TJsonValue::TJsonValue(const TJsonValue& other)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		(*this) = other;
 	}
 
 	TJsonValue::TJsonValue(TJsonValue&& other)
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 		(*this) = std::move(other);
 	}
 
 	TJsonValue::TJsonValue()
 	{
-		type = EType::NULLVALUE;
+		type = EStorageType::NULLVALUE;
 	}
 
 	TJsonValue::~TJsonValue()
@@ -521,13 +525,21 @@ namespace el1::io::format::json
 				sink.WriteAll(str.chars);
 				break;
 
-			case EType::INTEGER:
-				str = TString::Format(U"%d", this->Integer());
-				sink.WriteAll(str.chars);
-				break;
-
 			case EType::NUMBER:
-				str = TString::Format(U"%d", this->Number());
+				switch(NumberRepresentation())
+				{
+					case ENumberRepresentation::SIGNED_INTEGER:
+						str = TString::Format(U"%d", number.signed_integer);
+						break;
+
+					case ENumberRepresentation::UNSIGNED_INTEGER:
+						str = TString::Format(U"%u", number.unsigned_integer);
+						break;
+
+					case ENumberRepresentation::FLOATING:
+						str = TString::Format(U"%d", number.floating);
+						break;
+				}
 				sink.WriteAll(str.chars);
 				break;
 
@@ -618,12 +630,6 @@ namespace el1::io::format::json
 		return value;
 	}
 
-	std::optional<TJsonValue> TJsonParser::ConvertInteger(const TStringView token)
-	{
-		const auto value = text::scan::ParseNumber<s64_t>(token, 10);
-		return value ? std::optional<TJsonValue>(TJsonValue(*value)) : std::nullopt;
-	}
-
 	std::optional<TJsonValue> TJsonParser::ConvertNumber(const TStringView token)
 	{
 		const auto value = text::scan::ParseNumber<double>(token, 10);
@@ -632,7 +638,20 @@ namespace el1::io::format::json
 
 	std::optional<TJsonValue> TJsonParser::ConvertNumeric(const TStringView token)
 	{
-		return token.Contains(U'.') || token.Contains(U'e') || token.Contains(U'E') ? ConvertNumber(token) : ConvertInteger(token);
+		if(!token.Contains(U'.') && !token.Contains(U'e') && !token.Contains(U'E'))
+		{
+			if(token[0] == U'-')
+			{
+				if(const auto value = text::scan::ParseNumber<s64_t>(token, 10))
+					return TJsonValue(*value);
+			}
+			else if(const auto value = text::scan::ParseNumber<u64_t>(token, 10))
+			{
+				return TJsonValue(*value);
+			}
+		}
+
+		return ConvertNumber(token);
 	}
 
 	TJsonValue TJsonValue::Parse(const TStringView str, const bool tolerant)
@@ -674,7 +693,7 @@ namespace el1::io::format::json
 	const TJsonValue TJsonValue::NULLVALUE = TJsonValue();
 	const TJsonValue TJsonValue::TRUE = TJsonValue(true);
 	const TJsonValue TJsonValue::FALSE = TJsonValue(false);
-	const TJsonValue TJsonValue::ZERO = TJsonValue((s64_t)0);
+	const TJsonValue TJsonValue::ZERO = TJsonValue(0);
 	const TJsonValue TJsonValue::EMPTY_STRING = TJsonValue(TString());
 	const TJsonValue TJsonValue::EMPTY_ARRAY = TJsonValue(TJsonArray());
 	const TJsonValue TJsonValue::EMPTY_MAP = TJsonValue(TJsonMap());

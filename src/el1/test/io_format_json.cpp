@@ -13,9 +13,10 @@ namespace
 	{
 		{
 			const TJsonValue json = TJsonValue::Parse(U"12345");
-			EXPECT_EQ(json.Type(), EType::INTEGER);
-			EXPECT_EQ(json.Integer(), 12345);
+			EXPECT_EQ(json.Type(), EType::NUMBER);
+			EXPECT_EQ(json.Number(), 12345.0);
 			EXPECT_TRUE(json.IsNumeric());
+			EXPECT_EQ(json.ToInteger<s32_t>(), 12345);
 			EXPECT_EQ(json.ToDouble(), 12345.0);
 		}
 
@@ -94,14 +95,14 @@ namespace
 			EXPECT_EQ(json[1].String(), U"hello world");
 			EXPECT_EQ(json[2].Number(), 17.5);
 			EXPECT_EQ(json[3].Number(), 12.5);
-			EXPECT_EQ(json[4].Integer(), 7);
-			EXPECT_EQ(json[5].Integer(), 3);
-			EXPECT_EQ(json[6].Integer(), -2);
+			EXPECT_EQ(json[4].ToInteger<s32_t>(), 7);
+			EXPECT_EQ(json[5].ToInteger<s32_t>(), 3);
+			EXPECT_EQ(json[6].ToInteger<s32_t>(), -2);
 			EXPECT_EQ(json[7].Array().Count(), 0U);
 			EXPECT_EQ(json[8].Array().Count(), 3U);
-			EXPECT_EQ(json[8][0].Integer(), 1);
-			EXPECT_EQ(json[8][1].Integer(), 2);
-			EXPECT_EQ(json[8][2].Integer(), 3);
+			EXPECT_EQ(json[8][0].ToInteger<s32_t>(), 1);
+			EXPECT_EQ(json[8][1].ToInteger<s32_t>(), 2);
+			EXPECT_EQ(json[8][2].ToInteger<s32_t>(), 3);
 		}
 
 		{
@@ -155,11 +156,32 @@ namespace
 		}
 
 		{
-			const TJsonValue max = TJsonValue::Parse(U"9223372036854775807");
-			const TJsonValue min = TJsonValue::Parse(U"-9223372036854775808");
-			EXPECT_EQ(max.Integer(), std::numeric_limits<s64_t>::max());
-			EXPECT_EQ(min.Integer(), std::numeric_limits<s64_t>::min());
-			EXPECT_THROW(TJsonValue::Parse(U"9223372036854775808"), TInvalidJsonException);
+			const TJsonValue signed_max = TJsonValue::Parse(U"9223372036854775807");
+			const TJsonValue signed_min = TJsonValue::Parse(U"-9223372036854775808");
+			const TJsonValue unsigned_max = TJsonValue::Parse(U"18446744073709551615");
+			EXPECT_EQ(signed_max.Type(), EType::NUMBER);
+			EXPECT_EQ(signed_max.ToInteger<s64_t>(), std::numeric_limits<s64_t>::max());
+			EXPECT_EQ(signed_min.ToInteger<s64_t>(), std::numeric_limits<s64_t>::min());
+			EXPECT_EQ(unsigned_max.ToInteger<u64_t>(), std::numeric_limits<u64_t>::max());
+			EXPECT_EQ(signed_max.ToString(), U"9223372036854775807");
+			EXPECT_EQ(unsigned_max.ToString(), U"18446744073709551615");
+			EXPECT_THROW(signed_max.ToInteger<s32_t>(), TException);
+			EXPECT_THROW(TJsonValue::Parse(U"9223372036854775808").ToInteger<s64_t>(), TException);
+			EXPECT_THROW(TJsonValue::Parse(U"18446744073709551616").ToInteger<u64_t>(), TException);
+			EXPECT_TRUE(TJsonValue::Parse(U"1") == TJsonValue(1.0));
+			EXPECT_TRUE(TJsonValue::Parse(U"1") == TJsonValue((u64_t)1));
+			EXPECT_FALSE(TJsonValue::Parse(U"9007199254740993") == TJsonValue(9007199254740992.0));
+		}
+
+		{
+			EXPECT_EQ(TJsonValue::Parse(U"65535").ToInteger<u16_t>(), std::numeric_limits<u16_t>::max());
+			EXPECT_THROW(TJsonValue::Parse(U"65536").ToInteger<u16_t>(), TException);
+			EXPECT_THROW(TJsonValue::Parse(U"-1").ToInteger<u16_t>(), TException);
+			EXPECT_THROW(TJsonValue::Parse(U"1.5").ToInteger<s32_t>(), TException);
+			EXPECT_EQ(TJsonValue::Parse(U"1e3").ToInteger<s32_t>(), 1000);
+			EXPECT_THROW(TJsonValue::Parse(U"1e-1").ToInteger<s32_t>(), TException);
+			EXPECT_EQ(TJsonValue().ToInteger<u16_t>(123), 123);
+			EXPECT_THROW(TJsonValue(U"not-a-number").ToInteger<u16_t>(123), TException);
 		}
 
 		{
@@ -220,10 +242,17 @@ namespace
 		}
 
 		{
-			TJsonValue value = (s64_t)9223372036854775807LL;
-			EXPECT_EQ(value.Type(), EType::INTEGER);
-			EXPECT_EQ(value.Integer(), std::numeric_limits<s64_t>::max());
+			TJsonValue value = std::numeric_limits<s64_t>::max();
+			EXPECT_EQ(value.Type(), EType::NUMBER);
+			EXPECT_EQ(value.ToInteger<s64_t>(), std::numeric_limits<s64_t>::max());
 			EXPECT_EQ(value.ToString(), U"9223372036854775807");
+		}
+
+		{
+			TJsonValue value = std::numeric_limits<u64_t>::max();
+			EXPECT_EQ(value.Type(), EType::NUMBER);
+			EXPECT_EQ(value.ToInteger<u64_t>(), std::numeric_limits<u64_t>::max());
+			EXPECT_EQ(value.ToString(), U"18446744073709551615");
 		}
 
 		{
@@ -363,7 +392,8 @@ namespace
 		{
 			TJsonValue value;
 			EXPECT_THROW(value.Boolean() = true, TException);
-			EXPECT_THROW(value.Number() = 17.3, TException);
+			EXPECT_THROW((void)value.Number(), TException);
+			EXPECT_THROW((void)value.ToInteger<s32_t>(), TException);
 			EXPECT_THROW(value.String() = U"test", TException);
 			EXPECT_THROW(value.Array().Clear(), TException);
 			EXPECT_THROW(value.Map().Remove(U"test"), TException);
@@ -371,7 +401,8 @@ namespace
 
 		{
 			TJsonValue value = true;
-			EXPECT_THROW(value.Number() = 17.3, TException);
+			EXPECT_THROW((void)value.Number(), TException);
+			EXPECT_THROW((void)value.ToInteger<s32_t>(), TException);
 			EXPECT_THROW(value.String() = U"test", TException);
 			EXPECT_THROW(value.Array().Clear(), TException);
 			EXPECT_THROW(value.Map().Remove(U"test"), TException);
@@ -388,7 +419,8 @@ namespace
 		{
 			TJsonValue value = "test";
 			EXPECT_THROW(value.Boolean() = true, TException);
-			EXPECT_THROW(value.Number() = 17.3, TException);
+			EXPECT_THROW((void)value.Number(), TException);
+			EXPECT_THROW((void)value.ToInteger<s32_t>(), TException);
 			EXPECT_THROW(value.Array().Clear(), TException);
 			EXPECT_THROW(value.Map().Remove(U"test"), TException);
 		}
@@ -396,7 +428,8 @@ namespace
 		{
 			TJsonValue value = TList<TJsonValue>();
 			EXPECT_THROW(value.Boolean() = true, TException);
-			EXPECT_THROW(value.Number() = 17.3, TException);
+			EXPECT_THROW((void)value.Number(), TException);
+			EXPECT_THROW((void)value.ToInteger<s32_t>(), TException);
 			EXPECT_THROW(value.String() = U"test", TException);
 			EXPECT_THROW(value.Map().Remove(U"test"), TException);
 		}
@@ -404,7 +437,8 @@ namespace
 		{
 			TJsonValue value = TSortedMap<TString, TJsonValue>();
 			EXPECT_THROW(value.Boolean() = true, TException);
-			EXPECT_THROW(value.Number() = 17.3, TException);
+			EXPECT_THROW((void)value.Number(), TException);
+			EXPECT_THROW((void)value.ToInteger<s32_t>(), TException);
 			EXPECT_THROW(value.String() = U"test", TException);
 			EXPECT_THROW(value.Array().Clear(), TException);
 		}

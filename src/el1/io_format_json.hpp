@@ -7,7 +7,9 @@
 #include "io_stream_producer.hpp"
 #include "io_text_parser.hpp"
 #include <concepts>
+#include <cmath>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 namespace el1::io::file
@@ -49,8 +51,7 @@ namespace el1::io::format::json
 		NUMBER = 2,		// => double
 		STRING = 3,		// => TString
 		ARRAY = 4,		// => TJsonArray
-		MAP = 5,			// => TJsonMap
-		INTEGER = 6		// => s64_t
+		MAP = 5			// => TJsonMap
 	};
 
 	const char* JsonTypeToString(const EType type);
@@ -62,12 +63,39 @@ namespace el1::io::format::json
 	class TJsonValue
 	{
 		protected:
-			EType type;
+			enum class ENumberRepresentation : u8_t
+			{
+				FLOATING,
+				SIGNED_INTEGER,
+				UNSIGNED_INTEGER
+			};
+
+			union number_t
+			{
+				double floating;
+				s64_t signed_integer;
+				u64_t unsigned_integer;
+			};
+
+			enum class EStorageType : usys_t
+			{
+				NULLVALUE = static_cast<usys_t>(EType::NULLVALUE),
+				BOOLEAN = static_cast<usys_t>(EType::BOOLEAN),
+				NUMBER_FLOATING = static_cast<usys_t>(EType::NUMBER),
+				STRING = static_cast<usys_t>(EType::STRING),
+				ARRAY = static_cast<usys_t>(EType::ARRAY),
+				MAP = static_cast<usys_t>(EType::MAP),
+				NUMBER_SIGNED_INTEGER,
+				NUMBER_UNSIGNED_INTEGER
+			};
+
+			static_assert(sizeof(number_t) == sizeof(u64_t));
+
+			EStorageType type;
 			union
 			{
 				bool boolean;
-				double number;
-				s64_t integer;
+				number_t number;
 
 				struct
 				{
@@ -77,10 +105,21 @@ namespace el1::io::format::json
 
 			void Destruct() noexcept;
 
+			ENumberRepresentation NumberRepresentation() const noexcept
+			{
+				if(type == EStorageType::NUMBER_SIGNED_INTEGER)
+					return ENumberRepresentation::SIGNED_INTEGER;
+				if(type == EStorageType::NUMBER_UNSIGNED_INTEGER)
+					return ENumberRepresentation::UNSIGNED_INTEGER;
+				return ENumberRepresentation::FLOATING;
+			}
+
 		public:
 			EType Type() const EL_GETTER
 			{
-				return type;
+				if(type == EStorageType::NUMBER_SIGNED_INTEGER || type == EStorageType::NUMBER_UNSIGNED_INTEGER)
+					return EType::NUMBER;
+				return static_cast<EType>(type);
 			}
 
 			bool operator==(const TJsonValue& rhs) const EL_GETTER;
@@ -111,21 +150,52 @@ namespace el1::io::format::json
 			explicit operator bool&() { return Boolean(); }
 			explicit operator const bool&() const { return Boolean(); }
 
-			bool IsInteger() const { return Type() == EType::INTEGER; }
-			s64_t& Integer() EL_GETTER;
-			const s64_t& Integer() const EL_GETTER;
-			const s64_t& Integer(const s64_t& _default) const EL_GETTER;
-			explicit operator s64_t&() { return Integer(); }
-			explicit operator const s64_t&() const { return Integer(); }
-
 			bool IsNumber() const { return Type() == EType::NUMBER; }
-			bool IsNumeric() const { return IsInteger() || IsNumber(); }
+			bool IsNumeric() const { return IsNumber(); }
 			double ToDouble() const EL_GETTER;
-			double& Number() EL_GETTER;
-			const double& Number() const EL_GETTER;
-			const double& Number(const double& _default) const EL_GETTER;
-			explicit operator double&() { return Number(); }
-			explicit operator const double&() const { return Number(); }
+			double Number() const EL_GETTER;
+			double Number(const double _default) const EL_GETTER;
+			explicit operator double() const { return Number(); }
+
+			template<std::integral T>
+			requires (!std::same_as<std::remove_cv_t<T>, bool>)
+			T ToInteger() const EL_GETTER
+			{
+				using value_t = std::remove_cv_t<T>;
+				EL_ERROR(Type() != EType::NUMBER, TException, TString::Format(U"requested integer value, but contains %s", JsonTypeToString(Type())));
+
+				switch(NumberRepresentation())
+				{
+					case ENumberRepresentation::SIGNED_INTEGER:
+						EL_ERROR(!std::in_range<value_t>(number.signed_integer), TException, U"JSON number is outside requested integer range");
+						return static_cast<value_t>(number.signed_integer);
+
+					case ENumberRepresentation::UNSIGNED_INTEGER:
+						EL_ERROR(!std::in_range<value_t>(number.unsigned_integer), TException, U"JSON number is outside requested integer range");
+						return static_cast<value_t>(number.unsigned_integer);
+
+					case ENumberRepresentation::FLOATING:
+						break;
+				}
+
+				const double value = number.floating;
+				EL_ERROR(!std::isfinite(value) || std::trunc(value) != value, TException, U"JSON number has a fractional part and cannot be converted to an integer");
+
+				const double upper_bound = std::ldexp(1.0, std::numeric_limits<value_t>::digits);
+				if constexpr(std::is_signed_v<value_t>)
+					EL_ERROR(value < -upper_bound || value >= upper_bound, TException, U"JSON number is outside requested integer range");
+				else
+					EL_ERROR(value < 0.0 || value >= upper_bound, TException, U"JSON number is outside requested integer range");
+
+				return static_cast<value_t>(value);
+			}
+
+			template<std::integral T>
+			requires (!std::same_as<std::remove_cv_t<T>, bool>)
+			T ToInteger(const T _default) const EL_GETTER
+			{
+				return IsNull() ? _default : ToInteger<T>();
+			}
 
 			bool IsString() const { return Type() == EType::STRING; }
 			TString& String();
@@ -152,16 +222,21 @@ namespace el1::io::format::json
 			TJsonValue& operator=(TJsonValue&& rhs);
 
 			TJsonValue(const bool boolean);
-			TJsonValue(const s64_t integer);
 
 			template<std::integral T>
-			requires (!std::same_as<std::remove_cv_t<T>, bool> && !std::same_as<std::remove_cv_t<T>, s64_t>)
+			requires (!std::same_as<std::remove_cv_t<T>, bool>)
 			TJsonValue(const T integer)
 			{
-				type = EType::INTEGER;
-				if constexpr(std::is_unsigned_v<T>)
-					EL_ERROR((u64_t)integer > (u64_t)std::numeric_limits<s64_t>::max(), TInvalidArgumentException, "integer", "JSON integer exceeds s64_t range");
-				this->integer = (s64_t)integer;
+				if constexpr(std::is_signed_v<T>)
+				{
+					type = EStorageType::NUMBER_SIGNED_INTEGER;
+					number.signed_integer = static_cast<s64_t>(integer);
+				}
+				else
+				{
+					type = EStorageType::NUMBER_UNSIGNED_INTEGER;
+					number.unsigned_integer = static_cast<u64_t>(integer);
+				}
 			}
 
 			TJsonValue(const double number);
@@ -204,7 +279,6 @@ namespace el1::io::format::json
 	class TJsonParser
 	{
 		static u16_t ConvertCodeUnit(TStringView token);
-		static std::optional<TJsonValue> ConvertInteger(TStringView token);
 		static std::optional<TJsonValue> ConvertNumber(TStringView token);
 		static std::optional<TJsonValue> ConvertNumeric(TStringView token);
 

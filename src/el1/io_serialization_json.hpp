@@ -37,11 +37,7 @@ namespace el1::io::serialization::json
 		void EndOptional() {}
 		void Boolean(const bool value) { *current = TJsonValue(value); }
 		void Signed(const s64_t value) { *current = TJsonValue(value); }
-		void Unsigned(const u64_t value)
-		{
-			EL_ERROR(value > (u64_t)std::numeric_limits<s64_t>::max(), TException, U"JSON backend only supports integers representable as s64_t");
-			*current = TJsonValue((s64_t)value);
-		}
+		void Unsigned(const u64_t value) { *current = TJsonValue(value); }
 		void Floating(const double value)
 		{
 			EL_ERROR(!std::isfinite(value), TException, U"JSON serialization does not support NaN or infinity");
@@ -127,10 +123,10 @@ namespace el1::io::serialization::json
 			return current->Map();
 		}
 
-		static s64_t RequireInteger(const TJsonValue& value)
+		template<std::integral T>
+		static T RequireInteger(const TJsonValue& value)
 		{
-			EL_ERROR(!value.IsInteger(), TException, U"expected JSON integer during deserialization");
-			return value.Integer();
+			return value.ToInteger<T>();
 		}
 
 	public:
@@ -147,21 +143,18 @@ namespace el1::io::serialization::json
 
 		s64_t Signed()
 		{
-			return RequireInteger(*current);
+			return RequireInteger<s64_t>(*current);
 		}
 
 		u64_t Unsigned()
 		{
-			const s64_t value = RequireInteger(*current);
-			EL_ERROR(value < 0, TException, U"negative JSON integer cannot be deserialized into an unsigned type");
-			return (u64_t)value;
+			return RequireInteger<u64_t>(*current);
 		}
 
 		double Floating()
 		{
-			if(current->IsNumber()) return current->Number();
-			if(current->IsInteger()) return (double)current->Integer();
-			EL_THROW(TException, U"expected JSON number during deserialization");
+			EL_ERROR(!current->IsNumber(), TException, U"expected JSON number during deserialization");
+			return current->Number();
 		}
 
 		TString String()
@@ -182,10 +175,10 @@ namespace el1::io::serialization::json
 			const TString type_id_key(U"type_id");
 			const TString version_key(U"version");
 			EL_ERROR(!metadata.Contains(format_key) || !metadata.Contains(type_id_key) || !metadata.Contains(version_key), TException, U"serialized object metadata is incomplete");
-			EL_ERROR(RequireInteger(metadata[format_key]) != (s64_t)FORMAT_VERSION, TException, U"unsupported serialization JSON format version");
+			EL_ERROR(RequireInteger<s64_t>(metadata[format_key]) != (s64_t)FORMAT_VERSION, TException, U"unsupported serialization JSON format version");
 			EL_ERROR(!metadata[type_id_key].IsString(), TException, U"serialized type_id must be a string");
 			EL_ERROR(TTypeId::FromString(metadata[type_id_key].String().View()) != expected.id, TException, U"serialized type does not match requested C++ type");
-			const s64_t version = RequireInteger(metadata[version_key]);
+			const s64_t version = RequireInteger<s64_t>(metadata[version_key]);
 			EL_ERROR(version <= 0 || (u64_t)version > expected.version, TException, U"serialized schema version is not supported by this C++ type");
 			return (u32_t)version;
 		}

@@ -115,11 +115,7 @@ namespace el1::security::jwt
 
 	static s64_t NumericClaim(const TJsonValue& value, const s64_t fallback)
 	{
-		if(value.IsInteger())
-			return value.Integer();
-		if(value.IsNumber())
-			return (s64_t)value.Number();
-		return fallback;
+		return value.IsNumber() ? static_cast<s64_t>(value.Number()) : fallback;
 	}
 
 	TJwkSet::TJwkSet()
