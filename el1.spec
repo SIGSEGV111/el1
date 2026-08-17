@@ -1,5 +1,3 @@
-%define abi_version 1
-
 Name:           el1
 Summary:        Essentials Library v1
 Group:          System/Libraries
@@ -28,7 +26,7 @@ el1 is a C++ Essentials Library focused on IoT and high-level operations.
 %build
 
 %install
-make install-runtime %{?_smp_mflags} ABI_VERSION=%{abi_version} LIB_DIR="%{buildroot}%{_libdir}"
+make install-runtime %{?_smp_mflags} PACKAGE_VERSION="%{version}" LIB_DIR="%{buildroot}%{_libdir}"
 
 %post -p /sbin/ldconfig
 
@@ -36,6 +34,6 @@ make install-runtime %{?_smp_mflags} ABI_VERSION=%{abi_version} LIB_DIR="%{build
 
 %files
 %license LICENSE.txt
-%{_libdir}/libel1.so.%{abi_version}
+%{_libdir}/libel1.so.%{version}
 
 %changelog

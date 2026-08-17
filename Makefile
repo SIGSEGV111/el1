@@ -6,7 +6,13 @@
 
 CXX := clang++
 ARCH ?= $(shell rpm --eval '%{_target_cpu}' 2>/dev/null || uname -m)
-VERSION ?= *DEVELOPMENT SNAPSHOT*
+EASY_RPM_VERSION ?= easy-rpm-version.sh
+PACKAGE_VERSION ?= $(shell $(EASY_RPM_VERSION))
+PACKAGE_VERSION := $(strip $(PACKAGE_VERSION))
+ifeq ($(PACKAGE_VERSION),)
+$(error unable to determine PACKAGE_VERSION; install easy-rpm or set PACKAGE_VERSION/RPM_VERSION explicitly)
+endif
+VERSION ?= Version $(PACKAGE_VERSION)
 
 WITH_POSTGRES ?= 1
 WITH_POSTGRES_TESTS ?= $(WITH_POSTGRES)
@@ -165,7 +171,16 @@ TEST_OUT_DIR_DEFINE := '-DEL1_TEST_OUT_DIR=U"$(OUT_DIR)"'
 
 LIB_DIR ?= /usr/lib
 INCLUDE_DIR ?= /usr/include
-ABI_VERSION ?= 0
+PKG_CONFIG_DIR ?= $(LIB_DIR)/pkgconfig
+PKG_CONFIG_LIB_DIR ?= $(LIB_DIR)
+PKG_CONFIG_INCLUDE_DIR ?= $(INCLUDE_DIR)
+
+ifneq ($(origin ABI_VERSION),undefined)
+ifneq ($(strip $(ABI_VERSION)),$(PACKAGE_VERSION))
+$(error ABI_VERSION='$(ABI_VERSION)' must equal PACKAGE_VERSION='$(PACKAGE_VERSION)')
+endif
+endif
+override ABI_VERSION := $(PACKAGE_VERSION)
 KEYID ?= BE5096C665CA4595AF11DAB010CD9FF74E4565ED
 
 RPM_OUT_DIR := $(OUT_DIR)/rpm
@@ -432,11 +447,13 @@ endif
 
 $(ARCH_RPM_NAME) $(SRC_RPM_NAME) &: $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile LICENSE.txt
 	@mkdir -p "$(RPM_OUT_DIR)"
-	easy-rpm.sh --debug --name el1 --spec "$(SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $^
+	ensure-git-clean.sh
+	easy-rpm.sh --debug --name el1 --version "$(PACKAGE_VERSION)" --spec "$(SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $^
 
 $(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME) &: $(LIB_HEADERS) $(DEVEL_SPEC_NAME) Makefile LICENSE.txt
 	@mkdir -p "$(RPM_OUT_DIR)"
-	easy-rpm.sh --debug --name el1-devel --spec "$(DEVEL_SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $^
+	ensure-git-clean.sh
+	easy-rpm.sh --debug --name el1-devel --version "$(PACKAGE_VERSION)" --spec "$(DEVEL_SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $^
 
 install: install-runtime install-devel
 
@@ -446,9 +463,18 @@ install-runtime: $(RELEASE_LIB_NAME)
 
 install-devel: $(SUPER_HEADER)
 	rm -rf -- "$(INCLUDE_DIR)/el1"
-	mkdir -p "$(LIB_DIR)" "$(INCLUDE_DIR)/el1"
+	mkdir -p "$(LIB_DIR)" "$(INCLUDE_DIR)/el1" "$(PKG_CONFIG_DIR)"
 	ln -sfn "$(LIB_SONAME)" "$(LIB_DIR)/$(LIB_BASENAME)"
 	install -m 644 $(LIB_HEADERS) "$(SUPER_HEADER)" "$(INCLUDE_DIR)/el1/"
+	{ \
+		printf 'libdir=%s\n' '$(PKG_CONFIG_LIB_DIR)'; \
+		printf 'includedir=%s\n\n' '$(PKG_CONFIG_INCLUDE_DIR)'; \
+		printf 'Name: el1\n'; \
+		printf 'Description: Essentials Library v1\n'; \
+		printf 'Version: %s\n' '$(PACKAGE_VERSION)'; \
+		printf 'Libs: -L$${libdir} -lel1\n'; \
+		printf 'Cflags: -I$${includedir}\n'; \
+	} > "$(PKG_CONFIG_DIR)/el1.pc"
 
 package: rpm
 
