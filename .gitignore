@@ -12,3 +12,4 @@ src/**/*.Makefile
 *.rpm
 vgcore.*
 gen-lifetime
+*.list

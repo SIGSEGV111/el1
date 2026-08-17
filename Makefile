@@ -466,15 +466,18 @@ endif
 # Packaging and installation
 # -----------------------------------------------------------------------------
 
-$(ARCH_RPM_NAME) $(SRC_RPM_NAME) &: $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile LICENSE.txt
-	@mkdir -p "$(RPM_OUT_DIR)"
-	ensure-git-clean.sh
-	easy-rpm.sh --debug --name el1 --version "$(PACKAGE_VERSION)" --spec "$(SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $^
+RUNTIME_RPM_SOURCE_FILES := $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile LICENSE.txt
+DEVEL_RPM_SOURCE_FILES := $(LIB_HEADERS) $(DEVEL_SPEC_NAME) Makefile LICENSE.txt
 
-$(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME) &: $(LIB_HEADERS) $(DEVEL_SPEC_NAME) Makefile LICENSE.txt
+$(ARCH_RPM_NAME) $(SRC_RPM_NAME) &: $(RELEASE_LIB_NAME) $(RELEASE_LIB_LINK_NAME) $(RUNTIME_RPM_SOURCE_FILES)
 	@mkdir -p "$(RPM_OUT_DIR)"
 	ensure-git-clean.sh
-	easy-rpm.sh --debug --name el1-devel --version "$(PACKAGE_VERSION)" --spec "$(DEVEL_SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $^
+	easy-rpm.sh --debug --prebuilt --name el1 --version "$(PACKAGE_VERSION)" --spec "$(SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $(RUNTIME_RPM_SOURCE_FILES)
+
+$(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME) &: $(GENERATED_LIB_HEADERS) $(SUPER_HEADER) $(DEVEL_RPM_SOURCE_FILES)
+	@mkdir -p "$(RPM_OUT_DIR)"
+	ensure-git-clean.sh
+	easy-rpm.sh --debug --prebuilt --name el1-devel --version "$(PACKAGE_VERSION)" --spec "$(DEVEL_SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $(DEVEL_RPM_SOURCE_FILES)
 
 install: install-runtime install-devel
 

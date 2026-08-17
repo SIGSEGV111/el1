@@ -43,16 +43,20 @@ _el1_setup_environment()
 	include_dir="$source_dir/gen/include";
 	lib_dir="$source_dir/gen/$arch/release";
 
-	if [[ ! -f "$include_dir/el1/el1.hpp" ]]; then
-		echo "error: $include_dir/el1/el1.hpp does not exist" >&2;
-		echo "error: build the public headers first: make -C '$source_dir' headers" >&2;
-		return 2;
-	fi
+	# Export the build locations even before el1 has been built.  This allows:
+	#
+	#   source ./el1-env.sh
+	#   make rpm
+	#
+	# from a clean tree.  Consumer Makefiles validate the files when they are
+	# actually used and derive EL1_VERSION from the built library's SONAME.
+	export ARCH="$arch";
+	export EL1_INCLUDE_DIR="$include_dir";
+	export EL1_LIB_DIR="$lib_dir";
+	unset EL1_VERSION;
 
 	if [[ ! -e "$lib_dir/libel1.so" ]]; then
-		echo "error: $lib_dir/libel1.so does not exist" >&2;
-		echo "error: build el1 first: make -C '$source_dir' ARCH='$arch' release" >&2;
-		return 2;
+		return 0;
 	fi
 
 	readelf_cmd='';
@@ -74,17 +78,12 @@ _el1_setup_environment()
 	case "$soname" in
 		libel1.so.*)
 			version="${soname#libel1.so.}";
+			export EL1_VERSION="$version";
 			;;
 		*)
-			echo "error: unable to determine el1 ABI version from $lib_dir/libel1.so" >&2;
-			return 2;
+			echo "warning: unable to determine el1 ABI version from $lib_dir/libel1.so" >&2;
 			;;
 	esac
-
-	export ARCH="$arch";
-	export EL1_INCLUDE_DIR="$include_dir";
-	export EL1_LIB_DIR="$lib_dir";
-	export EL1_VERSION="$version";
 }
 
 if _el1_setup_environment; then
