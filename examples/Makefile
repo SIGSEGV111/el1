@@ -1,5 +1,7 @@
 EL1_ROOT := ..
-OUT_DIR ?= $(EL1_ROOT)/gen/examples
+ARCH ?= $(shell rpm --eval '%{_target_cpu}' 2>/dev/null || uname -m)
+EL1_OUT_DIR ?= $(abspath $(EL1_ROOT)/gen/$(ARCH))
+OUT_DIR ?= $(EL1_OUT_DIR)/examples
 CXX := clang++
 
 CPPFLAGS ?=
@@ -8,7 +10,7 @@ LDFLAGS ?=
 
 COMMON_CPPFLAGS := -I$(EL1_ROOT)/src $(CPPFLAGS)
 COMMON_CXXFLAGS := -std=c++20 -Wall -Wextra -Wno-unused-parameter -O2 -g $(CXXFLAGS)
-COMMON_LDFLAGS := -L$(EL1_ROOT)/gen/release -Wl,-rpath,'$$ORIGIN/../release' $(LDFLAGS)
+COMMON_LDFLAGS := -L$(EL1_OUT_DIR)/release -Wl,-rpath,'$$ORIGIN/../release' $(LDFLAGS)
 COMMON_LIBS := -lel1 $(shell pkg-config --libs krb5 zlib) -pthread
 
 EXAMPLES := \
@@ -38,15 +40,15 @@ SOURCES_w1-test := w1-test/w1-test.cpp
 
 all: $(EXAMPLES)
 
-$(EL1_ROOT)/gen/release/libel1.so:
-	$(MAKE) -C $(EL1_ROOT) release
+$(EL1_OUT_DIR)/release/libel1.so:
+	$(MAKE) -C $(EL1_ROOT) ARCH="$(ARCH)" OUT_DIR="$(EL1_OUT_DIR)" release
 
 $(OUT_DIR):
 	mkdir -p "$@"
 
 $(EXAMPLES): %: $(OUT_DIR)/%
 
-$(OUT_DIR)/%: $$(SOURCES_$$*) $(EL1_ROOT)/gen/release/libel1.so | $(OUT_DIR)
+$(OUT_DIR)/%: $$(SOURCES_$$*) $(EL1_OUT_DIR)/release/libel1.so | $(OUT_DIR)
 	$(CXX) $(COMMON_CPPFLAGS) $(COMMON_CXXFLAGS) "$<" -o "$@" $(COMMON_LDFLAGS) $(COMMON_LIBS)
 
 smoke-test: all

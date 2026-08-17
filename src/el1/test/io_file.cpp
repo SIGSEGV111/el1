@@ -5,10 +5,17 @@
 
 using namespace ::testing;
 
+#ifndef EL1_TEST_OUT_DIR
+#define EL1_TEST_OUT_DIR U"gen"
+#endif
+
 namespace
 {
 	using namespace el1::io::file;
 	using namespace el1::error;
+
+	static const TPath TEST_OUTPUT_DIR(EL1_TEST_OUT_DIR);
+	static const TPath TESTDATA_DIR = TEST_OUTPUT_DIR + U"testdata";
 
 	static const TPath NX_TEST_PATH1 = TString(U"dir1") + TPath::SEPERATOR + TString(U"subdir1") + TPath::SEPERATOR + TString(U"file1.ext");
 	static const TPath NX_TEST_PATH2 = TString(U"dir2") + TPath::SEPERATOR + TString(U"subdir2") + TPath::SEPERATOR + TString(U"file2.ext");
@@ -50,8 +57,8 @@ namespace
 	{
 		#ifdef EL_OS_LINUX
 		{
-			TDirectory dir1 = TPath("gen/test.tmp");
-			TDirectory dir2 = TPath("gen/test.tmp");
+			TDirectory dir1 = TEST_OUTPUT_DIR + U"test.tmp";
+			TDirectory dir2 = TEST_OUTPUT_DIR + U"test.tmp";
 			TDirectory dir3 = TPath(".");
 			EXPECT_EQ(dir1, dir2);
 			EXPECT_NE(dir1, dir3);
@@ -65,7 +72,7 @@ namespace
 		#ifdef EL_OS_LINUX
 		{
 			TList<direntry_t> dents;
-			TDirectory testdata_dir = TPath("gen/testdata");
+			TDirectory testdata_dir = TESTDATA_DIR;
 			testdata_dir.Enum([&](const direntry_t& de) { dents.Append(de); return true; });
 			EXPECT_EQ(dents.Count(), 11U);
 
@@ -242,7 +249,7 @@ namespace
 		}
 
 		{
-			TPath path = TPath::CurrentWorkingDirectory() + "gen" + "testdata";
+			TPath path = TPath::CurrentWorkingDirectory() + TESTDATA_DIR;
 			EXPECT_EQ(path.Type(), EObjectType::DIRECTORY);
 			EXPECT_FALSE(path.IsMountpoint());
 		}
@@ -254,15 +261,15 @@ namespace
 
 		#ifdef EL_OS_LINUX
 		{
-			EXPECT_EQ(TPath("gen/testdata/hw.txt"      ).Type(), EObjectType::FILE);
-			EXPECT_EQ(TPath("gen/testdata/empty-file"  ).Type(), EObjectType::FILE);
-			EXPECT_EQ(TPath("gen/testdata/hardlink.txt").Type(), EObjectType::FILE);
-			EXPECT_EQ(TPath("gen/testdata/dead-symlink").Type(), EObjectType::SYMLINK);
-			EXPECT_EQ(TPath("gen/testdata/good-symlink").Type(), EObjectType::SYMLINK);
-			EXPECT_EQ(TPath("gen/testdata/dir-symlink" ).Type(), EObjectType::SYMLINK);
-			EXPECT_EQ(TPath("gen/testdata/dir"         ).Type(), EObjectType::DIRECTORY);
-			EXPECT_EQ(TPath("gen/testdata/socket"      ).Type(), EObjectType::SOCKET);
-			EXPECT_EQ(TPath("gen/testdata/fifo"        ).Type(), EObjectType::FIFO);
+			EXPECT_EQ((TESTDATA_DIR + U"hw.txt").Type(), EObjectType::FILE);
+			EXPECT_EQ((TESTDATA_DIR + U"empty-file").Type(), EObjectType::FILE);
+			EXPECT_EQ((TESTDATA_DIR + U"hardlink.txt").Type(), EObjectType::FILE);
+			EXPECT_EQ((TESTDATA_DIR + U"dead-symlink").Type(), EObjectType::SYMLINK);
+			EXPECT_EQ((TESTDATA_DIR + U"good-symlink").Type(), EObjectType::SYMLINK);
+			EXPECT_EQ((TESTDATA_DIR + U"dir-symlink").Type(), EObjectType::SYMLINK);
+			EXPECT_EQ((TESTDATA_DIR + U"dir").Type(), EObjectType::DIRECTORY);
+			EXPECT_EQ((TESTDATA_DIR + U"socket").Type(), EObjectType::SOCKET);
+			EXPECT_EQ((TESTDATA_DIR + U"fifo").Type(), EObjectType::FIFO);
 			EXPECT_EQ(TPath("/dev/null").Type(), EObjectType::CHAR_DEVICE);
 		}
 		#endif
@@ -496,7 +503,7 @@ namespace
 
 	TEST(io_file, TPath_CreateDeleteAndDirectoryInfo)
 	{
-		const TPath root("gen/test1.tmp/io-file-tree");
+		const TPath root = TEST_OUTPUT_DIR + U"test1.tmp" + U"io-file-tree";
 		if(root.Exists())
 			root.Delete(true);
 
@@ -543,7 +550,7 @@ namespace
 
 	TEST(io_file, TFile_CreateModesIdentityAndMappingRemap)
 	{
-		const TPath root("gen/test1.tmp/io-file-modes");
+		const TPath root = TEST_OUTPUT_DIR + U"test1.tmp" + U"io-file-modes";
 		if(root.Exists())
 			root.Delete(true);
 		root.CreateAsDirectory(true);

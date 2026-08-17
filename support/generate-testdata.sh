@@ -1,11 +1,14 @@
 #!/bin/bash -eu
 cd "$(dirname "$(readlink -f "$0")")/.."
 
-rm -rf gen/testdata
-mkdir -p gen/testdata
-cp --reflink=auto -- testdata/* gen/testdata/
+OUT_DIR="${1:-gen}"
+TESTDATA_DIR="$OUT_DIR/testdata"
 
-cd gen/testdata
+rm -rf -- "$TESTDATA_DIR"
+mkdir -p -- "$TESTDATA_DIR"
+cp --reflink=auto -- testdata/* "$TESTDATA_DIR/"
+
+cd "$TESTDATA_DIR"
 mkdir dir
 mkfifo fifo
 touch empty-file

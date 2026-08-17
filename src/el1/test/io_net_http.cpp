@@ -14,8 +14,13 @@
 
 using namespace ::testing;
 
+#ifndef EL1_TEST_OUT_DIR
+#define EL1_TEST_OUT_DIR U"gen"
+#endif
+
 namespace
 {
+	static const el1::io::file::TPath TESTDATA_DIR = el1::io::file::TPath(EL1_TEST_OUT_DIR) + U"testdata";
 	using namespace el1::io::net::http;
 	using namespace el1::io::collection::list;
 	using namespace el1::io::stream;
@@ -262,7 +267,7 @@ namespace
 		TTcpServer tcp_server;
 		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			response.status = EStatus::OK;
-			auto file = el1::New<TFile>(U"gen/testdata/test1.json");
+			auto file = el1::New<TFile>(TESTDATA_DIR + U"test1.json");
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
@@ -270,7 +275,7 @@ namespace
 		const TString url = TString::Format(U"http://localhost:%d/", tcp_server.LocalAddress().port);
 		TString str_curl = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", url, url, url });
 		str_curl.Cut(0, str_curl.Length() / 3 * 2);
-		TFile reference_file(U"gen/testdata/test1.json");
+		TFile reference_file(TESTDATA_DIR + U"test1.json");
 		const TString str_ref = reference_file.Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
 	}
@@ -282,14 +287,14 @@ namespace
 		THttpServer http_server(&tls_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
 			EXPECT_EQ(request.url, U"/secure");
 			response.status = EStatus::OK;
-			auto file = el1::New<TFile>(U"gen/testdata/freecad_v1_0_0.gcode");
+			auto file = el1::New<TFile>(TESTDATA_DIR + U"freecad_v1_0_0.gcode");
 			response.header_fields.ContentLength(file->Size());
 			response.body = std::move(file);
 		});
 
 		const TString url = TString::Format(U"https://localhost:%d/secure", tls_server.LocalAddress().port);
 		const TString str_curl = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", U"--cacert", U"support/tls-test-cert.pem", U"--tlsv1.2", url });
-		TFile reference_file(U"gen/testdata/freecad_v1_0_0.gcode");
+		TFile reference_file(TESTDATA_DIR + U"freecad_v1_0_0.gcode");
 		const TString str_ref = reference_file.Pipe().Transform(TUTF8Decoder()).Collect();
 		EXPECT_EQ(str_curl, str_ref);
 	}

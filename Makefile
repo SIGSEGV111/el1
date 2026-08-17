@@ -150,8 +150,9 @@ DEBUG_TEST_CXXFLAGS := $(DEBUG_BUILD_CXXFLAGS) $(TEST_CXXFLAGS)
 # Paths and generated files
 # -----------------------------------------------------------------------------
 
-OUT_DIR ?= gen
-LIFETIME_OUT_DIR ?= $(OUT_DIR)-lifetime
+GEN_DIR ?= gen
+OUT_DIR ?= $(GEN_DIR)/$(ARCH)
+LIFETIME_OUT_DIR ?= $(OUT_DIR)/lifetime
 RELEASE_DIR := $(OUT_DIR)/release
 DEBUG_DIR := $(OUT_DIR)/debug
 GTEST_DIR := $(OUT_DIR)/gtest
@@ -160,16 +161,18 @@ COVERAGE_PROFILE_DIR := $(COVERAGE_DIR)/profiles
 COVERAGE_HTML_DIR := $(COVERAGE_DIR)/html
 COVERAGE_DATA := $(COVERAGE_DIR)/coverage.profdata
 TEST_WORK_DIRS ?= $(OUT_DIR)/test.tmp $(OUT_DIR)/test1.tmp
+TEST_OUT_DIR_DEFINE := '-DEL1_TEST_OUT_DIR=U"$(OUT_DIR)"'
 
 LIB_DIR ?= /usr/lib
 INCLUDE_DIR ?= /usr/include
 ABI_VERSION ?= 0
 KEYID ?= BE5096C665CA4595AF11DAB010CD9FF74E4565ED
 
-ARCH_RPM_NAME := el1.$(ARCH).rpm
-DEVEL_RPM_NAME := el1-devel.$(ARCH).rpm
-SRC_RPM_NAME := el1.src.rpm
-DEVEL_SRC_RPM_NAME := el1-devel.src.rpm
+RPM_OUT_DIR := $(OUT_DIR)/rpm
+ARCH_RPM_NAME := $(RPM_OUT_DIR)/el1.$(ARCH).rpm
+DEVEL_RPM_NAME := $(RPM_OUT_DIR)/el1-devel.$(ARCH).rpm
+SRC_RPM_NAME := $(RPM_OUT_DIR)/el1.src.rpm
+DEVEL_SRC_RPM_NAME := $(RPM_OUT_DIR)/el1-devel.src.rpm
 SPEC_NAME := el1.spec
 DEVEL_SPEC_NAME := el1-devel.spec
 
@@ -234,7 +237,7 @@ export CXX
 # Primary targets
 # -----------------------------------------------------------------------------
 
-.PHONY: all release debug clean \
+.PHONY: all release debug clean clean-all \
 	compile-debug build-tests-release build-tests-debug \
 	install install-runtime install-devel package rpm deploy \
 	test test-release test-debug coverage-report \
@@ -256,10 +259,12 @@ build-tests-release: $(RELEASE_TEST_NAME)
 build-tests-debug: $(DEBUG_TEST_NAME)
 
 examples: release
-	$(MAKE) --no-print-directory -C examples CXX="$(CXX)" all
+	$(MAKE) --no-print-directory -C examples \
+		CXX="$(CXX)" ARCH="$(ARCH)" EL1_OUT_DIR="$(abspath $(OUT_DIR))" all
 
 examples-test: release
-	$(MAKE) --no-print-directory -C examples CXX="$(CXX)" smoke-test
+	$(MAKE) --no-print-directory -C examples \
+		CXX="$(CXX)" ARCH="$(ARCH)" EL1_OUT_DIR="$(abspath $(OUT_DIR))" smoke-test
 
 # High-confidence lifetime diagnostics are already enabled by every Debug build.
 # This target adds stricter/advisory analyses in an isolated output directory and
@@ -291,7 +296,10 @@ lifetime-check:
 	@echo "Additional lifetime-check flags: $(strip $(LIFETIME_CHECK_CXXFLAGS))"
 
 clean:
-	rm -rf -- "$(OUT_DIR)" "$(LIFETIME_OUT_DIR)" *.rpm vgcore.*
+	rm -rf -- "$(OUT_DIR)"
+
+clean-all:
+	rm -rf -- "$(GEN_DIR)" *.rpm vgcore.*
 
 # -----------------------------------------------------------------------------
 # Library and test build rules
@@ -332,13 +340,13 @@ $(DEBUG_LIB_LINK_NAME): $(DEBUG_LIB_NAME)
 $(RELEASE_DIR)/test/%.o: src/el1/test/%.cpp Makefile
 	@mkdir -p "$(@D)"
 	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(RELEASE_TEST_CXXFLAGS) \
-		$(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" \
+		$(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" $(TEST_OUT_DIR_DEFINE) \
 		-I submodules/googletest/googletest/include -I src -MMD -MP -c -o "$@" "$<"
 
 $(DEBUG_DIR)/test/%.o: src/el1/test/%.cpp Makefile
 	@mkdir -p "$(@D)"
 	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(DEBUG_TEST_CXXFLAGS) \
-		$(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" \
+		$(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" $(TEST_OUT_DIR_DEFINE) \
 		-I submodules/googletest/googletest/include -I src -MMD -MP -c -o "$@" "$<"
 
 $(GTEST_LIB): Makefile
@@ -389,12 +397,12 @@ test:
 	$(MAKE) --no-print-directory coverage-report
 
 test-release: check-valgrind $(RELEASE_TEST_NAME)
-	./support/generate-testdata.sh
+	./support/generate-testdata.sh "$(OUT_DIR)"
 	rm -rf -- $(TEST_WORK_DIRS) && mkdir -p -- $(TEST_WORK_DIRS)
 	LD_LIBRARY_PATH="$(RELEASE_DIR)" $(TEST_RUNNER) "$(RELEASE_TEST_NAME)" $(TEST_GTEST_FLAGS)
 
 test-debug: check-valgrind $(DEBUG_TEST_NAME)
-	./support/generate-testdata.sh
+	./support/generate-testdata.sh "$(OUT_DIR)"
 	rm -rf -- $(TEST_WORK_DIRS) "$(COVERAGE_PROFILE_DIR)" && mkdir -p -- $(TEST_WORK_DIRS)
 	mkdir -p "$(COVERAGE_PROFILE_DIR)"
 	LLVM_PROFILE_FILE="$(abspath $(COVERAGE_PROFILE_DIR))/%m-%p.profraw" \
@@ -423,10 +431,12 @@ endif
 # -----------------------------------------------------------------------------
 
 $(ARCH_RPM_NAME) $(SRC_RPM_NAME) &: $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile LICENSE.txt
-	easy-rpm.sh --debug --name el1 --spec "$(SPEC_NAME)" --outdir . --plain --arch "$(ARCH)" -- $^
+	@mkdir -p "$(RPM_OUT_DIR)"
+	easy-rpm.sh --debug --name el1 --spec "$(SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $^
 
 $(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME) &: $(LIB_HEADERS) $(DEVEL_SPEC_NAME) Makefile LICENSE.txt
-	easy-rpm.sh --debug --name el1-devel --spec "$(DEVEL_SPEC_NAME)" --outdir . --plain --arch "$(ARCH)" -- $^
+	@mkdir -p "$(RPM_OUT_DIR)"
+	easy-rpm.sh --debug --name el1-devel --spec "$(DEVEL_SPEC_NAME)" --outdir "$(RPM_OUT_DIR)" --plain --arch "$(ARCH)" -- $^
 
 install: install-runtime install-devel
 

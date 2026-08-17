@@ -12,7 +12,7 @@ Run the hardware-independent smoke tests and the command-line parser of every ha
 make examples-test
 ```
 
-Binaries are written to `gen/examples/` and use the in-tree `gen/release/libel1.so` through a relative runtime search path.
+Binaries are written to `gen/<arch>/examples/` and use the in-tree `gen/<arch>/release/libel1.so` through a relative runtime search path.
 
 ## Hardware examples
 
@@ -29,7 +29,7 @@ Use `--help` on each binary for device paths and parameters. Hardware examples r
 ### DS2482S-100 example
 
 ```sh
-gen/examples/w1-test \
+gen/"$(rpm --eval '%{_target_cpu}')"/examples/w1-test \
 	--backend=ds2482 \
 	--i2c-device=/dev/i2c-1 \
 	--address=24 \
@@ -40,7 +40,7 @@ gen/examples/w1-test \
 ### SPI 1-Wire example
 
 ```sh
-gen/examples/w1-test \
+gen/"$(rpm --eval '%{_target_cpu}')"/examples/w1-test \
 	--backend=spi \
 	--spi-device=/dev/spidev0.0 \
 	--invert-tx=true \
