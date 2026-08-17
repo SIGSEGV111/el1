@@ -158,6 +158,8 @@ DEBUG_TEST_CXXFLAGS := $(DEBUG_BUILD_CXXFLAGS) $(TEST_CXXFLAGS)
 
 GEN_DIR ?= gen
 OUT_DIR ?= $(GEN_DIR)/$(ARCH)
+GENERATED_INCLUDE_DIR ?= $(GEN_DIR)/include
+GENERATED_EL1_INCLUDE_DIR := $(GENERATED_INCLUDE_DIR)/el1
 LIFETIME_OUT_DIR ?= $(OUT_DIR)/lifetime
 RELEASE_DIR := $(OUT_DIR)/release
 DEBUG_DIR := $(OUT_DIR)/debug
@@ -199,12 +201,13 @@ RELEASE_LIB_LINK_NAME := $(RELEASE_DIR)/$(LIB_BASENAME)
 DEBUG_LIB_LINK_NAME := $(DEBUG_DIR)/$(LIB_BASENAME)
 RELEASE_TEST_NAME := $(RELEASE_DIR)/gtest.exe
 DEBUG_TEST_NAME := $(DEBUG_DIR)/gtest.exe
-SUPER_HEADER := $(OUT_DIR)/el1.hpp
 GTEST_LIB := $(GTEST_DIR)/lib/libgtest.a
 GTEST_MAIN_LIB := $(GTEST_DIR)/lib/libgtest_main.a
 
 LIB_SOURCES := $(wildcard src/el1/*.cpp)
 LIB_HEADERS := $(wildcard src/el1/*.hpp)
+GENERATED_LIB_HEADERS := $(patsubst src/el1/%.hpp,$(GENERATED_EL1_INCLUDE_DIR)/%.hpp,$(LIB_HEADERS))
+SUPER_HEADER := $(GENERATED_EL1_INCLUDE_DIR)/el1.hpp
 TEST_SOURCES := $(wildcard src/el1/test/*.cpp)
 
 ifeq ($(WITH_BLUETOOTH),0)
@@ -252,7 +255,7 @@ export CXX
 # Primary targets
 # -----------------------------------------------------------------------------
 
-.PHONY: all release debug clean clean-all \
+.PHONY: all headers release debug clean clean-all \
 	compile-debug build-tests-release build-tests-debug \
 	install install-runtime install-devel package rpm deploy \
 	test test-release test-debug coverage-report \
@@ -261,9 +264,16 @@ export CXX
 
 all: release debug
 
-release: $(RELEASE_LIB_NAME) $(RELEASE_LIB_LINK_NAME) $(SUPER_HEADER)
+headers: $(GENERATED_LIB_HEADERS) $(SUPER_HEADER)
+	@for header in "$(GENERATED_EL1_INCLUDE_DIR)"/*.hpp; do \
+		[ -e "$$header" ] || continue; \
+		[ "$$header" = "$(SUPER_HEADER)" ] && continue; \
+		[ -f "src/el1/$${header##*/}" ] || rm -f -- "$$header"; \
+	done
 
-debug: $(DEBUG_LIB_NAME) $(DEBUG_LIB_LINK_NAME) $(SUPER_HEADER)
+release: $(RELEASE_LIB_NAME) $(RELEASE_LIB_LINK_NAME) headers
+
+debug: $(DEBUG_LIB_NAME) $(DEBUG_LIB_LINK_NAME) headers
 
 # Compile every el1 Debug translation unit without linking googletest. This is
 # used by static-analysis targets that only need compiler diagnostics.
@@ -320,11 +330,22 @@ clean-all:
 # Library and test build rules
 # -----------------------------------------------------------------------------
 
+$(GENERATED_EL1_INCLUDE_DIR)/%.hpp: src/el1/%.hpp
+	@mkdir -p "$(@D)"
+	@tmp="$$(mktemp "$@.tmp.XXXXXX")"; \
+	trap 'rm -f -- "$$tmp"' EXIT HUP INT TERM; \
+	install -m 644 "$<" "$$tmp"; \
+	mv -f -- "$$tmp" "$@"
+
 $(SUPER_HEADER): $(LIB_HEADERS)
 	@mkdir -p "$(@D)"
-	echo "#pragma once" > "$@.tmp"
-	for header in $(LIB_HEADERS); do echo "#include \"$${header#src/el1/*}\""; done >> "$@.tmp"
-	mv -f -- "$@.tmp" "$@"
+	@tmp="$$(mktemp "$@.tmp.XXXXXX")"; \
+	trap 'rm -f -- "$$tmp"' EXIT HUP INT TERM; \
+	{ \
+		echo "#pragma once"; \
+		for header in $(LIB_HEADERS); do echo "#include \"$${header#src/el1/*}\""; done; \
+	} > "$$tmp"; \
+	mv -f -- "$$tmp" "$@"
 
 $(RELEASE_DIR)/obj/%.o: src/el1/%.cpp Makefile
 	@mkdir -p "$(@D)"
@@ -461,11 +482,11 @@ install-runtime: $(RELEASE_LIB_NAME)
 	mkdir -p "$(LIB_DIR)"
 	install -m 755 "$(RELEASE_LIB_NAME)" "$(LIB_DIR)/$(LIB_SONAME)"
 
-install-devel: $(SUPER_HEADER)
+install-devel: headers
 	rm -rf -- "$(INCLUDE_DIR)/el1"
 	mkdir -p "$(LIB_DIR)" "$(INCLUDE_DIR)/el1" "$(PKG_CONFIG_DIR)"
 	ln -sfn "$(LIB_SONAME)" "$(LIB_DIR)/$(LIB_BASENAME)"
-	install -m 644 $(LIB_HEADERS) "$(SUPER_HEADER)" "$(INCLUDE_DIR)/el1/"
+	install -m 644 $(GENERATED_LIB_HEADERS) "$(SUPER_HEADER)" "$(INCLUDE_DIR)/el1/"
 	{ \
 		printf 'libdir=%s\n' '$(PKG_CONFIG_LIB_DIR)'; \
 		printf 'includedir=%s\n\n' '$(PKG_CONFIG_INCLUDE_DIR)'; \

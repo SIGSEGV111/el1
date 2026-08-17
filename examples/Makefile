@@ -1,6 +1,7 @@
 EL1_ROOT := ..
 ARCH ?= $(shell rpm --eval '%{_target_cpu}' 2>/dev/null || uname -m)
 EL1_OUT_DIR ?= $(abspath $(EL1_ROOT)/gen/$(ARCH))
+EL1_INCLUDE_DIR ?= $(abspath $(EL1_ROOT)/gen/include)
 OUT_DIR ?= $(EL1_OUT_DIR)/examples
 CXX := clang++
 
@@ -8,7 +9,7 @@ CPPFLAGS ?=
 CXXFLAGS ?=
 LDFLAGS ?=
 
-COMMON_CPPFLAGS := -I$(EL1_ROOT)/src $(CPPFLAGS)
+COMMON_CPPFLAGS := -I$(EL1_INCLUDE_DIR) $(CPPFLAGS)
 COMMON_CXXFLAGS := -std=c++20 -Wall -Wextra -Wno-unused-parameter -O2 -g $(CXXFLAGS)
 COMMON_LDFLAGS := -L$(EL1_OUT_DIR)/release -Wl,-rpath,'$$ORIGIN/../release' $(LDFLAGS)
 COMMON_LIBS := -lel1 $(shell pkg-config --libs krb5 zlib) -pthread
