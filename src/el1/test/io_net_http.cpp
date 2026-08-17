@@ -134,6 +134,88 @@ namespace
 		EXPECT_EQ(body, U"Wikipedia");
 	}
 
+	TEST(io_net_http, HandleSingleRequest_combines_repeated_accept_fields)
+	{
+		const char* str_src =
+			"GET /v2/example/image/manifests/latest HTTP/1.1\r\n"
+			"Host: registry.example.test\r\n"
+			"Accept: application/vnd.oci.image.manifest.v1+json\r\n"
+			"Accept: application/vnd.docker.distribution.manifest.v2+json\r\n"
+			"Accept: application/vnd.docker.distribution.manifest.v1+prettyjws\r\n"
+			"Accept: application/vnd.docker.distribution.manifest.v1+json\r\n"
+			"Accept: application/vnd.docker.distribution.manifest.list.v2+json\r\n"
+			"Accept: application/vnd.oci.image.index.v1+json\r\n"
+			"Content-Length: 0\r\n"
+			"\r\n";
+		TFifo<byte_t, 4096> fifo_c2s;
+		TFifo<byte_t, 4096> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		bool handler_called = false;
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t& request, THttpServer::response_t& response)
+		{
+			handler_called = true;
+			const TString* const accept = request.header_fields.Get(U"accept");
+			ASSERT_NE(accept, nullptr);
+			EXPECT_EQ(
+				*accept,
+				U"application/vnd.oci.image.manifest.v1+json, "
+				U"application/vnd.docker.distribution.manifest.v2+json, "
+				U"application/vnd.docker.distribution.manifest.v1+prettyjws, "
+				U"application/vnd.docker.distribution.manifest.v1+json, "
+				U"application/vnd.docker.distribution.manifest.list.v2+json, "
+				U"application/vnd.oci.image.index.v1+json"
+			);
+			response.status = EStatus::OK;
+		});
+		EXPECT_EQ(status, EStatus::OK);
+		EXPECT_TRUE(handler_called);
+	}
+
+	TEST(io_net_http, HandleSingleRequest_rejects_duplicate_authorization)
+	{
+		const char* str_src =
+			"GET / HTTP/1.1\r\n"
+			"Authorization: Basic Zm9vOmJhcg==\r\n"
+			"Authorization: Basic YmF6OnF1dXg=\r\n"
+			"Content-Length: 0\r\n"
+			"\r\n";
+		TFifo<byte_t, 1024> fifo_c2s;
+		TFifo<byte_t, 1024> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		bool handler_called = false;
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t&, THttpServer::response_t&)
+		{
+			handler_called = true;
+		});
+		EXPECT_EQ(status, EStatus::BAD_REQUEST);
+		EXPECT_FALSE(handler_called);
+	}
+
+	TEST(io_net_http, HandleSingleRequest_rejects_duplicate_content_length)
+	{
+		const char* str_src =
+			"GET / HTTP/1.1\r\n"
+			"Content-Length: 0\r\n"
+			"Content-Length: 0\r\n"
+			"\r\n";
+		TFifo<byte_t, 1024> fifo_c2s;
+		TFifo<byte_t, 1024> fifo_s2c;
+		fifo_c2s.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		fifo_c2s.CloseOutput();
+
+		bool handler_called = false;
+		const EStatus status = THttpServer::HandleSingleRequest(fifo_c2s, fifo_s2c, [&handler_called](const THttpServer::request_t&, THttpServer::response_t&)
+		{
+			handler_called = true;
+		});
+		EXPECT_EQ(status, EStatus::BAD_REQUEST);
+		EXPECT_FALSE(handler_called);
+	}
+
 	TEST(io_net_http, HandleSingleRequest_rejects_content_length_with_transfer_encoding)
 	{
 		const char* str_src =

@@ -617,9 +617,32 @@ namespace el1::io::net::http
 					EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid header field encountered");
 				}
 				arr_req[0].ToLower();
-				EL_ERROR(request.header_fields.Get(arr_req[0]) != nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"duplicate header field encountered");
 				arr_req[1].Trim();
-				request.header_fields.Add(std::move(arr_req[0]), std::move(arr_req[1]));
+				TString* const existing_header = request.header_fields.Get(arr_req[0]);
+				if(existing_header == nullptr)
+				{
+					request.header_fields.Add(std::move(arr_req[0]), std::move(arr_req[1]));
+				}
+				else
+				{
+					// RFC 9110 sections 5.2/5.3 define a repeated field's combined value as
+					// the field-line values joined in order with comma+SP. Keep framing,
+					// routing and credential fields strict to avoid ambiguous request
+					// interpretation; Cookie is the one request field whose values are
+					// conventionally combined using semicolon+SP instead.
+					EL_ERROR(
+						arr_req[0] == U"content-length" ||
+						arr_req[0] == U"host" ||
+						arr_req[0] == U"authorization" ||
+						arr_req[0] == U"proxy-authorization",
+						THttpProcessingException, EStatus::BAD_REQUEST, U"duplicate singleton header field encountered"
+					);
+					if(arr_req[0] == U"cookie")
+						*existing_header += TStringView(U"; ");
+					else
+						*existing_header += TStringView(U", ");
+					*existing_header += arr_req[1];
+				}
 			}
 			arr_req.Clear();
 			EL_ERROR(request_line == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"header not correctly terminated by empty line");
