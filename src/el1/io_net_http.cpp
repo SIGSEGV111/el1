@@ -841,38 +841,61 @@ namespace el1::io::net::http
 		u8_t cleanup_handlers = 0;
 		TMemoryWaitable<u8_t> wait_cleanup(&cleanup_handlers, nullptr, 0xff);
 
+		if(quic_server != nullptr)
+		{
+			for(;;)
+			{
+				auto connection = quic_server->TryAcceptConnection();
+				if(connection == nullptr)
+				{
+					for(ssys_t i = handlers.Count() - 1; i >= 0; i--)
+						if(!handlers[i]->IsAlive())
+						{
+							auto e = handlers[i]->Join();
+							if(e != nullptr)
+								EL_FORWARD(*e.get(), TLogicException);
+							handlers.Remove(i);
+						}
+
+					cleanup_handlers = 0;
+					TFiber::WaitForMany({ &quic_server->OnConnectionAvailable(), &wait_cleanup });
+				}
+				else
+				{
+					handlers.MoveAppend(New<TFiber>([this, connection = std::move(connection), &cleanup_handlers]()
+					{
+						HandleHttp3Connection(*connection, this->handler);
+						cleanup_handlers = 1;
+					}));
+				}
+			}
+		}
+
 		for(;;)
 		{
-			// accept new client
 			IF_DEBUG_PRINTF("calling AcceptClient()\n");
-			std::unique_ptr<IStreamClient> stream_client = this->stream_server->AcceptStreamClient();
+			std::unique_ptr<IStreamClient> stream_client = stream_server->AcceptStreamClient();
 			if(stream_client == nullptr)
 			{
 				IF_DEBUG_PRINTF("no new client waiting, just cleaning up\n");
-				// cleanup
 				for(ssys_t i = handlers.Count() - 1; i >= 0; i--)
 					if(!handlers[i]->IsAlive())
 					{
 						auto e = handlers[i]->Join();
 						if(e != nullptr)
 							EL_FORWARD(*e.get(), TLogicException);
-
 						handlers.Remove(i);
 					}
 
 				cleanup_handlers = 0;
-
-				// wait
 				IF_DEBUG_PRINTF("waiting ...\n");
-				TFiber::WaitForMany({ &this->stream_server->OnClientConnect(), &wait_cleanup });
+				TFiber::WaitForMany({ &stream_server->OnClientConnect(), &wait_cleanup });
 			}
 			else
 			{
 				IF_DEBUG_PRINTF("accepted new client, spawning handler\n");
-				// start handler and handoff client
-				handlers.MoveAppend(New<TFiber>([this, stream_client = std::move(stream_client), &cleanup_handlers](){
-					// TODO: add some kind of output buffer to prevent excessive amounts of small write()-syscalls
-
+				handlers.MoveAppend(New<TFiber>([this, stream_client = std::move(stream_client), &cleanup_handlers]()
+				{
 					EProtocol connection_protocol = protocol;
 					if(connection_protocol == EProtocol::AUTO)
 					{
@@ -883,11 +906,10 @@ namespace el1::io::net::http
 					}
 
 					if(connection_protocol == EProtocol::HTTP2)
-						HandleHttp2Connection(*stream_client.get(), *stream_client.get(), this->handler, stream_client->RemoteAddress());
+						HandleHttp2Connection(*stream_client, *stream_client, this->handler, stream_client->RemoteAddress());
 					else
-						while(HandleSingleRequest(*stream_client.get(), *stream_client.get(), this->handler, stream_client->RemoteAddress()) != EStatus::EOF);
+						while(HandleSingleRequest(*stream_client, *stream_client, this->handler, stream_client->RemoteAddress()) != EStatus::EOF);
 
-					// notify controller to cleanup handler
 					cleanup_handlers = 1;
 				}));
 			}
@@ -895,13 +917,11 @@ namespace el1::io::net::http
 	}
 
 	THttpServer::THttpServer(IStreamServer* const stream_server, request_handler_t handler, const EProtocol protocol) :
-		stream_server(stream_server),
-		handler(handler),
-		protocol(protocol),
+		stream_server(stream_server), quic_server(nullptr), handler(handler), protocol(protocol),
 		fiber(TFunction<void>(this, &THttpServer::FiberMain), true)
 	{
 		EL_ERROR(stream_server == nullptr, TInvalidArgumentException, "stream_server", "stream_server must not be null");
-		IF_DEBUG_PRINTF("THttpServer constructor\n");
+		EL_ERROR(protocol == EProtocol::HTTP3, TInvalidArgumentException, "protocol", "HTTP/3 requires a QUIC server");
 	}
 
 	THttpServer::THttpServer(TTcpServer* const tcp_server, request_handler_t handler, const EProtocol protocol) :
@@ -909,9 +929,17 @@ namespace el1::io::net::http
 	{
 	}
 
+	THttpServer::THttpServer(quic::TServer* const quic_server, request_handler_t handler) :
+		stream_server(nullptr), quic_server(quic_server), handler(std::move(handler)), protocol(EProtocol::HTTP3),
+		fiber(TFunction<void>(this, &THttpServer::FiberMain), true)
+	{
+		EL_ERROR(quic_server == nullptr, TInvalidArgumentException, "quic_server", "quic_server must not be null");
+	}
+
 	THttpServer::~THttpServer()
 	{
-		IF_DEBUG_PRINTF("THttpServer destructor\n");
+		IF_DEBUG_PRINTF("THttpServer destructor\
+");
 	}
 
 	static void WriteChunkedBody(ISource<byte_t>& source, ISink<byte_t>& sink)

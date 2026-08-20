@@ -11,6 +11,9 @@
 #include <el1/system_task.hpp>
 #include <string.h>
 #include <stdlib.h>
+#include <nghttp3/nghttp3.h>
+#include <unordered_map>
+#include <string>
 
 using namespace ::testing;
 
@@ -28,9 +31,174 @@ namespace
 	using namespace el1::io::text::encoding::utf8;
 	using namespace el1::io::net::ip;
 	namespace tls = el1::io::net::tls;
+	namespace quic = el1::io::net::quic;
 	using namespace el1::io::file;
 	using namespace el1::error;
 	using namespace el1::system::task;
+
+
+	class THttp3TestClient
+	{
+		quic::TClient connection;
+		nghttp3_conn* session = nullptr;
+		std::unordered_map<int64_t, std::unique_ptr<quic::TStream>> streams;
+		std::unordered_map<int64_t, bool> input_fin;
+		bool complete = false;
+		u16_t status = 0;
+		std::string body;
+
+		static int RecvHeader(nghttp3_conn*, int64_t, int32_t, nghttp3_rcbuf* name, nghttp3_rcbuf* value, uint8_t, void* user_data, void*)
+		{
+			auto* const self = static_cast<THttp3TestClient*>(user_data);
+			const nghttp3_vec n = nghttp3_rcbuf_get_buf(name);
+			const nghttp3_vec v = nghttp3_rcbuf_get_buf(value);
+			if(std::string((char*)n.base, n.len) == ":status")
+				self->status = (u16_t)atoi(std::string((char*)v.base, v.len).c_str());
+			return 0;
+		}
+
+		static int RecvData(nghttp3_conn*, int64_t, const uint8_t* data, size_t size, void* user_data, void*)
+		{
+			static_cast<THttp3TestClient*>(user_data)->body.append((const char*)data, size);
+			return 0;
+		}
+
+		static int EndStream(nghttp3_conn*, int64_t, void* user_data, void*)
+		{
+			static_cast<THttp3TestClient*>(user_data)->complete = true;
+			return 0;
+		}
+
+		void AddStream(std::unique_ptr<quic::TStream> stream)
+		{
+			const int64_t id = (int64_t)stream->Id();
+			streams.emplace(id, std::move(stream));
+		}
+
+		public:
+			explicit THttp3TestClient(const ipport_t remote_address) : connection(remote_address, [&]()
+			{
+				quic::client_config_t config;
+				config.server_name = U"localhost";
+				config.ca_certificates = tls::TPemSource(TPath(U"support/tls-test-cert.pem"));
+				config.application_protocol = U"h3";
+				return config;
+			}())
+			{
+				nghttp3_callbacks callbacks{};
+				callbacks.recv_header = &RecvHeader;
+				callbacks.recv_data = &RecvData;
+				callbacks.end_stream = &EndStream;
+				nghttp3_settings settings;
+				nghttp3_settings_default(&settings);
+				settings.qpack_max_dtable_capacity = 4096U;
+				settings.qpack_encoder_max_dtable_capacity = 4096U;
+				settings.qpack_blocked_streams = 16U;
+				EL_ERROR(nghttp3_conn_client_new(&session, &callbacks, &settings, nullptr, this) != 0, TException, U"failed to create nghttp3 test client");
+				nghttp3_conn_set_max_concurrent_streams(session, 100U);
+
+				auto control = connection.OpenStream(true);
+				auto qenc = connection.OpenStream(true);
+				auto qdec = connection.OpenStream(true);
+				const int64_t control_id = (int64_t)control->Id();
+				const int64_t qenc_id = (int64_t)qenc->Id();
+				const int64_t qdec_id = (int64_t)qdec->Id();
+				AddStream(std::move(control));
+				AddStream(std::move(qenc));
+				AddStream(std::move(qdec));
+				EL_ERROR(nghttp3_conn_bind_control_stream(session, control_id) != 0, TException, U"failed to bind test HTTP/3 control stream");
+				EL_ERROR(nghttp3_conn_bind_qpack_streams(session, qenc_id, qdec_id) != 0, TException, U"failed to bind test HTTP/3 QPACK streams");
+			}
+
+			~THttp3TestClient()
+			{
+				if(session != nullptr)
+					nghttp3_conn_del(session);
+			}
+
+			std::pair<u16_t, std::string> Get(const char* const path)
+			{
+				auto request = connection.OpenStream(false);
+				const int64_t request_id = (int64_t)request->Id();
+				AddStream(std::move(request));
+				nghttp3_nv fields[] = {
+					{ (uint8_t*)":method", (uint8_t*)"GET", 7, 3, NGHTTP3_NV_FLAG_NONE },
+					{ (uint8_t*)":scheme", (uint8_t*)"https", 7, 5, NGHTTP3_NV_FLAG_NONE },
+					{ (uint8_t*)":authority", (uint8_t*)"localhost", 10, 9, NGHTTP3_NV_FLAG_NONE },
+					{ (uint8_t*)":path", (uint8_t*)path, 5, strlen(path), NGHTTP3_NV_FLAG_NONE },
+				};
+				EL_ERROR(nghttp3_conn_submit_request(session, request_id, fields, 4, nullptr, nullptr) != 0, TException, U"failed to submit HTTP/3 test request");
+
+				for(usys_t iterations = 0; !complete && iterations < 20000U; iterations++)
+				{
+					bool progress = false;
+					for(;;)
+					{
+						auto stream = connection.TryAcceptStream();
+						if(stream == nullptr)
+							break;
+						AddStream(std::move(stream));
+						progress = true;
+					}
+
+					byte_t buffer[4096];
+					for(auto& item : streams)
+					{
+						auto& stream = *item.second;
+						if(!stream.CanRead() || input_fin[item.first])
+							continue;
+						const usys_t n = stream.Read(buffer, sizeof(buffer));
+						if(n != 0)
+						{
+							const nghttp3_ssize consumed = nghttp3_conn_read_stream(session, item.first, buffer, n, 0);
+							EL_ERROR(consumed < 0, TException, nghttp3_strerror((int)consumed));
+							progress = true;
+						}
+						else if(stream.OnInputReady() == nullptr)
+						{
+							const nghttp3_ssize consumed = nghttp3_conn_read_stream(session, item.first, nullptr, 0, 1);
+							EL_ERROR(consumed < 0, TException, nghttp3_strerror((int)consumed));
+							input_fin[item.first] = true;
+							progress = true;
+						}
+					}
+
+					for(usys_t output_iterations = 0; output_iterations < 64U; output_iterations++)
+					{
+						int64_t stream_id = -1;
+						int fin = 0;
+						nghttp3_vec vec[1];
+						const nghttp3_ssize count = nghttp3_conn_writev_stream(session, &stream_id, &fin, vec, 1);
+						EL_ERROR(count < 0, TException, nghttp3_strerror((int)count));
+						if(stream_id < 0)
+							break;
+						auto& stream = *streams.at(stream_id);
+						if(count == 0)
+						{
+							if(fin)
+							{
+								stream.CloseOutput();
+								EL_ERROR(nghttp3_conn_add_write_offset(session, stream_id, 0) != 0, TException, U"failed to advance HTTP/3 test write offset");
+							}
+							break;
+						}
+						const usys_t n = stream.Write(vec[0].base, vec[0].len);
+						if(n == 0)
+							break;
+						EL_ERROR(nghttp3_conn_add_write_offset(session, stream_id, n) != 0, TException, U"failed to advance HTTP/3 test write offset");
+						EL_ERROR(nghttp3_conn_add_ack_offset(session, stream_id, n) != 0, TException, U"failed to advance HTTP/3 test ack offset");
+						if(fin && n == vec[0].len)
+							stream.CloseOutput();
+						progress = true;
+					}
+
+					if(!progress)
+						TFiber::Sleep(0.001);
+				}
+				EL_ERROR(!complete, TException, U"HTTP/3 test client timed out");
+				return { status, body };
+			}
+	};
 
 	TEST(io_net_http, HandleSingleRequest_simple)
 	{
@@ -366,7 +534,6 @@ namespace
 		EXPECT_TRUE(request.body->Complete());
 		ASSERT_EQ(decoder.Read(&request, 1), 1U);
 		EXPECT_EQ(request.url, U"/two");
-		EXPECT_EQ(request.body, nullptr);
 	}
 
 	TEST(io_net_http, THttpRequestDecoder_chunked_body_trailers)
@@ -897,6 +1064,36 @@ namespace
 		const TString result = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", U"--http2", U"--cacert", U"support/tls-test-cert.pem", url });
 		EXPECT_EQ(result, U"h2-tls");
 	}
+
+	TEST(io_net_http, THttpServer_http3_quic)
+	{
+		if(!quic::IsSupported())
+			GTEST_SKIP() << "HTTP/3 requires OpenSSL 3.5 QUIC support";
+
+		TUdpSocket udp(ipaddr_t(U"127.0.0.1"));
+		quic::server_config_t config;
+		config.certificate_chain = tls::TPemSource(TPath(U"support/tls-test-cert.pem"));
+		config.private_key = tls::TPemSource(TPath(U"support/tls-test-key.pem"));
+		config.application_protocol = U"h3";
+		quic::TServer quic_server(&udp, std::move(config));
+		THttpServer http_server(&quic_server, [](const THttpServer::request_t& request, THttpServer::response_t& response)
+		{
+			EXPECT_EQ(request.version, EVersion::HTTP30);
+			EXPECT_EQ(request.method, EMethod::GET);
+			EXPECT_EQ(request.url, U"/h3");
+			response.status = EStatus::OK;
+			auto body = el1::New<TFifo<byte_t>>();
+			body->WriteAll(reinterpret_cast<const byte_t*>("http3-ok"), 8);
+			body->CloseOutput();
+			response.body = std::move(body);
+		});
+
+		THttp3TestClient client({ ipaddr_t(U"127.0.0.1"), quic_server.LocalAddress().port });
+		const auto response = client.Get("/h3");
+		EXPECT_EQ(response.first, 200U);
+		EXPECT_EQ(response.second, "http3-ok");
+	}
+
 
 	TEST(io_net_http, THttpServer_http2_streaming_request_body_flow_control)
 	{

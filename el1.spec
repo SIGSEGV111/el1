@@ -16,8 +16,10 @@ BuildRequires:  pkgconfig(krb5)
 BuildRequires:  pkgconfig(libpq)
 BuildRequires:  pkgconfig(openssl) >= 3.5
 BuildRequires:  pkgconfig(libnghttp2)
+BuildRequires:  pkgconfig(libnghttp3)
 Requires:       libopenssl3 >= 3.5
 Requires:       libnghttp2-14
+Requires:       libnghttp3-9
 BuildRequires:  pkgconfig(zlib)
 
 %description

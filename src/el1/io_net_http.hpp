@@ -11,6 +11,7 @@
 #include "util_function.hpp"
 #include "io_net_ip.hpp"
 #include "io_net_tls.hpp"
+#include "io_net_quic.hpp"
 #include "system_time.hpp"
 
 #undef EOF
@@ -223,6 +224,7 @@ namespace el1::io::net::http
 				AUTO,
 				HTTP1,
 				HTTP2,
+				HTTP3,
 			};
 
 			static bool DEBUG;
@@ -233,6 +235,7 @@ namespace el1::io::net::http
 
 		protected:
 			ip::IStreamServer* const stream_server;
+			quic::TServer* const quic_server;
 			request_handler_t handler;
 			const EProtocol protocol;
 			system::task::TFiber fiber;
@@ -254,8 +257,15 @@ namespace el1::io::net::http
 				const ip::ipport_t remote_address = ip::ipport_t{}
 			);
 
+			static void HandleHttp3Connection(
+				quic::TConnection& transport,
+				request_handler_t handler,
+				const ip::ipport_t remote_address = ip::ipport_t{}
+			);
+
 			THttpServer(ip::IStreamServer* const stream_server, request_handler_t handler, const EProtocol protocol = EProtocol::AUTO);
 			THttpServer(ip::TTcpServer* const tcp_server, request_handler_t handler, const EProtocol protocol = EProtocol::AUTO);
+			THttpServer(quic::TServer* const quic_server, request_handler_t handler);
 			~THttpServer();
 	};
 
