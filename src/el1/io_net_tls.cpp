@@ -13,6 +13,7 @@ namespace el1::io::net::tls
 {
 	using namespace error;
 	using namespace io::stream;
+	using namespace io::collection::list;
 	using namespace io::text::string;
 	using namespace system::waitable;
 
@@ -55,6 +56,33 @@ namespace el1::io::net::tls
 			INPUT,
 			OUTPUT,
 		};
+
+		static TList<byte_t> AlpnWire(const TList<TString>& protocols)
+		{
+			TList<byte_t> result;
+			for(const TString& protocol : protocols)
+			{
+				auto cstr = protocol.MakeCStr();
+				const usys_t size = strlen(cstr.get());
+				EL_ERROR(size == 0 || size > 255U, TInvalidArgumentException, "application_protocols", "ALPN protocol names must encode to 1..255 bytes");
+				result.Append(static_cast<byte_t>(size));
+				result.Append(reinterpret_cast<const byte_t*>(cstr.get()), size);
+			}
+			return result;
+		}
+
+		static int SelectAlpn(SSL*, const unsigned char** const output, unsigned char* const output_size, const unsigned char* const input, const unsigned int input_size, void* const arg)
+		{
+			auto* const protocols = static_cast<TList<byte_t>*>(arg);
+			if(protocols == nullptr || protocols->Count() == 0)
+				return SSL_TLSEXT_ERR_NOACK;
+
+			unsigned char* selected = nullptr;
+			if(SSL_select_next_proto(&selected, output_size, protocols->ItemPtr(0), protocols->Count(), input, input_size) != OPENSSL_NPN_NEGOTIATED)
+				return SSL_TLSEXT_ERR_NOACK;
+			*output = selected;
+			return SSL_TLSEXT_ERR_OK;
+		}
 
 		static TString OpenSslError(const char* const context)
 		{
@@ -415,6 +443,10 @@ namespace el1::io::net::tls
 			EL_ERROR(SSL_set_tlsext_host_name(data->ssl, server_name.get()) != 1, TTlsException, OpenSslError("failed to set TLS SNI hostname"));
 			if(config.verify_peer)
 				EL_ERROR(SSL_set1_host(data->ssl, server_name.get()) != 1, TTlsException, OpenSslError("failed to configure TLS hostname verification"));
+
+			const TList<byte_t> alpn = AlpnWire(config.application_protocols);
+			if(alpn.Count() != 0)
+				EL_ERROR(SSL_set_alpn_protos(data->ssl, alpn.ItemPtr(0), alpn.Count()) != 0, TTlsException, OpenSslError("failed to configure TLS ALPN protocols"));
 		}
 		catch(...)
 		{
@@ -443,6 +475,34 @@ namespace el1::io::net::tls
 	ip::ipport_t TClient::RemoteAddress() const
 	{
 		return data->tcp_client->RemoteAddress();
+	}
+
+	void TClient::Negotiate()
+	{
+		for(;;)
+		{
+			ERR_clear_error();
+			const int result = SSL_do_handshake(data->ssl);
+			if(result == 1)
+				return;
+			const EWaitDirection direction = WaitDirectionFromSslError(data->ssl, result, "SSL_do_handshake() failed");
+			const IWaitable* const waitable = data->Waitable(direction);
+			EL_ERROR(waitable == nullptr, TTlsException, U"TLS transport closed during handshake");
+			waitable->WaitFor();
+		}
+	}
+
+	TString TClient::ApplicationProtocol() const
+	{
+		const unsigned char* protocol = nullptr;
+		unsigned int size = 0;
+		SSL_get0_alpn_selected(data->ssl, &protocol, &size);
+		if(protocol == nullptr || size == 0)
+			return {};
+		TList<char> str(size + 1U);
+		str.Append(reinterpret_cast<const char*>(protocol), size);
+		str.Append('\0');
+		return TString(str.ItemPtr(0));
 	}
 
 	usys_t TClient::Read(byte_t* const arr_items, const usys_t n_items_max)
@@ -594,6 +654,7 @@ namespace el1::io::net::tls
 
 	TServer::TServer(ip::TTcpServer* const tcp_server, server_config_t config) :
 		tcp_server(tcp_server),
+		alpn_protocols(AlpnWire(config.application_protocols)),
 		ssl_context(nullptr)
 	{
 		EL_ERROR(tcp_server == nullptr, TInvalidArgumentException, "tcp_server", "tcp_server must not be null");
@@ -609,6 +670,8 @@ namespace el1::io::net::tls
 		{
 			EL_ERROR(SSL_CTX_set_min_proto_version(context, NativeVersion(config.min_version)) != 1, TTlsException, OpenSslError("SSL_CTX_set_min_proto_version() failed"));
 			SSL_CTX_set_options(context, SSL_OP_NO_COMPRESSION);
+			if(alpn_protocols.Count() != 0)
+				SSL_CTX_set_alpn_select_cb(context, &SelectAlpn, &alpn_protocols);
 
 			LoadCertificateChain(context, config.certificate_chain);
 			LoadPrivateKey(context, config.private_key);
@@ -631,6 +694,7 @@ namespace el1::io::net::tls
 		TServer(tcp_server, server_config_t{
 			.certificate_chain = TPemSource(std::move(certificate_chain_file)),
 			.private_key = TPemSource(std::move(private_key_file)),
+			.application_protocols = {},
 			.min_version = min_version,
 		})
 	{

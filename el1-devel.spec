@@ -8,6 +8,7 @@ URL:            https://www.brennecke-it.net
 BuildRequires:  make
 Requires:       el1 = %{version}
 Requires:       krb5-devel
+Requires:       pkgconfig(libnghttp2)
 
 %description
 Header files and the linker interface for developing C++ applications with el1.

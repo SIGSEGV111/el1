@@ -95,7 +95,17 @@ namespace el1::io::net::http
 		THttpHeaderFields header_fields;
 	};
 
-	class THttpRequestBody final : public stream::ISource<byte_t>
+	class IHttpRequestBody : public stream::ISource<byte_t>
+	{
+		public:
+			virtual bool Complete() const EL_GETTER = 0;
+			virtual usys_t Remaining() const EL_GETTER = 0;
+			virtual const THttpHeaderFields& Trailers() const EL_GETTER = 0;
+			using stream::ISource<byte_t>::Discard;
+			virtual void Discard() = 0;
+	};
+
+	class THttpRequestBody final : public IHttpRequestBody
 	{
 		friend class THttpRequestDecoder;
 
@@ -133,10 +143,10 @@ namespace el1::io::net::http
 		public:
 			using stream::ISource<byte_t>::Discard;
 
-			bool Complete() const EL_GETTER;
-			usys_t Remaining() const EL_GETTER;
-			const THttpHeaderFields& Trailers() const EL_GETTER { return trailers; }
-			void Discard();
+			bool Complete() const override EL_GETTER;
+			usys_t Remaining() const override EL_GETTER;
+			const THttpHeaderFields& Trailers() const override EL_GETTER { return trailers; }
+			void Discard() override;
 
 			usys_t Read(byte_t* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT;
 			const system::waitable::IWaitable* OnInputReady() const final override;
@@ -145,7 +155,7 @@ namespace el1::io::net::http
 	struct THttpRequest : request_meta_t
 	{
 		ip::ipport_t remote_address;
-		THttpRequestBody* body = nullptr;
+		IHttpRequestBody* body = nullptr;
 
 		bool KeepAlive() const EL_GETTER;
 	};
@@ -208,6 +218,13 @@ namespace el1::io::net::http
 	class THttpServer
 	{
 		public:
+			enum class EProtocol : u8_t
+			{
+				AUTO,
+				HTTP1,
+				HTTP2,
+			};
+
 			static bool DEBUG;
 
 			using request_t = THttpRequestDecoder::request_t;
@@ -217,6 +234,7 @@ namespace el1::io::net::http
 		protected:
 			ip::IStreamServer* const stream_server;
 			request_handler_t handler;
+			const EProtocol protocol;
 			system::task::TFiber fiber;
 
 			void FiberMain();
@@ -229,8 +247,15 @@ namespace el1::io::net::http
 				const ip::ipport_t remote_address = ip::ipport_t{}
 			);
 
-			THttpServer(ip::IStreamServer* const stream_server, request_handler_t handler);
-			THttpServer(ip::TTcpServer* const tcp_server, request_handler_t handler);
+			static void HandleHttp2Connection(
+				stream::ISource<byte_t>& source,
+				stream::ISink<byte_t>& sink,
+				request_handler_t handler,
+				const ip::ipport_t remote_address = ip::ipport_t{}
+			);
+
+			THttpServer(ip::IStreamServer* const stream_server, request_handler_t handler, const EProtocol protocol = EProtocol::AUTO);
+			THttpServer(ip::TTcpServer* const tcp_server, request_handler_t handler, const EProtocol protocol = EProtocol::AUTO);
 			~THttpServer();
 	};
 

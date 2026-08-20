@@ -51,6 +51,7 @@ namespace el1::io::net::tls
 	{
 		TPemSource certificate_chain;
 		TPemSource private_key;
+		collection::list::TList<text::string::TString> application_protocols;
 		EVersion min_version = EVersion::TLS12;
 	};
 
@@ -58,6 +59,7 @@ namespace el1::io::net::tls
 	{
 		text::string::TString server_name;
 		TPemSource ca_certificates;
+		collection::list::TList<text::string::TString> application_protocols;
 		EVersion min_version = EVersion::TLS12;
 		bool verify_peer = true;
 	};
@@ -91,6 +93,8 @@ namespace el1::io::net::tls
 			system::handle::handle_t Handle() final override EL_GETTER;
 			ip::ipport_t LocalAddress() const final override EL_GETTER;
 			ip::ipport_t RemoteAddress() const final override EL_GETTER;
+			void Negotiate();
+			text::string::TString ApplicationProtocol() const EL_GETTER;
 
 			usys_t Read(byte_t* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT;
 			usys_t Write(const byte_t* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT;
@@ -108,6 +112,7 @@ namespace el1::io::net::tls
 	{
 		protected:
 			ip::TTcpServer* const tcp_server;
+			collection::list::TList<byte_t> alpn_protocols;
 			void* ssl_context;
 
 		public:

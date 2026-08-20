@@ -873,8 +873,19 @@ namespace el1::io::net::http
 				handlers.MoveAppend(New<TFiber>([this, stream_client = std::move(stream_client), &cleanup_handlers](){
 					// TODO: add some kind of output buffer to prevent excessive amounts of small write()-syscalls
 
-					// process all requests from client
-					while(HandleSingleRequest(*stream_client.get(), *stream_client.get(), this->handler, stream_client->RemoteAddress()) != EStatus::EOF);
+					EProtocol connection_protocol = protocol;
+					if(connection_protocol == EProtocol::AUTO)
+					{
+						auto* const tls_client = dynamic_cast<tls::TClient*>(stream_client.get());
+						if(tls_client != nullptr)
+							tls_client->Negotiate();
+						connection_protocol = tls_client != nullptr && tls_client->ApplicationProtocol() == U"h2" ? EProtocol::HTTP2 : EProtocol::HTTP1;
+					}
+
+					if(connection_protocol == EProtocol::HTTP2)
+						HandleHttp2Connection(*stream_client.get(), *stream_client.get(), this->handler, stream_client->RemoteAddress());
+					else
+						while(HandleSingleRequest(*stream_client.get(), *stream_client.get(), this->handler, stream_client->RemoteAddress()) != EStatus::EOF);
 
 					// notify controller to cleanup handler
 					cleanup_handlers = 1;
@@ -883,17 +894,18 @@ namespace el1::io::net::http
 		}
 	}
 
-	THttpServer::THttpServer(IStreamServer* const stream_server, request_handler_t handler) :
+	THttpServer::THttpServer(IStreamServer* const stream_server, request_handler_t handler, const EProtocol protocol) :
 		stream_server(stream_server),
 		handler(handler),
+		protocol(protocol),
 		fiber(TFunction<void>(this, &THttpServer::FiberMain), true)
 	{
 		EL_ERROR(stream_server == nullptr, TInvalidArgumentException, "stream_server", "stream_server must not be null");
 		IF_DEBUG_PRINTF("THttpServer constructor\n");
 	}
 
-	THttpServer::THttpServer(TTcpServer* const tcp_server, request_handler_t handler) :
-		THttpServer(static_cast<IStreamServer*>(tcp_server), std::move(handler))
+	THttpServer::THttpServer(TTcpServer* const tcp_server, request_handler_t handler, const EProtocol protocol) :
+		THttpServer(static_cast<IStreamServer*>(tcp_server), std::move(handler), protocol)
 	{
 	}
 

@@ -15,7 +15,9 @@ BuildRequires:  libstdc++-devel
 BuildRequires:  pkgconfig(krb5)
 BuildRequires:  pkgconfig(libpq)
 BuildRequires:  pkgconfig(openssl) >= 3.5
+BuildRequires:  pkgconfig(libnghttp2)
 Requires:       libopenssl3 >= 3.5
+Requires:       libnghttp2-14
 BuildRequires:  pkgconfig(zlib)
 
 %description

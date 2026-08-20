@@ -857,4 +857,77 @@ namespace
 		EXPECT_EQ(raw_server.Join(), nullptr);
 	}
 
+	TEST(io_net_http, THttpServer_curl_http2_prior_knowledge)
+	{
+		TTcpServer tcp_server;
+		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			EXPECT_EQ(request.version, EVersion::HTTP20);
+			EXPECT_EQ(request.url, U"/h2");
+			response.status = EStatus::OK;
+			auto body = el1::New<TFifo<byte_t>>();
+			body->WriteAll(reinterpret_cast<const byte_t*>("http2-ok"), 8);
+			body->CloseOutput();
+			response.body = std::move(body);
+		}, THttpServer::EProtocol::HTTP2);
+
+		const TString url = TString::Format(U"http://localhost:%d/h2", tcp_server.LocalAddress().port);
+		const TString result = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", U"--http2-prior-knowledge", url });
+		EXPECT_EQ(result, U"http2-ok");
+	}
+
+	TEST(io_net_http, THttpServer_curl_https_http2_alpn)
+	{
+		TTcpServer tcp_server;
+		tls::server_config_t tls_config;
+		tls_config.certificate_chain = tls::TPemSource(TPath(U"support/tls-test-cert.pem"));
+		tls_config.private_key = tls::TPemSource(TPath(U"support/tls-test-key.pem"));
+		tls_config.application_protocols = { U"h2", U"http/1.1" };
+		tls::TServer tls_server(&tcp_server, std::move(tls_config));
+		THttpServer http_server(&tls_server, [](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			EXPECT_EQ(request.version, EVersion::HTTP20);
+			EXPECT_EQ(request.url, U"/h2-tls");
+			response.status = EStatus::OK;
+			auto body = el1::New<TFifo<byte_t>>();
+			body->WriteAll(reinterpret_cast<const byte_t*>("h2-tls"), 6);
+			body->CloseOutput();
+			response.body = std::move(body);
+		});
+
+		const TString url = TString::Format(U"https://localhost:%d/h2-tls", tls_server.LocalAddress().port);
+		const TString result = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", U"--http2", U"--cacert", U"support/tls-test-cert.pem", url });
+		EXPECT_EQ(result, U"h2-tls");
+	}
+
+	TEST(io_net_http, THttpServer_http2_streaming_request_body_flow_control)
+	{
+		TTcpServer tcp_server;
+		usys_t received = 0;
+		THttpServer http_server(&tcp_server, [&received](const THttpServer::request_t& request, THttpServer::response_t& response) {
+			EXPECT_EQ(request.version, EVersion::HTTP20);
+			ASSERT_NE(request.body, nullptr);
+			byte_t buffer[4096];
+			while(!request.body->Complete())
+			{
+				const usys_t n = request.body->Read(buffer, sizeof(buffer));
+				if(n != 0)
+					received += n;
+				else if(const auto* const waitable = request.body->OnInputReady(); waitable != nullptr)
+					waitable->WaitFor();
+			}
+			response.status = EStatus::NO_CONTENT;
+		}, THttpServer::EProtocol::HTTP2);
+
+		const TPath payload_path = TPath(EL1_TEST_OUT_DIR) + TPath(U"http2-upload.bin");
+		TFile payload_file(payload_path, TAccess::RW, ECreateMode::DELETE);
+		byte_t payload[4096];
+		memset(payload, 'x', sizeof(payload));
+		for(usys_t i = 0; i < 32U; i++)
+			payload_file.WriteAll(payload, sizeof(payload));
+		TString data_arg(U"@");
+		data_arg += payload_path.ToString();
+		const TString url = TString::Format(U"http://localhost:%d/upload", tcp_server.LocalAddress().port);
+		TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", U"--http2-prior-knowledge", U"--data-binary", data_arg, url });
+		EXPECT_EQ(received, 128U * 1024U);
+	}
+
 }
