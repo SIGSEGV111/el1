@@ -686,6 +686,30 @@ namespace
 		}
 	}
 
+	TEST(system_task, TProcess_pipe_waitables_remain_stable)
+	{
+		TSortedMap<fd_t, TProcess::EFDIO> stream_map;
+		stream_map.Add(0, TProcess::EFDIO::PIPE_PARENT_TO_CHILD);
+		stream_map.Add(1, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
+		stream_map.Add(2, TProcess::EFDIO::PIPE_CHILD_TO_PARENT);
+
+		TProcess proc(U"/bin/true", {}, stream_map);
+
+		const IWaitable* const stdin_waitable = proc.SendStream(0)->OnOutputReady();
+		const IWaitable* const stdout_waitable = proc.ReceiveStream(1)->OnInputReady();
+		const IWaitable* const stderr_waitable = proc.ReceiveStream(2)->OnInputReady();
+
+		for(const IWaitable* const waitable : { stdin_waitable, stdout_waitable, stderr_waitable })
+		{
+			ASSERT_NE(waitable, nullptr);
+			const auto handle_waitables = waitable->HandleWaitables();
+			ASSERT_EQ(handle_waitables.Count(), usys_t(1));
+			EXPECT_EQ(handle_waitables[0], waitable);
+		}
+
+		EXPECT_EQ(proc.Join(), 0);
+	}
+
 	TEST(system_task, TProcess_stop_resume)
 	{
 		{

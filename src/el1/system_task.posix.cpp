@@ -421,20 +421,20 @@ namespace el1::system::task
 					break;
 			}
 
-			TPipe pipe;
+			std::unique_ptr<TPipe> pipe(new TPipe());
 
 			if(kv.value == EFDIO::PIPE_PARENT_TO_CHILD)
 			{
-				pipe.SendSide().BlockingIO(false);
-				child_handles.Add(kv.key, std::move(pipe.ReceiveSide()));
-				this->streams.Add(kv.key, std::move(pipe));
+				pipe->SendSide().BlockingIO(false);
+				child_handles.Add(kv.key, std::move(pipe->ReceiveSide()));
 			}
 			else
 			{
-				pipe.ReceiveSide().BlockingIO(false);
-				child_handles.Add(kv.key, std::move(pipe.SendSide()));
-				this->streams.Add(kv.key, std::move(pipe));
+				pipe->ReceiveSide().BlockingIO(false);
+				child_handles.Add(kv.key, std::move(pipe->SendSide()));
 			}
+
+			this->streams.Add(kv.key, std::move(pipe));
 		}
 
 		EL_SYSERR(pid = fork());

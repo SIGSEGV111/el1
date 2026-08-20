@@ -671,7 +671,7 @@ namespace el1::system::task
 			process_id_t pid;
 			THandle h_proc;
 			mutable THandleWaitable on_terminate;
-			io::collection::map::TSortedMap<fd_t, TPipe> streams;
+			io::collection::map::TSortedMap<fd_t, std::unique_ptr<TPipe>> streams;
 
 		public:
 			static bool WARN_NONZERO_EXIT_IN_DESTRUCTOR;

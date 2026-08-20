@@ -809,12 +809,14 @@ namespace el1::system::task
 
 	ISource<byte_t>* TProcess::ReceiveStream(const fd_t fd)
 	{
-		return streams.Get(fd);
+		const auto* const pipe = streams.Get(fd);
+		return pipe == nullptr ? nullptr : pipe->get();
 	}
 
 	ISink<byte_t>* TProcess::SendStream(const fd_t fd)
 	{
-		return streams.Get(fd);
+		const auto* const pipe = streams.Get(fd);
+		return pipe == nullptr ? nullptr : pipe->get();
 	}
 
 	TProcess::TProcess(
