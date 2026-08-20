@@ -37,6 +37,7 @@ LDFLAGS ?=
 EXEFLAGS ?=
 TEST_CXXFLAGS ?=
 TEST_GTEST_FLAGS ?=
+TEST_JUNIT_XML ?=
 LIFETIME_EXTRA_CXXFLAGS ?=
 
 RELEASE_CXXFLAGS ?= -O3 -g -DNDEBUG -flto
@@ -117,6 +118,10 @@ ifneq ($(strip $(TEST_EXCLUDE_PATTERNS)),)
 TEST_GTEST_FLAGS += '--gtest_filter=-$(subst $(space),:,$(strip $(TEST_EXCLUDE_PATTERNS)))'
 endif
 
+ifneq ($(strip $(TEST_JUNIT_XML)),)
+TEST_GTEST_FLAGS += '--gtest_output=xml:$(abspath $(TEST_JUNIT_XML))'
+endif
+
 ifeq ($(WITH_COVERAGE),1)
 DEBUG_COVERAGE_CXXFLAGS := $(COVERAGE_CXXFLAGS)
 else
@@ -176,6 +181,11 @@ COVERAGE_DIR := $(DEBUG_DIR)/coverage
 COVERAGE_PROFILE_DIR := $(COVERAGE_DIR)/profiles
 COVERAGE_HTML_DIR := $(COVERAGE_DIR)/html
 COVERAGE_DATA := $(COVERAGE_DIR)/coverage.profdata
+COVERAGE_LCOV := $(COVERAGE_DIR)/coverage.lcov
+CI_DIR ?= $(GEN_DIR)/jenkins
+CI_JUNIT_XML := $(CI_DIR)/junit.xml
+CI_COVERAGE_LCOV := $(CI_DIR)/coverage.lcov
+CI_RPM_DIR := $(CI_DIR)/rpm
 TEST_WORK_DIRS ?= $(OUT_DIR)/test.tmp $(OUT_DIR)/test1.tmp
 TEST_OUT_DIR_DEFINE := '-DEL1_TEST_OUT_DIR=U"$(OUT_DIR)"'
 
@@ -266,7 +276,7 @@ export CXX
 .PHONY: all headers release debug clean clean-all \
 	compile-debug build-tests-release build-tests-debug \
 	install install-runtime install-devel package rpm deploy \
-	test test-release test-debug coverage-report \
+	test test-release test-debug coverage-report ci \
 	examples examples-test \
 	check-valgrind check-coverage-tools lifetime-check entr
 
@@ -449,11 +459,13 @@ test-release-native: $(RELEASE_TEST_NAME)
 	LD_LIBRARY_PATH="$(RELEASE_DIR)" "$(RELEASE_TEST_NAME)" $(TEST_GTEST_FLAGS)
 
 test-release: check-valgrind $(RELEASE_TEST_NAME)
+	@if [ -n "$(TEST_JUNIT_XML)" ]; then mkdir -p "$(dir $(TEST_JUNIT_XML))"; fi
 	./support/generate-testdata.sh "$(OUT_DIR)"
 	rm -rf -- $(TEST_WORK_DIRS) && mkdir -p -- $(TEST_WORK_DIRS)
 	LD_LIBRARY_PATH="$(RELEASE_DIR)" $(TEST_RUNNER) "$(RELEASE_TEST_NAME)" $(TEST_GTEST_FLAGS)
 
 test-debug: check-valgrind $(DEBUG_TEST_NAME)
+	@if [ -n "$(TEST_JUNIT_XML)" ]; then mkdir -p "$(dir $(TEST_JUNIT_XML))"; fi
 	./support/generate-testdata.sh "$(OUT_DIR)"
 	rm -rf -- $(TEST_WORK_DIRS) "$(COVERAGE_PROFILE_DIR)" && mkdir -p -- $(TEST_WORK_DIRS)
 	mkdir -p "$(COVERAGE_PROFILE_DIR)"
@@ -472,7 +484,13 @@ coverage-report: check-coverage-tools test-debug
 		-show-line-counts-or-regions \
 		-show-instantiations=false \
 		--sources $(LIB_SOURCES) $(LIB_HEADERS)
+	$(LLVM_COV) export "$(DEBUG_TEST_NAME)" \
+		-instr-profile="$(COVERAGE_DATA)" \
+		-format=lcov \
+		--sources $(LIB_SOURCES) $(LIB_HEADERS) \
+		> "$(COVERAGE_LCOV)"
 	@echo "Coverage report: file://$(abspath $(COVERAGE_HTML_DIR))/index.html"
+	@echo "LCOV report: $(abspath $(COVERAGE_LCOV))"
 else
 coverage-report: test-debug
 	@echo "Coverage disabled (WITH_COVERAGE=0)"
@@ -519,6 +537,23 @@ install-devel: headers
 package: rpm
 
 rpm: $(ARCH_RPM_NAME) $(SRC_RPM_NAME) $(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME)
+
+ifeq ($(WITH_COVERAGE),1)
+ci:
+	rm -rf -- "$(CI_DIR)"
+	mkdir -p "$(CI_DIR)" "$(CI_RPM_DIR)"
+	$(MAKE) --no-print-directory test TEST_JUNIT_XML="$(abspath $(CI_JUNIT_XML))"
+	cp -f -- "$(COVERAGE_LCOV)" "$(CI_COVERAGE_LCOV)"
+	$(MAKE) --no-print-directory rpm
+	cp -f -- "$(ARCH_RPM_NAME)" "$(SRC_RPM_NAME)" "$(DEVEL_RPM_NAME)" "$(DEVEL_SRC_RPM_NAME)" "$(CI_RPM_DIR)/"
+	@echo "JUnit report: $(abspath $(CI_JUNIT_XML))"
+	@echo "LCOV report: $(abspath $(CI_COVERAGE_LCOV))"
+	@echo "RPM artifacts: $(abspath $(CI_RPM_DIR))"
+else
+ci:
+	@echo "ERROR: ci requires WITH_COVERAGE=1" >&2
+	@exit 1
+endif
 
 deploy: $(ARCH_RPM_NAME) $(SRC_RPM_NAME) $(DEVEL_RPM_NAME) $(DEVEL_SRC_RPM_NAME)
 	ensure-git-clean.sh
