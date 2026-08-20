@@ -57,6 +57,7 @@ namespace el1::io::collection::list
 	class EL_LIFETIME_OWNER TList : public TList_Insert_Impl<T, std::is_copy_constructible<T>::value>, public array_t<T>
 	{
 		static_assert(!std::is_const_v<T>, "TList owns mutable objects; use array_t<const T> for a read-only view");
+		static_assert(std::is_move_constructible_v<T> || std::is_copy_constructible_v<T>, "TList elements must be move- or copy-constructible because the backing storage may be relocated");
 		friend struct TList_Insert_Impl<T, std::is_copy_constructible<T>::value>;
 		friend struct TListSink<T>;
 		protected:

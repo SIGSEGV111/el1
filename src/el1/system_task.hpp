@@ -661,8 +661,10 @@ namespace el1::system::task
 			void Close() final override;
 
 			TPipe();
-			TPipe(TPipe&&) = default;
 			TPipe(const TPipe&) = delete;
+			TPipe(TPipe&&) = delete;
+			TPipe& operator=(const TPipe&) = delete;
+			TPipe& operator=(TPipe&&) = delete;
 	};
 
 	class TProcess : public ITask
