@@ -359,7 +359,7 @@ namespace
 		ASSERT_NE(request.body, nullptr);
 		EXPECT_EQ(request.url, U"/one");
 		EXPECT_EQ(request.body->Remaining(), 4U);
-		EXPECT_THROW(decoder.Read(&request, 1), TLogicException);
+		EXPECT_THROW((void)decoder.Read(&request, 1), TLogicException);
 
 		byte_t body[4];
 		request.body->ReadAll(body, sizeof(body));

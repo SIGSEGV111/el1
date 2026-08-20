@@ -112,3 +112,17 @@
    obj:/usr/lib64/libkrb5.so.3.3
    fun:krb5_kt_resolve
 }
+
+# OpenSSL's optimized x86_64 AES-GCM implementation is known to trigger a
+# Memcheck false positive in EVP_DecryptFinal_ex in release builds.  QUIC uses
+# AES-GCM during packet decryption, so constrain the suppression to the path
+# from EVP_DecryptFinal_ex back into our QUIC accept call.  See OpenSSL #19719.
+{
+   openssl_aes_gcm_quic_decrypt_final
+   Memcheck:Cond
+   obj:*/libcrypto.so*
+   obj:*/libcrypto.so*
+   fun:EVP_DecryptFinal_ex
+   ...
+   fun:_ZN3el12io3net4quic7TServer19TryAcceptConnectionEv
+}

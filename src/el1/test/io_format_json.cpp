@@ -165,9 +165,9 @@ namespace
 			EXPECT_EQ(unsigned_max.ToInteger<u64_t>(), std::numeric_limits<u64_t>::max());
 			EXPECT_EQ(signed_max.ToString(), U"9223372036854775807");
 			EXPECT_EQ(unsigned_max.ToString(), U"18446744073709551615");
-			EXPECT_THROW(signed_max.ToInteger<s32_t>(), TException);
-			EXPECT_THROW(TJsonValue::Parse(U"9223372036854775808").ToInteger<s64_t>(), TException);
-			EXPECT_THROW(TJsonValue::Parse(U"18446744073709551616").ToInteger<u64_t>(), TException);
+			EXPECT_THROW((void)signed_max.ToInteger<s32_t>(), TException);
+			EXPECT_THROW((void)TJsonValue::Parse(U"9223372036854775808").ToInteger<s64_t>(), TException);
+			EXPECT_THROW((void)TJsonValue::Parse(U"18446744073709551616").ToInteger<u64_t>(), TException);
 			EXPECT_TRUE(TJsonValue::Parse(U"1") == TJsonValue(1.0));
 			EXPECT_TRUE(TJsonValue::Parse(U"1") == TJsonValue((u64_t)1));
 			EXPECT_FALSE(TJsonValue::Parse(U"9007199254740993") == TJsonValue(9007199254740992.0));
@@ -175,13 +175,13 @@ namespace
 
 		{
 			EXPECT_EQ(TJsonValue::Parse(U"65535").ToInteger<u16_t>(), std::numeric_limits<u16_t>::max());
-			EXPECT_THROW(TJsonValue::Parse(U"65536").ToInteger<u16_t>(), TException);
-			EXPECT_THROW(TJsonValue::Parse(U"-1").ToInteger<u16_t>(), TException);
-			EXPECT_THROW(TJsonValue::Parse(U"1.5").ToInteger<s32_t>(), TException);
+			EXPECT_THROW((void)TJsonValue::Parse(U"65536").ToInteger<u16_t>(), TException);
+			EXPECT_THROW((void)TJsonValue::Parse(U"-1").ToInteger<u16_t>(), TException);
+			EXPECT_THROW((void)TJsonValue::Parse(U"1.5").ToInteger<s32_t>(), TException);
 			EXPECT_EQ(TJsonValue::Parse(U"1e3").ToInteger<s32_t>(), 1000);
-			EXPECT_THROW(TJsonValue::Parse(U"1e-1").ToInteger<s32_t>(), TException);
+			EXPECT_THROW((void)TJsonValue::Parse(U"1e-1").ToInteger<s32_t>(), TException);
 			EXPECT_EQ(TJsonValue().ToInteger<u16_t>(123), 123);
-			EXPECT_THROW(TJsonValue(U"not-a-number").ToInteger<u16_t>(123), TException);
+			EXPECT_THROW((void)TJsonValue(U"not-a-number").ToInteger<u16_t>(123), TException);
 		}
 
 		{
@@ -381,9 +381,10 @@ namespace
 	TEST(io_format_json, TJsonValue_self_assign)
 	{
 		TJsonValue value(TString(U"keep"));
-		value = value;
+		TJsonValue* const alias = &value;
+		value = *alias;
 		EXPECT_EQ(value.String(), TString(U"keep"));
-		value = std::move(value);
+		value = std::move(*alias);
 		EXPECT_EQ(value.String(), TString(U"keep"));
 	}
 

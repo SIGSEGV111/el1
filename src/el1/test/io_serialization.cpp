@@ -112,8 +112,8 @@ namespace
 
 		const TString metadata_key(U"$el1");
 		const auto& metadata = json.Map()[metadata_key].Map();
-		EXPECT_EQ(metadata[TString(U"format")].ToInteger<u32_t>(), 1);
-		EXPECT_EQ(metadata[TString(U"version")].ToInteger<u32_t>(), 2);
+		EXPECT_EQ(metadata[TString(U"format")].ToInteger<u32_t>(), 1U);
+		EXPECT_EQ(metadata[TString(U"version")].ToInteger<u32_t>(), 2U);
 		EXPECT_EQ(metadata[TString(U"type")].String(), TString(U"serialization_test::TRoot"));
 		EXPECT_EQ(metadata[TString(U"type_id")].String().Length(), 32U);
 		EXPECT_TRUE(json.Map()[TString(U"big")].IsNumber());
@@ -121,7 +121,7 @@ namespace
 
 		const auto& child = json.Map()[TString(U"children")].Array()[0];
 		ASSERT_TRUE(child.IsMap());
-		EXPECT_EQ(child.Map()[metadata_key].Map()[TString(U"version")].ToInteger<u32_t>(), 1);
+		EXPECT_EQ(child.Map()[metadata_key].Map()[TString(U"version")].ToInteger<u32_t>(), 1U);
 
 		const TString encoded = json.ToString();
 		EXPECT_NE(encoded.Find(TStringView(U"9223372036854775807")), NEG1);
