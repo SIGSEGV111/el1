@@ -543,7 +543,13 @@ ci:
 	rm -rf -- "$(CI_DIR)"
 	mkdir -p "$(CI_DIR)" "$(CI_RPM_DIR)"
 	$(MAKE) --no-print-directory test TEST_JUNIT_XML="$(abspath $(CI_JUNIT_XML))"
-	cp -f -- "$(COVERAGE_LCOV)" "$(CI_COVERAGE_LCOV)"
+	awk -F '[:,]' '\
+	/^DA:/ { \
+		printf "DA:%s,%d\n", $$2, ($$3 > 0 ? 1 : 0); \
+		next; \
+	} \
+	{ print; } \
+	' "$(COVERAGE_LCOV)" > "$(CI_COVERAGE_LCOV)"
 	$(MAKE) --no-print-directory rpm
 	cp -f -- "$(ARCH_RPM_NAME)" "$(SRC_RPM_NAME)" "$(DEVEL_RPM_NAME)" "$(DEVEL_SRC_RPM_NAME)" "$(CI_RPM_DIR)/"
 	@echo "JUnit report: $(abspath $(CI_JUNIT_XML))"
