@@ -76,6 +76,7 @@ namespace el1::io::net::http
 		HTTP10 = 10,
 		HTTP11 = 11,
 		HTTP20 = 20,
+		HTTP30 = 30,
 	};
 
 	struct request_meta_t
@@ -94,22 +95,123 @@ namespace el1::io::net::http
 		THttpHeaderFields header_fields;
 	};
 
-	class THttpServer
+	class THttpRequestBody final : public stream::ISource<byte_t>
 	{
-		public:
-			static bool DEBUG;
+		friend class THttpRequestDecoder;
 
-			struct request_t : request_meta_t
+		protected:
+			enum class EEncoding : u8_t
 			{
-				ip::ipport_t remote_address;
-				stream::ISource<byte_t>* body;
+				NONE,
+				CONTENT_LENGTH,
+				CHUNKED,
 			};
 
+			enum class EChunkState : u8_t
+			{
+				SIZE,
+				DATA,
+				DATA_CR,
+				DATA_LF,
+				TRAILER,
+				DONE,
+			};
+
+			stream::ISource<byte_t>* source = nullptr;
+			EEncoding encoding = EEncoding::NONE;
+			EChunkState chunk_state = EChunkState::DONE;
+			usys_t n_remaining = 0;
+			usys_t trailer_size = 0;
+			text::string::TString line;
+			THttpHeaderFields trailers;
+
+			void Reset(stream::ISource<byte_t>* source, const usys_t content_length, const bool chunked);
+			bool ReadByte(byte_t& byte);
+			bool ReadLine(text::string::TString& result);
+			void ParseChunkSize(text::string::TStringView line);
+
+		public:
+			using stream::ISource<byte_t>::Discard;
+
+			bool Complete() const EL_GETTER;
+			usys_t Remaining() const EL_GETTER;
+			const THttpHeaderFields& Trailers() const EL_GETTER { return trailers; }
+			void Discard();
+
+			usys_t Read(byte_t* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT;
+			const system::waitable::IWaitable* OnInputReady() const final override;
+	};
+
+	struct THttpRequest : request_meta_t
+	{
+		ip::ipport_t remote_address;
+		THttpRequestBody* body = nullptr;
+
+		bool KeepAlive() const EL_GETTER;
+	};
+
+	class THttpRequestDecoder final : public stream::ISource<THttpRequest>
+	{
+		public:
+			using request_t = THttpRequest;
+
+		protected:
+			enum class EState : u8_t
+			{
+				REQUEST_LINE,
+				HEADERS,
+				EOF_REACHED,
+			};
+
+			stream::ISource<byte_t>* const source;
+			const ip::ipport_t remote_address;
+			const usys_t header_char_limit;
+			EState state = EState::REQUEST_LINE;
+			text::string::TString line;
+			request_t request;
+			THttpRequestBody body;
+			usys_t header_size = 0;
+			bool body_outstanding = false;
+
+			enum class ELineResult : u8_t { COMPLETE, BLOCKED, EOF_REACHED };
+			ELineResult ReadLine();
+			void ParseRequestLine();
+			void ParseHeaderLine();
+			void FinishHeaders();
+
+		public:
+			explicit THttpRequestDecoder(stream::ISource<byte_t>& source, const ip::ipport_t remote_address = {}, const usys_t header_char_limit = 8192U);
+
+			usys_t Read(request_t* const arr_items, const usys_t n_items_max) final override EL_WARN_UNUSED_RESULT;
+			const system::waitable::IWaitable* OnInputReady() const final override;
+			THttpRequestBody* ActiveBody() EL_GETTER { return body_outstanding ? &body : nullptr; }
+	};
+
+	class THttpResponseEncoder
+	{
+		public:
 			struct response_t : response_meta_t
 			{
 				std::unique_ptr<stream::ISource<byte_t>> body;
 			};
 
+		protected:
+			stream::ISink<byte_t>* const sink;
+
+		public:
+			explicit THttpResponseEncoder(stream::ISink<byte_t>& sink) : sink(&sink) {}
+
+			void WriteResponse(response_t& response, const bool suppress_body = false);
+			const system::waitable::IWaitable* OnOutputReady() const { return sink->OnOutputReady(); }
+	};
+
+	class THttpServer
+	{
+		public:
+			static bool DEBUG;
+
+			using request_t = THttpRequestDecoder::request_t;
+			using response_t = THttpResponseEncoder::response_t;
 			using request_handler_t = util::function::TFunction<void, const request_t&, response_t&>;
 
 		protected:
@@ -120,8 +222,6 @@ namespace el1::io::net::http
 			void FiberMain();
 
 		public:
-
-			// blocking
 			static EStatus HandleSingleRequest(
 				stream::ISource<byte_t>&,
 				stream::ISink<byte_t>&,

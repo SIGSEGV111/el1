@@ -323,7 +323,7 @@ namespace
 		EXPECT_EQ(str_response, U"");
 	}
 
-	TEST(io_net_http, HandleSingleRequest_unknown_length_response_closes_stream)
+	TEST(io_net_http, HandleSingleRequest_unknown_length_response_uses_chunked_encoding)
 	{
 		const char* str_src = "GET /preview HTTP/1.1\r\nContent-Length: 0\r\n\r\n";
 		TFifo<byte_t> fifo_c2s;
@@ -339,9 +339,64 @@ namespace
 			response.body = std::move(body);
 		});
 
-		EXPECT_EQ(fifo_s2c.OnInputReady(), nullptr);
+		fifo_s2c.CloseOutput();
 		const TString str_response = fifo_s2c.Pipe().Transform(TUTF8Decoder()).Collect();
-		EXPECT_EQ(str_response, U"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nstream");
+		EXPECT_EQ(str_response, U"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nstream\r\n0\r\n\r\n");
+	}
+
+	TEST(io_net_http, THttpRequestDecoder_streaming_body_blocks_next_request)
+	{
+		const char* str_src =
+			"POST /one HTTP/1.1\r\nContent-Length: 4\r\n\r\nDATA"
+			"GET /two HTTP/1.1\r\nContent-Length: 0\r\n\r\n";
+		TFifo<byte_t> source;
+		source.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		source.CloseOutput();
+
+		THttpRequestDecoder decoder(source);
+		THttpRequest request;
+		ASSERT_EQ(decoder.Read(&request, 1), 1U);
+		ASSERT_NE(request.body, nullptr);
+		EXPECT_EQ(request.url, U"/one");
+		EXPECT_EQ(request.body->Remaining(), 4U);
+		EXPECT_THROW(decoder.Read(&request, 1), TLogicException);
+
+		byte_t body[4];
+		request.body->ReadAll(body, sizeof(body));
+		EXPECT_TRUE(request.body->Complete());
+		ASSERT_EQ(decoder.Read(&request, 1), 1U);
+		EXPECT_EQ(request.url, U"/two");
+		EXPECT_EQ(request.body, nullptr);
+	}
+
+	TEST(io_net_http, THttpRequestDecoder_chunked_body_trailers)
+	{
+		const char* str_src =
+			"POST /upload HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+			"4\r\ntest\r\n0\r\nChecksum: ok\r\n\r\n";
+		TFifo<byte_t> source;
+		source.WriteAll(reinterpret_cast<const byte_t*>(str_src), strlen(str_src));
+		source.CloseOutput();
+
+		THttpRequestDecoder decoder(source);
+		THttpRequest request;
+		ASSERT_EQ(decoder.Read(&request, 1), 1U);
+		ASSERT_NE(request.body, nullptr);
+		TList<byte_t> body;
+		byte_t buffer[16];
+		for(;;)
+		{
+			const usys_t n = request.body->Read(buffer, sizeof(buffer));
+			if(n != 0)
+				body.Append({ buffer, n });
+			else if(request.body->Complete())
+				break;
+			else
+				FAIL() << "unexpected blocking source";
+		}
+		ASSERT_EQ(body.Count(), 4U);
+		EXPECT_EQ(memcmp(body.ItemPtr(0), "test", 4), 0);
+		EXPECT_EQ(request.body->Trailers()[U"checksum"], U"ok");
 	}
 
 	TEST(io_net_http, THttpServer_curl_simple)

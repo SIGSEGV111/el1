@@ -66,6 +66,7 @@ namespace el1::io::net::http
 	{
 		switch(version)
 		{
+			case EVersion::HTTP30: return "HTTP/3";
 			case EVersion::HTTP20: return "HTTP/2";
 			case EVersion::HTTP11: return "HTTP/1.1";
 			case EVersion::HTTP10: return "HTTP/1.0";
@@ -317,159 +318,30 @@ namespace el1::io::net::http
 		return value;
 	}
 
-	class TChunkedRequestSource final : public ISource<byte_t>
-	{
-		private:
-			enum class EState : u8_t
-			{
-				SIZE,
-				DATA,
-				DATA_CR,
-				DATA_LF,
-				TRAILER,
-				DONE,
-			};
 
-			ISource<byte_t>& source;
-			EState state = EState::SIZE;
-			usys_t chunk_remaining = 0;
-			usys_t trailer_size = 0;
-			TString line;
+	static void WriteChunkedBody(ISource<byte_t>& source, ISink<byte_t>& sink);
 
-			bool ReadByte(byte_t& byte)
-			{
-				const usys_t n = source.Read(&byte, 1);
-				if(n != 0)
-					return true;
-				EL_ERROR(source.OnInputReady() == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"unexpected EOF in chunked request body");
-				return false;
-			}
-
-			bool ReadLine(TString& result)
-			{
-				for(;;)
-				{
-					byte_t byte;
-					if(!ReadByte(byte))
-						return false;
-					if(byte == '\n')
-					{
-						EL_ERROR(line.Length() == 0 || line[-1] != '\r', THttpProcessingException, EStatus::BAD_REQUEST, U"invalid chunked request line ending");
-						line.chars.Remove(-1);
-						result = std::move(line);
-						line = TString();
-						return true;
-					}
-					EL_ERROR(line.Length() >= HEADER_CHAR_LIMIT, THttpProcessingException, EStatus::BAD_REQUEST, U"HTTP chunk line exceeds configured limit");
-					line += char32_t((u32_t)byte);
-				}
-			}
-
-			void ParseSize(const TStringView input)
-			{
-				const usys_t pos_extension = input.Find(';');
-				TString str_size = pos_extension == NEG1 ? TString(input) : TString(input.SliceBE(0, pos_extension));
-				str_size.Trim();
-				try
-				{
-					chunk_remaining = ParseHex(str_size);
-				}
-				catch(const IException&)
-				{
-					EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid HTTP chunk size");
-				}
-				state = chunk_remaining == 0 ? EState::TRAILER : EState::DATA;
-			}
-
-		public:
-			explicit TChunkedRequestSource(ISource<byte_t>& source) : source(source) {}
-
-			usys_t Read(byte_t* const arr_items, const usys_t n_items_max) final override
-			{
-				if(n_items_max == 0 || state == EState::DONE)
-					return 0;
-
-				for(;;)
-				{
-					switch(state)
-					{
-						case EState::SIZE:
-						{
-							TString size_line;
-							if(!ReadLine(size_line))
-								return 0;
-							ParseSize(size_line);
-							break;
-						}
-
-						case EState::DATA:
-						{
-							const usys_t n = source.Read(arr_items, util::Min(n_items_max, chunk_remaining));
-							if(n == 0)
-							{
-								EL_ERROR(source.OnInputReady() == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"unexpected EOF in HTTP chunk data");
-								return 0;
-							}
-							chunk_remaining -= n;
-							if(chunk_remaining == 0)
-								state = EState::DATA_CR;
-							return n;
-						}
-
-						case EState::DATA_CR:
-						case EState::DATA_LF:
-						{
-							byte_t byte;
-							if(!ReadByte(byte))
-								return 0;
-							const byte_t expected = state == EState::DATA_CR ? '\r' : '\n';
-							EL_ERROR(byte != expected, THttpProcessingException, EStatus::BAD_REQUEST, U"invalid HTTP chunk terminator");
-							state = state == EState::DATA_CR ? EState::DATA_LF : EState::SIZE;
-							break;
-						}
-
-						case EState::TRAILER:
-						{
-							TString trailer;
-							if(!ReadLine(trailer))
-								return 0;
-							if(trailer.Length() == 0)
-							{
-								state = EState::DONE;
-								return 0;
-							}
-							trailer_size += trailer.Length();
-							EL_ERROR(trailer_size > HEADER_CHAR_LIMIT || trailer.Find(':') == NEG1, THttpProcessingException, EStatus::BAD_REQUEST, U"invalid HTTP chunk trailer");
-							break;
-						}
-
-						case EState::DONE:
-							return 0;
-					}
-				}
-			}
-
-			bool Complete() const EL_GETTER
-			{
-				return state == EState::DONE;
-			}
-
-			const IWaitable* OnInputReady() const final override
-			{
-				return state == EState::DONE ? nullptr : source.OnInputReady();
-			}
-	};
-
-	static void SendResponse(ISink<byte_t>& sink, THttpServer::response_t& response)
+	static void SendResponse(ISink<byte_t>& sink, THttpResponseEncoder::response_t& response, const bool suppress_body = false)
 	{
 		const char* const str_version = VersionToString(response.version);
 		const char* const str_status_text = StatusToString(response.status);
 		auto str_status_code = TString::Format(U"%d", (u16_t)response.status).MakeCStr();
 
-		if(response.body == nullptr && response.header_fields.ContentLength() == NEG1)
+		const usys_t content_length = response.header_fields.ContentLength();
+		const TString* const transfer_encoding = FindHeaderField(response.header_fields, U"Transfer-Encoding");
+		EL_ERROR(content_length != NEG1 && transfer_encoding != nullptr, TInvalidArgumentException, "response", "response must not contain both Content-Length and Transfer-Encoding");
+
+		if(response.body == nullptr && content_length == NEG1)
 			response.header_fields.ContentLength(0);
-		else if(response.header_fields.ContentLength() == NEG1 && response.version != EVersion::HTTP10)
-			response.header_fields.Set(U"Connection", U"close");
+		else if(response.body != nullptr && content_length == NEG1 && transfer_encoding == nullptr)
+		{
+			if(response.version == EVersion::HTTP11)
+				response.header_fields.Set(U"Transfer-Encoding", U"chunked");
+			else if(response.version == EVersion::HTTP10)
+				response.header_fields.Set(U"Connection", U"close");
+			else
+				response.header_fields.Set(U"Connection", U"close");
+		}
 
 		for(const auto& field : response.header_fields.Items())
 			ValidateHeaderField(field.key, field.value);
@@ -494,13 +366,14 @@ namespace el1::io::net::http
 
 		sink.WriteAll((const byte_t*)"\r\n", 2);
 
-		if(response.body != nullptr)
+		if(response.body != nullptr && !suppress_body)
 		{
 			const usys_t n_content_length = response.header_fields.ContentLength();
-			Pump(*response.body, sink, n_content_length, true);
-			if(n_content_length == NEG1)
-				if(!sink.CloseOutput())
-					sink.Close();
+			const TString* const transfer_encoding_body = FindHeaderField(response.header_fields, U"Transfer-Encoding");
+			if(transfer_encoding_body != nullptr && HeaderHasToken(*transfer_encoding_body, U"chunked"))
+				WriteChunkedBody(*response.body, sink);
+			else
+				Pump(*response.body, sink, n_content_length, true);
 		}
 	}
 
@@ -520,198 +393,413 @@ namespace el1::io::net::http
 		SetHeaderField(*this, U"Content-Length", TString::Format(U"%d", new_content_length));
 	}
 
+	bool THttpRequest::KeepAlive() const
+	{
+		const TString* const connection = FindHeaderField(header_fields, U"Connection");
+		if(version == EVersion::HTTP11)
+			return connection == nullptr || !HeaderHasToken(*connection, U"close");
+		if(version == EVersion::HTTP10)
+			return connection != nullptr && HeaderHasToken(*connection, U"keep-alive");
+		return true;
+	}
+
+	void THttpRequestBody::Reset(ISource<byte_t>* const new_source, const usys_t content_length, const bool chunked)
+	{
+		source = new_source;
+		encoding = chunked ? EEncoding::CHUNKED : (content_length == 0 ? EEncoding::NONE : EEncoding::CONTENT_LENGTH);
+		chunk_state = chunked ? EChunkState::SIZE : EChunkState::DONE;
+		n_remaining = content_length;
+		trailer_size = 0;
+		line = TString();
+		trailers.Clear();
+	}
+
+	bool THttpRequestBody::ReadByte(byte_t& byte)
+	{
+		EL_ERROR(source == nullptr, TLogicException);
+		const usys_t n = source->Read(&byte, 1);
+		if(n != 0)
+			return true;
+		EL_ERROR(source->OnInputReady() == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"unexpected EOF in chunked request body");
+		return false;
+	}
+
+	bool THttpRequestBody::ReadLine(TString& result)
+	{
+		for(;;)
+		{
+			byte_t byte;
+			if(!ReadByte(byte))
+				return false;
+			if(byte == '\n')
+			{
+				EL_ERROR(line.Length() == 0 || line[-1] != '\r', THttpProcessingException, EStatus::BAD_REQUEST, U"invalid chunked request line ending");
+				line.chars.Remove(-1);
+				result = std::move(line);
+				line = TString();
+				return true;
+			}
+			EL_ERROR(line.Length() >= HEADER_CHAR_LIMIT, THttpProcessingException, EStatus::BAD_REQUEST, U"HTTP chunk line exceeds configured limit");
+			line += char32_t((u32_t)byte);
+		}
+	}
+
+	void THttpRequestBody::ParseChunkSize(const TStringView input)
+	{
+		const usys_t pos_extension = input.Find(';');
+		TString str_size = pos_extension == NEG1 ? TString(input) : TString(input.SliceBE(0, pos_extension));
+		str_size.Trim();
+		try
+		{
+			n_remaining = ParseHex(str_size);
+		}
+		catch(const IException&)
+		{
+			EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid HTTP chunk size");
+		}
+		chunk_state = n_remaining == 0 ? EChunkState::TRAILER : EChunkState::DATA;
+	}
+
+	bool THttpRequestBody::Complete() const
+	{
+		switch(encoding)
+		{
+			case EEncoding::NONE: return true;
+			case EEncoding::CONTENT_LENGTH: return n_remaining == 0;
+			case EEncoding::CHUNKED: return chunk_state == EChunkState::DONE;
+		}
+		EL_THROW(TLogicException);
+	}
+
+	usys_t THttpRequestBody::Remaining() const
+	{
+		return encoding == EEncoding::CONTENT_LENGTH ? n_remaining : (Complete() ? 0 : NEG1);
+	}
+
+	usys_t THttpRequestBody::Read(byte_t* const arr_items, const usys_t n_items_max)
+	{
+		if(n_items_max == 0 || Complete())
+			return 0;
+		EL_ERROR(source == nullptr, TLogicException);
+
+		if(encoding == EEncoding::CONTENT_LENGTH)
+		{
+			const usys_t n = source->Read(arr_items, util::Min(n_items_max, n_remaining));
+			if(n == 0)
+				EL_ERROR(source->OnInputReady() == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"unexpected EOF in HTTP request body");
+			n_remaining -= n;
+			return n;
+		}
+
+		for(;;)
+		{
+			switch(chunk_state)
+			{
+				case EChunkState::SIZE:
+				{
+					TString size_line;
+					if(!ReadLine(size_line))
+						return 0;
+					ParseChunkSize(size_line);
+					break;
+				}
+
+				case EChunkState::DATA:
+				{
+					const usys_t n = source->Read(arr_items, util::Min(n_items_max, n_remaining));
+					if(n == 0)
+					{
+						EL_ERROR(source->OnInputReady() == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"unexpected EOF in HTTP chunk data");
+						return 0;
+					}
+					n_remaining -= n;
+					if(n_remaining == 0)
+						chunk_state = EChunkState::DATA_CR;
+					return n;
+				}
+
+				case EChunkState::DATA_CR:
+				case EChunkState::DATA_LF:
+				{
+					byte_t byte;
+					if(!ReadByte(byte))
+						return 0;
+					const byte_t expected = chunk_state == EChunkState::DATA_CR ? '\r' : '\n';
+					EL_ERROR(byte != expected, THttpProcessingException, EStatus::BAD_REQUEST, U"invalid HTTP chunk terminator");
+					chunk_state = chunk_state == EChunkState::DATA_CR ? EChunkState::DATA_LF : EChunkState::SIZE;
+					break;
+				}
+
+				case EChunkState::TRAILER:
+				{
+					TString trailer;
+					if(!ReadLine(trailer))
+						return 0;
+					if(trailer.Length() == 0)
+					{
+						chunk_state = EChunkState::DONE;
+						return 0;
+					}
+					trailer_size += trailer.Length();
+					EL_ERROR(trailer_size > HEADER_CHAR_LIMIT, THttpProcessingException, EStatus::BAD_REQUEST, U"HTTP chunk trailers exceed configured limit");
+					auto fields = trailer.Split(':', 2U);
+					EL_ERROR(fields.Count() != 2U, THttpProcessingException, EStatus::BAD_REQUEST, U"invalid HTTP chunk trailer");
+					fields[0].ToLower();
+					fields[1].Trim();
+					ValidateHeaderField(fields[0], fields[1]);
+					trailers.Set(std::move(fields[0]), std::move(fields[1]));
+					break;
+				}
+
+				case EChunkState::DONE:
+					return 0;
+			}
+		}
+	}
+
+	const IWaitable* THttpRequestBody::OnInputReady() const
+	{
+		return Complete() || source == nullptr ? nullptr : source->OnInputReady();
+	}
+
+	void THttpRequestBody::Discard()
+	{
+		byte_t buffer[4U * 1024U];
+		while(!Complete())
+		{
+			const usys_t n = Read(buffer, sizeof(buffer));
+			if(n == 0)
+			{
+				const IWaitable* const waitable = OnInputReady();
+				EL_ERROR(waitable == nullptr && !Complete(), TStreamDryException);
+				if(waitable != nullptr)
+					waitable->WaitFor();
+			}
+		}
+	}
+
+	THttpRequestDecoder::THttpRequestDecoder(ISource<byte_t>& new_source, const ipport_t new_remote_address, const usys_t new_header_char_limit) :
+		source(&new_source),
+		remote_address(new_remote_address),
+		header_char_limit(new_header_char_limit)
+	{
+		EL_ERROR(header_char_limit == 0, TInvalidArgumentException, "header_char_limit", "header_char_limit must be greater than zero");
+	}
+
+	THttpRequestDecoder::ELineResult THttpRequestDecoder::ReadLine()
+	{
+		for(;;)
+		{
+			byte_t byte = 0;
+			const usys_t n = source->Read(&byte, 1);
+			if(n == 0)
+			{
+				if(source->OnInputReady() != nullptr)
+					return ELineResult::BLOCKED;
+				EL_ERROR(line.Length() != 0, THttpProcessingException, EStatus::BAD_REQUEST, U"unexpected EOF in HTTP header");
+				return ELineResult::EOF_REACHED;
+			}
+
+			if(byte == '\n')
+			{
+				if(line.Length() != 0 && line[-1] == '\r')
+					line.chars.Remove(-1);
+				return ELineResult::COMPLETE;
+			}
+
+			EL_ERROR(line.Length() >= header_char_limit, THttpProcessingException, EStatus::REQUEST_HEADER_FIELDS_TOO_LARGE, U"HTTP header line exceeds configured limit");
+			line += char32_t((u32_t)byte);
+		}
+	}
+
+	void THttpRequestDecoder::ParseRequestLine()
+	{
+		header_size = line.Length();
+		EL_ERROR(line.Length() < 14U, THttpProcessingException, EStatus::BAD_REQUEST, U"request too short");
+		auto arr_req = line.Split(' ', 3U);
+		EL_ERROR(arr_req.Count() != 3U, THttpProcessingException, EStatus::BAD_REQUEST, U"request METHOD/URL/VERSION malformed");
+		request = request_t{};
+		request.remote_address = remote_address;
+		request.method = MethodFromString(arr_req[0]);
+		request.version = VersionFromString(arr_req[2]);
+		try { ValidateRequestTarget(arr_req[1]); }
+		catch(const IException&) { EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid request target"); }
+		request.url = std::move(arr_req[1]);
+
+		const usys_t pos_args = request.url.Find('?');
+		if(pos_args != NEG1)
+		{
+			EL_ERROR(pos_args == 0, THttpProcessingException, EStatus::BAD_REQUEST, U"empty URL");
+			TList<TString> arg_strs = request.url.SliceSL(pos_args + 1).Split('&');
+			for(auto& arg : arg_strs)
+			{
+				EL_ERROR(arg.Length() == 0, THttpProcessingException, EStatus::BAD_REQUEST, U"empty request parameter");
+				if(arg.Contains('='))
+				{
+					auto kv = arg.SplitKV('=');
+					request.args.Add(UrlDecode(std::move(kv.key)), UrlDecode(std::move(kv.value)));
+				}
+				else
+					request.args.Add(UrlDecode(std::move(arg)), U"");
+			}
+			request.url = request.url.SliceBE(0, pos_args);
+		}
+
+		request.url = UrlDecode(std::move(request.url));
+		try { ValidateDecodedRequestPath(request.url); }
+		catch(const IException&) { EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid decoded request path"); }
+	}
+
+	void THttpRequestDecoder::ParseHeaderLine()
+	{
+		header_size += line.Length();
+		EL_ERROR(header_size > header_char_limit, THttpProcessingException, EStatus::REQUEST_HEADER_FIELDS_TOO_LARGE, U"HTTP request header exceeds configured limit");
+		auto fields = line.Split(':', 2U);
+		EL_ERROR(fields.Count() != 2U, THttpProcessingException, EStatus::BAD_REQUEST, U"invalid header field encountered");
+		try { ValidateHeaderField(fields[0], fields[1]); }
+		catch(const IException&) { EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid header field encountered"); }
+		fields[0].ToLower();
+		fields[1].Trim();
+		TString* const existing_header = request.header_fields.Get(fields[0]);
+		if(existing_header == nullptr)
+			request.header_fields.Add(std::move(fields[0]), std::move(fields[1]));
+		else
+		{
+			EL_ERROR(
+				fields[0] == U"content-length" || fields[0] == U"host" || fields[0] == U"authorization" || fields[0] == U"proxy-authorization",
+				THttpProcessingException, EStatus::BAD_REQUEST, U"duplicate singleton header field encountered"
+			);
+			*existing_header += fields[0] == U"cookie" ? TStringView(U"; ") : TStringView(U", ");
+			*existing_header += fields[1];
+		}
+	}
+
+	void THttpRequestDecoder::FinishHeaders()
+	{
+		usys_t content_length;
+		try { content_length = request.header_fields.ContentLength(); }
+		catch(const IException&) { EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid Content-Length header"); }
+		const TString* const transfer_encoding = FindHeaderField(request.header_fields, U"Transfer-Encoding");
+		EL_ERROR(transfer_encoding != nullptr && content_length != NEG1, THttpProcessingException, EStatus::BAD_REQUEST, U"request contains both Content-Length and Transfer-Encoding");
+		bool chunked = false;
+		if(transfer_encoding != nullptr)
+		{
+			TString encoding_value = *transfer_encoding;
+			encoding_value.Trim();
+			encoding_value.ToLower();
+			EL_ERROR(encoding_value != U"chunked", THttpProcessingException, EStatus::BAD_REQUEST, U"unsupported HTTP request transfer encoding");
+			chunked = true;
+		}
+
+		EL_ERROR(request.method == EMethod::TRACE, THttpProcessingException, EStatus::METHOD_NOT_ALLOWED, U"TRACE is not supported");
+		const usys_t effective_length = content_length == NEG1 ? 0 : content_length;
+		body.Reset(source, effective_length, chunked);
+		body_outstanding = chunked || effective_length != 0;
+		request.body = body_outstanding ? &body : nullptr;
+	}
+
+	usys_t THttpRequestDecoder::Read(request_t* const arr_items, const usys_t n_items_max)
+	{
+		if(n_items_max == 0 || state == EState::EOF_REACHED)
+			return 0;
+		EL_ERROR(arr_items == nullptr, TInvalidArgumentException, "arr_items", "arr_items must not be null");
+		if(body_outstanding)
+		{
+			if(body.Complete())
+				body_outstanding = false;
+			else
+				EL_THROW(TLogicException);
+		}
+
+		for(;;)
+		{
+			const ELineResult result = ReadLine();
+			if(result == ELineResult::BLOCKED)
+				return 0;
+			if(result == ELineResult::EOF_REACHED)
+			{
+				EL_ERROR(state != EState::REQUEST_LINE, THttpProcessingException, EStatus::BAD_REQUEST, U"unexpected EOF in HTTP headers");
+				state = EState::EOF_REACHED;
+				return 0;
+			}
+
+			if(state == EState::REQUEST_LINE)
+			{
+				ParseRequestLine();
+				line = TString();
+				state = EState::HEADERS;
+				continue;
+			}
+
+			if(line.Length() != 0)
+			{
+				ParseHeaderLine();
+				line = TString();
+				continue;
+			}
+
+			FinishHeaders();
+			arr_items[0] = std::move(request);
+			request = request_t{};
+			line = TString();
+			header_size = 0;
+			state = EState::REQUEST_LINE;
+			return 1;
+		}
+	}
+
+	const IWaitable* THttpRequestDecoder::OnInputReady() const
+	{
+		if(state == EState::EOF_REACHED || (body_outstanding && !body.Complete()))
+			return nullptr;
+		return source->OnInputReady();
+	}
+
+	void THttpResponseEncoder::WriteResponse(response_t& response, const bool suppress_body)
+	{
+		SendResponse(*sink, response, suppress_body);
+	}
+
 	EStatus THttpServer::HandleSingleRequest(ISource<byte_t>& source, ISink<byte_t>& sink, request_handler_t handler, const ipport_t remote_address)
 	{
-		IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): @1\n");
 		bool response_in_progress = false;
 		try
 		{
-			// read line-by-line
-			// first line must be something like: <METHOD> <URL> "HTTP/"<HTTP VERSION> ("GET /index.html HTTP/1.1")
-			// the following lines must be key:value style
-			// an empty line terminates the header
-			// after that follows the request body
-			// if the header has a content length field, then this terminates the body
-			// otherwise all following data from the source is considered to be part of the body and no further requests can be processed
-
-			usys_t sz_header = 0;
-			auto ss = source.Pipe();
-			auto ds = ss.Map([](byte_t chr){ return char32_t((u32_t)chr); });
-			auto lr = ds.Transform(TLineReader(HEADER_CHAR_LIMIT));
-
-			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): reading first line of request\n");
-			const TString* request_line = lr.NextItem();
-			if(request_line == nullptr)
-			{
-				IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): EOF\n");
-				return EStatus::EOF;
-			}
-
-			EL_ERROR(request_line->Length() < 14U, THttpProcessingException, EStatus::BAD_REQUEST, U"request too short");
-			sz_header += request_line->Length();
-
-			auto arr_req = request_line->Split(' ', 3U);
-			EL_ERROR(arr_req.Count() != 3U, THttpProcessingException, EStatus::BAD_REQUEST, U"request METHOD/URL/VERSION malformed");
-
+			THttpRequestDecoder decoder(source, remote_address);
+			THttpResponseEncoder encoder(sink);
 			request_t request;
-			request.remote_address = remote_address;
-			request.method = MethodFromString(arr_req[0]);
-			request.version = VersionFromString(arr_req[2]);
-			try
+			for(;;)
 			{
-				ValidateRequestTarget(arr_req[1]);
-			}
-			catch(const IException&)
-			{
-				EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid request target");
-			}
-			request.url = std::move(arr_req[1]);
-
-			const usys_t pos_args = request.url.Find('?');
-			if(pos_args != NEG1)
-			{
-				EL_ERROR(pos_args == 0, THttpProcessingException, EStatus::BAD_REQUEST, U"empty URU");
-				TList<TString> arg_strs = request.url.SliceSL(pos_args + 1).Split('&');
-				for(auto& s : arg_strs)
-				{
-					EL_ERROR(s.Length() == 0, THttpProcessingException, EStatus::BAD_REQUEST, U"empty request parameter");
-					if(s.Contains('='))
-					{
-						auto kv = s.SplitKV('=');
-						request.args.Add(UrlDecode(std::move(kv.key)), UrlDecode(std::move(kv.value)));
-					}
-					else
-					{
-						request.args.Add(UrlDecode(std::move(s)), U"");
-					}
-				}
-				request.url = request.url.SliceBE(0, pos_args);
+				if(decoder.Read(&request, 1) != 0)
+					break;
+				const IWaitable* const waitable = decoder.OnInputReady();
+				if(waitable == nullptr)
+					return EStatus::EOF;
+				waitable->WaitFor();
 			}
 
-			request.url = UrlDecode(std::move(request.url));
-			try
-			{
-				ValidateDecodedRequestPath(request.url);
-			}
-			catch(const IException&)
-			{
-				EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid decoded request path");
-			}
-
-			arr_req.Clear();
-
-			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): reading header values\n");
-			while((request_line = lr.NextItem()) != nullptr && request_line->Length() > 0U)
-			{
-				sz_header += request_line->Length();
-				EL_ERROR(sz_header > HEADER_CHAR_LIMIT, THttpProcessingException, EStatus::REQUEST_HEADER_FIELDS_TOO_LARGE, TString::Format(U"maximum request header length of %d characters exeeded (linebreaks do not count against this limit)", HEADER_CHAR_LIMIT));
-
-				arr_req = request_line->Split(':', 2U);
-				EL_ERROR(arr_req.Count() != 2U, THttpProcessingException, EStatus::BAD_REQUEST, U"invalid header field encountered");
-				try
-				{
-					ValidateHeaderField(arr_req[0], arr_req[1]);
-				}
-				catch(const IException&)
-				{
-					EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid header field encountered");
-				}
-				arr_req[0].ToLower();
-				arr_req[1].Trim();
-				TString* const existing_header = request.header_fields.Get(arr_req[0]);
-				if(existing_header == nullptr)
-				{
-					request.header_fields.Add(std::move(arr_req[0]), std::move(arr_req[1]));
-				}
-				else
-				{
-					// RFC 9110 sections 5.2/5.3 define a repeated field's combined value as
-					// the field-line values joined in order with comma+SP. Keep framing,
-					// routing and credential fields strict to avoid ambiguous request
-					// interpretation; Cookie is the one request field whose values are
-					// conventionally combined using semicolon+SP instead.
-					EL_ERROR(
-						arr_req[0] == U"content-length" ||
-						arr_req[0] == U"host" ||
-						arr_req[0] == U"authorization" ||
-						arr_req[0] == U"proxy-authorization",
-						THttpProcessingException, EStatus::BAD_REQUEST, U"duplicate singleton header field encountered"
-					);
-					if(arr_req[0] == U"cookie")
-						*existing_header += TStringView(U"; ");
-					else
-						*existing_header += TStringView(U", ");
-					*existing_header += arr_req[1];
-				}
-			}
-			arr_req.Clear();
-			EL_ERROR(request_line == nullptr, THttpProcessingException, EStatus::BAD_REQUEST, U"header not correctly terminated by empty line");
-
-			usys_t content_length;
-			try
-			{
-				content_length = request.header_fields.ContentLength();
-			}
-			catch(const IException&)
-			{
-				EL_THROW(THttpProcessingException, EStatus::BAD_REQUEST, U"invalid Content-Length header");
-			}
-			const TString* const transfer_encoding = request.header_fields.Get(U"transfer-encoding");
-			IF_DEBUG_PRINTF("got Content-Length %zu%s\n", (size_t)content_length, transfer_encoding != nullptr ? " with Transfer-Encoding" : "");
-			EL_ERROR(transfer_encoding != nullptr && content_length != NEG1, THttpProcessingException, EStatus::BAD_REQUEST, U"request contains both Content-Length and Transfer-Encoding");
-
-			TLimitSource<byte_t> limited_body(&ss, content_length);
-			TChunkedRequestSource chunked(ss);
-			if(transfer_encoding != nullptr)
-			{
-				TString encoding = *transfer_encoding;
-				encoding.Trim();
-				encoding.ToLower();
-				EL_ERROR(encoding != U"chunked", THttpProcessingException, EStatus::BAD_REQUEST, U"unsupported HTTP request transfer encoding");
-				request.body = &chunked;
-			}
-			else
-			{
-				request.body = content_length == NEG1 ? nullptr : &limited_body;
-			}
-
-			EL_ERROR(request.method == EMethod::TRACE, THttpProcessingException, EStatus::METHOD_NOT_ALLOWED, U"TRACE is not supported");
-
-			// call handler
 			response_t response;
 			response.status = EStatus::INTERNAL_SERVER_ERROR;
 			response.version = request.version;
-
-			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): calling handler\n");
 			handler(request, response);
-			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): returned from handler\n");
 
-			const bool request_body_consumed = transfer_encoding != nullptr ? chunked.Complete() : (content_length == NEG1 || limited_body.Remaining() == 0);
-			const TString* const connection = request.header_fields.Get(U"connection");
-			const bool request_close = connection != nullptr && HeaderHasToken(*connection, U"close");
-			if(!request_body_consumed || request_close)
+			const bool request_body_consumed = request.body == nullptr || request.body->Complete();
+			const bool keep_alive = request.KeepAlive() && request_body_consumed;
+			if(!keep_alive)
 				response.header_fields.Set(U"Connection", U"close");
-
-			if(request.method == EMethod::HEAD)
-				response.body.reset(nullptr);
 
 			TFile* file = nullptr;
 			if(response.body != nullptr && response.header_fields.ContentLength() == NEG1 && (file = dynamic_cast<TFile*>(response.body.get())) != nullptr)
 				response.header_fields.ContentLength(file->Size() - file->Offset());
 
-			// Responses without a declared length and requests with an unread body are delimited by closing the connection.
-			const bool close_after_response = !request_body_consumed || request_close || (response.body != nullptr && response.header_fields.ContentLength() == NEG1);
-
-			// send response
+			const bool close_for_http10_body = response.version == EVersion::HTTP10 && response.body != nullptr && response.header_fields.ContentLength() == NEG1;
 			response_in_progress = true;
-			SendResponse(sink, response);
-			if(close_after_response)
+			encoder.WriteResponse(response, request.method == EMethod::HEAD);
+			if(!keep_alive || close_for_http10_body)
 			{
 				source.Close();
 				sink.Close();
 			}
-
-			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): return response.status\n");
 			return response.status;
 		}
 		catch(const IException& e1)
@@ -719,59 +807,29 @@ namespace el1::io::net::http
 			if(EL_UNLIKELY(DEBUG))
 				e1.Print("THttpServer::HandleSingleRequest(): caught exception");
 
-			if(response_in_progress)
+			if(!response_in_progress)
 			{
-				IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): response already in progress => closing streams\n");
-				// just terminate the connection (in the next loop iteration EStatus::EOF will be returned immediately)
-				source.Close();
-				sink.Close();
-			}
-			else
-			{
-				IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): generating proper error response\n");
 				const THttpProcessingException* const http_error = dynamic_cast<const THttpProcessingException*>(&e1);
-
 				try
 				{
-					if(http_error != nullptr)
-					{
-						response_t response;
-						response.status = http_error->status;
-						response.version = EVersion::HTTP11;
-						response.body = nullptr;
-						response.header_fields.Set(U"Connection", U"close");
-						response_in_progress = true;
-						SendResponse(sink, response);
-					}
-					else
-					{
-						// HTTP 500
-						response_t response;
-						response.status = EStatus::INTERNAL_SERVER_ERROR;
-						response.version = EVersion::HTTP11;
-						response.header_fields.Set(U"Connection", U"close");
-						response_in_progress = true;
-						SendResponse(sink, response);
-					}
-
-					source.Close();
-					sink.Close();
+					THttpResponseEncoder encoder(sink);
+					response_t response;
+					response.status = http_error != nullptr ? http_error->status : EStatus::INTERNAL_SERVER_ERROR;
+					response.version = EVersion::HTTP11;
+					response.header_fields.Set(U"Connection", U"close");
+					response_in_progress = true;
+					encoder.WriteResponse(response);
 				}
 				catch(const IException&)
 				{
-					// this usually happens when the client closes the connection while we are still trying to inform it about the previous error
-					source.Close();
-					sink.Close();
 				}
-
-				if(http_error != nullptr)
-				{
-					IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): return http_error->status\n");
-					return http_error->status;
-				}
+				source.Close();
+				sink.Close();
+				return http_error != nullptr ? http_error->status : EStatus::INTERNAL_SERVER_ERROR;
 			}
 
-			IF_DEBUG_PRINTF("THttpServer::HandleSingleRequest(): return INTERNAL_SERVER_ERROR\n");
+			source.Close();
+			sink.Close();
 			return EStatus::INTERNAL_SERVER_ERROR;
 		}
 	}
