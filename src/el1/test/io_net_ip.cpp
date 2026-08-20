@@ -90,189 +90,161 @@ namespace
 	TEST(io_net_ip, TUdpNode_construct)
 	{
 		{
-			TUdpNode udp(12121U, EIP::ANY);
+			TUdpSocket udp;
+			EXPECT_NE(udp.LocalAddress().port, 0U);
 		}
 
 		{
-			TUdpNode udp(12121U, EIP::V4);
+			TUdpNode udp(0U, EIP::V4);
+			EXPECT_TRUE(udp.LocalAddress().ip.IsV4());
+			EXPECT_FALSE(udp.LocalAddress().ip.IsV6());
+			EXPECT_NE(udp.LocalAddress().port, 0U);
+		}
+
+		{
+			TUdpNode udp(0U, EIP::V6);
+			EXPECT_TRUE(udp.LocalAddress().ip.IsV6());
+			EXPECT_FALSE(udp.LocalAddress().ip.IsV4());
+			EXPECT_NE(udp.LocalAddress().port, 0U);
+		}
+
+		{
+			TUdpNode udp(ipaddr_t(U"127.0.0.1"));
 			EXPECT_TRUE(udp.LocalAddress().ip.IsV4());
 			EXPECT_FALSE(udp.LocalAddress().ip.IsV6());
 		}
 
 		{
-			TUdpNode udp(12121U, EIP::V6);
-			EXPECT_TRUE(udp.LocalAddress().ip.IsV6());
-			EXPECT_FALSE(udp.LocalAddress().ip.IsV4());
-		}
-
-		{
-			TUdpNode udp(ipaddr_t(U"127.0.0.1"), 12121U);
-			EXPECT_TRUE(udp.LocalAddress().ip.IsV4());
-			EXPECT_FALSE(udp.LocalAddress().ip.IsV6());
-		}
-
-		{
-			TUdpNode udp(ipaddr_t(U"::1"), 12121U);
+			TUdpNode udp(ipaddr_t(U"::1"));
 			EXPECT_TRUE(udp.LocalAddress().ip.IsV6());
 			EXPECT_FALSE(udp.LocalAddress().ip.IsV4());
 		}
 	}
 
-	TEST(io_net_ip, TUdpNode_loopback_simple)
+	TEST(io_net_ip, TUdpNode_loopback_ipv4)
 	{
-		{
-			TUdpNode node1(ipaddr_t(U"::1"), 12121U);
-			TUdpNode node2(ipaddr_t(U"::1"), 12122U);
+		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
+		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		const byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
 
-			byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
-			TList<byte_t> rx;
+		EXPECT_TRUE(sender.Send(receiver.LocalAddress(), tx, sizeof(tx)));
+		EXPECT_TRUE(receiver.OnReceiveMsg().WaitFor(1));
 
-			EXPECT_TRUE(node1.Send(node2.LocalAddress().ip, node2.LocalAddress().port, tx, sizeof(tx)));
-
-			EXPECT_TRUE(node2.OnReceiveMsg().WaitFor(1));
-			ipaddr_t rx_ip;
-			port_t rx_port;
-			EXPECT_TRUE(node2.Receive(rx, &rx_ip, &rx_port));
-			EXPECT_EQ(rx_ip, ipaddr_t(U"::1"));
-			EXPECT_EQ(rx_port, 12121U);
-
-			EXPECT_TRUE(rx.Count() == sizeof(tx));
-			EXPECT_TRUE(memcmp(rx.ItemPtr(0), tx, sizeof(tx)) == 0);
-
-			EXPECT_FALSE(node2.Receive(rx));
-		}
-
-		{
-			TUdpNode node1(ipaddr_t(U"127.0.0.1"), 12121U);
-			TUdpNode node2(ipaddr_t(U"127.0.0.1"), 12122U);
-
-			byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
-			TList<byte_t> rx;
-
-			EXPECT_TRUE(node1.Send(node2.LocalAddress().ip, node2.LocalAddress().port, tx, sizeof(tx)));
-
-			EXPECT_TRUE(node2.OnReceiveMsg().WaitFor(1));
-			ipaddr_t rx_ip;
-			port_t rx_port;
-			EXPECT_TRUE(node2.Receive(rx, &rx_ip, &rx_port));
-			EXPECT_EQ(rx_ip, ipaddr_t(U"127.0.0.1"));
-			EXPECT_EQ(rx_port, 12121U);
-
-			EXPECT_TRUE(rx.Count() == sizeof(tx));
-			EXPECT_TRUE(memcmp(rx.ItemPtr(0), tx, sizeof(tx)) == 0);
-
-			EXPECT_FALSE(node2.Receive(rx));
-		}
+		auto datagram = receiver.Receive();
+		ASSERT_TRUE(datagram.has_value());
+		EXPECT_EQ(datagram->source, sender.LocalAddress());
+		ASSERT_EQ(datagram->data.Count(), sizeof(tx));
+		EXPECT_EQ(memcmp(datagram->data.ItemPtr(0), tx, sizeof(tx)), 0);
+		EXPECT_FALSE(receiver.Receive().has_value());
 	}
 
-	TEST(io_net_ip, TUdpNode_loopback_dualstack)
+	TEST(io_net_ip, TUdpNode_loopback_ipv6)
 	{
-		{
-			TUdpNode node1(ipaddr_t(U"127.0.0.1"), 12121U);
-			TUdpNode node2(12122U);
+		TUdpNode sender(ipaddr_t(U"::1"));
+		TUdpNode receiver(ipaddr_t(U"::1"));
+		const byte_t tx[] = { 10,9,8,7,6,5,4,3,2,1 };
 
-			byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
-			TList<byte_t> rx;
+		EXPECT_TRUE(sender.Send(receiver.LocalAddress(), tx, sizeof(tx)));
+		EXPECT_TRUE(receiver.OnReceiveMsg().WaitFor(1));
 
-			EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx, sizeof(tx)));
-
-			if(node2.OnReceiveMsg().WaitFor(1))
-			{
-				ipaddr_t rx_ip;
-				port_t rx_port;
-				EXPECT_TRUE(node2.Receive(rx, &rx_ip, &rx_port));
-				EXPECT_EQ(rx_ip, ipaddr_t(U"127.0.0.1"));
-				EXPECT_EQ(rx_port, 12121U);
-
-				EXPECT_TRUE(rx.Count() == sizeof(tx));
-				EXPECT_TRUE(memcmp(rx.ItemPtr(0), tx, sizeof(tx)) == 0);
-
-				EXPECT_FALSE(node2.Receive(rx));
-			}
-			else
-			{
-				::system("netstat -lupn");
-				EXPECT_TRUE(false);
-			}
-		}
-
-		{
-			// dual-stack with one socket
-
-			TUdpNode node1(12121U);
-			TUdpNode node2(ipaddr_t(U"127.0.0.1"), 12122U);
-
-			byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
-			TList<byte_t> rx;
-
-			EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx, sizeof(tx)));
-
-			if(node2.OnReceiveMsg().WaitFor(1))
-			{
-				ipaddr_t rx_ip;
-				port_t rx_port;
-				EXPECT_TRUE(node2.Receive(rx, &rx_ip, &rx_port));
-				EXPECT_EQ(rx_ip, ipaddr_t(U"127.0.0.1"));
-				EXPECT_EQ(rx_port, 12121U);
-
-				EXPECT_TRUE(rx.Count() == sizeof(tx));
-				EXPECT_TRUE(memcmp(rx.ItemPtr(0), tx, sizeof(tx)) == 0);
-
-				EXPECT_FALSE(node2.Receive(rx));
-			}
-			else
-			{
-				::system("netstat -lupn");
-				EXPECT_TRUE(false);
-			}
-		}
+		udp_datagram_t datagram;
+		ASSERT_TRUE(receiver.Receive(datagram));
+		EXPECT_EQ(datagram.source, sender.LocalAddress());
+		ASSERT_EQ(datagram.data.Count(), sizeof(tx));
+		EXPECT_EQ(memcmp(datagram.data.ItemPtr(0), tx, sizeof(tx)), 0);
 	}
 
-	TEST(io_net_ip, TUdpNode_loopback_varysize)
+	TEST(io_net_ip, TUdpNode_dualstack_ipv4_send)
 	{
-		TUdpNode node1(ipaddr_t(U"127.0.0.1"), 12121U);
-		TUdpNode node2(ipaddr_t(U"127.0.0.1"), 12122U);
+		TUdpNode sender;
+		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		const byte_t tx[] = { 1,2,3,4 };
 
+		EXPECT_TRUE(sender.Send(ipport_t{ipaddr_t(U"127.0.0.1"), receiver.LocalAddress().port}, tx, sizeof(tx)));
+		EXPECT_TRUE(receiver.OnReceiveMsg().WaitFor(1));
+
+		auto datagram = receiver.Receive();
+		ASSERT_TRUE(datagram.has_value());
+		ASSERT_EQ(datagram->data.Count(), sizeof(tx));
+		EXPECT_EQ(memcmp(datagram->data.ItemPtr(0), tx, sizeof(tx)), 0);
+	}
+
+	TEST(io_net_ip, TUdpNode_dualstack_ipv4_receive)
+	{
+		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
+		TUdpNode receiver;
+		const byte_t tx[] = { 5,6,7,8 };
+
+		EXPECT_TRUE(sender.Send(ipaddr_t(U"127.0.0.1"), receiver.LocalAddress().port, tx, sizeof(tx)));
+		EXPECT_TRUE(receiver.OnReceiveMsg().WaitFor(1));
+
+		auto datagram = receiver.Receive();
+		ASSERT_TRUE(datagram.has_value());
+		EXPECT_EQ(datagram->source, sender.LocalAddress());
+		ASSERT_EQ(datagram->data.Count(), sizeof(tx));
+		EXPECT_EQ(memcmp(datagram->data.ItemPtr(0), tx, sizeof(tx)), 0);
+	}
+
+	TEST(io_net_ip, TUdpNode_preserves_datagram_boundaries_and_empty_datagrams)
+	{
+		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
+		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		const ipport_t target = receiver.LocalAddress();
+		const byte_t first[] = { 1,2,3 };
+		const byte_t second[] = { 4,5 };
+
+		EXPECT_TRUE(sender.Send(target, first, sizeof(first)));
+		EXPECT_TRUE(sender.Send(target, nullptr, 0));
+		EXPECT_TRUE(sender.Send(target, second, sizeof(second)));
+
+		auto a = receiver.Receive();
+		auto b = receiver.Receive();
+		auto c = receiver.Receive();
+		ASSERT_TRUE(a.has_value());
+		ASSERT_TRUE(b.has_value());
+		ASSERT_TRUE(c.has_value());
+		EXPECT_EQ(a->data.Count(), 3U);
+		EXPECT_EQ(b->data.Count(), 0U);
+		EXPECT_EQ(c->data.Count(), 2U);
+		EXPECT_EQ(a->data[0], 1U);
+		EXPECT_EQ(c->data[0], 4U);
+	}
+
+	TEST(io_net_ip, TUdpNode_resizes_receive_buffer)
+	{
+		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
+		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
 		TList<byte_t> tx;
-		TList<byte_t> rx;
+		for(usys_t i = 0; i < 4096; i++)
+			tx.Append((byte_t)i);
 
-		// 1024 bytes
+		EXPECT_TRUE(sender.Send(receiver.LocalAddress(), tx));
+		EXPECT_TRUE(receiver.OnReceiveMsg().WaitFor(1));
+		auto datagram = receiver.Receive();
+		ASSERT_TRUE(datagram.has_value());
+		ASSERT_EQ(datagram->data.Count(), tx.Count());
+		EXPECT_EQ(memcmp(datagram->data.ItemPtr(0), tx.ItemPtr(0), tx.Count()), 0);
+	}
 
-		for(usys_t i = 0; i < 1024; i++)
-			tx.Append((byte_t)i % 256);
+	TEST(io_net_ip, TUdpNode_hostname_send)
+	{
+		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
+		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		const byte_t tx[] = { 42 };
 
-		EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx));
-		EXPECT_TRUE(node2.OnReceiveMsg().WaitFor(1));
-		EXPECT_TRUE(node2.Receive(rx));
+		EXPECT_TRUE(sender.Send(U"localhost", receiver.LocalAddress().port, tx));
+		EXPECT_TRUE(receiver.OnReceiveMsg().WaitFor(1));
+		auto datagram = receiver.Receive();
+		ASSERT_TRUE(datagram.has_value());
+		ASSERT_EQ(datagram->data.Count(), 1U);
+		EXPECT_EQ(datagram->data[0], 42U);
+	}
 
-		EXPECT_EQ(tx.Count(), rx.Count());
-		for(usys_t i = 0; i < 1024; i++)
-			EXPECT_EQ(rx[i], ((byte_t)i % 256));
-
-		// 1152 bytes
-
-		for(usys_t i = 1024; i < 1152; i++)
-			tx.Append((byte_t)i % 256);
-
-		EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx));
-		EXPECT_TRUE(node2.OnReceiveMsg().WaitFor(1));
-		EXPECT_TRUE(node2.Receive(rx));
-
-		EXPECT_EQ(tx.Count(), rx.Count());
-		for(usys_t i = 0; i < 1152; i++)
-			EXPECT_EQ(rx[i], ((byte_t)i % 256));
-
-		// 8 bytes
-
-		tx = { 0,1,2,3,4,5,6,7 };
-
-		EXPECT_TRUE(node1.Send(ipaddr_t(U"127.0.0.1"), 12122U, tx));
-		EXPECT_TRUE(node2.OnReceiveMsg().WaitFor(1));
-		EXPECT_TRUE(node2.Receive(rx));
-
-		EXPECT_EQ(tx.Count(), rx.Count());
-		for(usys_t i = 0; i < 8; i++)
-			EXPECT_EQ(rx[i], i);
+	TEST(io_net_ip, TUdpNode_ipv4_socket_rejects_ipv6_target)
+	{
+		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
+		const byte_t tx[] = { 1 };
+		EXPECT_THROW({ const bool sent = sender.Send(ipport_t{ipaddr_t(U"::1"), 9U}, tx, sizeof(tx)); (void)sent; }, TInvalidArgumentException);
 	}
 
 	TEST(io_net_ip, TTcpServer_construct)

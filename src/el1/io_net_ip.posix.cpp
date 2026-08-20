@@ -91,13 +91,18 @@ namespace el1::io::net::ip
 		return ConvertFromPosix((const sockaddr&)addr);
 	}
 
-	static ipport_t AddressFromSocket(handle_t handle)
+	static int SocketDomain(const handle_t handle)
 	{
 		int domain = 0;
 		socklen_t len = sizeof(domain);
 		EL_SYSERR(getsockopt(handle, SOL_SOCKET, SO_DOMAIN, &domain, &len));
+		return domain;
+	}
 
-		switch(domain)
+	static ipport_t AddressFromSocket(handle_t handle)
+	{
+		socklen_t len = 0;
+		switch(SocketDomain(handle))
 		{
 			case AF_INET:
 			{
@@ -518,73 +523,128 @@ namespace el1::io::net::ip
 		return on_tx_ready;
 	}
 
-	bool TUdpNode::Receive(TList<byte_t>& msg_buffer, ipaddr_t* const remote_ip, port_t* const remote_port)
+	bool TUdpNode::Receive(TList<byte_t>& msg_buffer, ipport_t& remote_address)
 	{
-		// get length of datagram
-		const ssize_t r = recvfrom(this->handle, nullptr, 0, MSG_TRUNC | MSG_PEEK, nullptr, 0);
-
-		if(r > (ssys_t)msg_buffer.Count())
-		{
-			msg_buffer.Inflate(r - msg_buffer.Count(), 0);
-		}
-		else if(r < 0)
+		const ssize_t size = recvfrom(this->handle, nullptr, 0, MSG_TRUNC | MSG_PEEK, nullptr, nullptr);
+		if(size < 0)
 		{
 			EL_ERROR(errno != EAGAIN && errno != EWOULDBLOCK, TSyscallException, errno);
 			return false;
 		}
-		else if(r < (ssys_t)msg_buffer.Count())
+
+		msg_buffer.SetCount((usys_t)size);
+
+		sockaddr_storage addr = {};
+		socklen_t addr_size = sizeof(addr);
+		const ssize_t received = recvfrom(
+			this->handle,
+			size == 0 ? nullptr : msg_buffer.ItemPtr(0),
+			msg_buffer.Count(),
+			0,
+			(sockaddr*)&addr,
+			&addr_size
+		);
+
+		if(received < 0)
 		{
-			msg_buffer.Cut(0, msg_buffer.Count() - r);
+			msg_buffer.Truncate();
+			EL_ERROR(errno != EAGAIN && errno != EWOULDBLOCK, TSyscallException, errno);
+			return false;
 		}
 
-		struct sockaddr_in6 addr = {};
-		socklen_t len = sizeof(addr);
-
-		// get data of datagram
-		EL_ERROR(r != recvfrom(this->handle, msg_buffer.ItemPtr(0), msg_buffer.Count(), 0, (struct sockaddr*)&addr, &len), TLogicException);
-
-		const ipport_t ipp = ConvertFromPosix(addr);
-		if(remote_ip != nullptr)
-			*remote_ip = ipp.ip;
-		if(remote_port != nullptr)
-			*remote_port = ipp.port;
-
+		EL_ERROR(received != size, TLogicException);
+		remote_address = ConvertFromPosix(*(const sockaddr*)&addr);
 		return true;
 	}
 
-	bool TUdpNode::Send(const ipaddr_t remote_ip, const port_t remote_port, array_t<const byte_t> msg_buffer)
+	bool TUdpNode::Receive(TList<byte_t>& msg_buffer, ipaddr_t* const remote_ip, port_t* const remote_port)
 	{
-		if(remote_ip.IsV4())
+		ipport_t remote_address;
+		if(!Receive(msg_buffer, remote_address))
+			return false;
+
+		if(remote_ip != nullptr)
+			*remote_ip = remote_address.ip;
+		if(remote_port != nullptr)
+			*remote_port = remote_address.port;
+		return true;
+	}
+
+	bool TUdpNode::Receive(udp_datagram_t& datagram)
+	{
+		return Receive(datagram.data, datagram.source);
+	}
+
+	std::optional<udp_datagram_t> TUdpNode::Receive()
+	{
+		udp_datagram_t datagram;
+		if(!Receive(datagram))
+			return std::nullopt;
+		return std::move(datagram);
+	}
+
+	bool TUdpNode::Send(const ipport_t remote_address, const array_t<const byte_t> msg_buffer)
+	{
+		ssize_t result = -1;
+		switch(SocketDomain(this->handle))
 		{
-			auto addr = ConvertToPosixV4(remote_ip, remote_port);
-			const ssys_t r = sendto(this->handle, msg_buffer.ItemPtr(0), msg_buffer.Count(), 0, (const sockaddr*)&addr, sizeof(addr));
-			if(r < 0)
+			case AF_INET:
 			{
-				EL_ERROR(errno != EAGAIN && errno != EWOULDBLOCK, TSyscallException, errno);
-				return false;
+				EL_ERROR(!remote_address.ip.IsV4(), TInvalidArgumentException, "remote_address", "an IPv4 UDP socket cannot send to an IPv6 address");
+				const sockaddr_in addr = ConvertToPosixV4(remote_address.ip, remote_address.port);
+				result = sendto(this->handle, msg_buffer.ItemPtr(0), msg_buffer.Count(), 0, (const sockaddr*)&addr, sizeof(addr));
+				break;
 			}
 
-			EL_ERROR(r != (ssys_t)msg_buffer.Count(), TException, TString::Format(U"message truncated to %d bytes (out of %d bytes)", r, msg_buffer.Count()));
-			return true;
-		}
-		else
-		{
-			auto addr = ConvertToPosixV6(remote_ip, remote_port);
-			const ssys_t r = sendto(this->handle, msg_buffer.ItemPtr(0), msg_buffer.Count(), 0, (const sockaddr*)&addr, sizeof(addr));
-			if(r < 0)
+			case AF_INET6:
 			{
-				EL_ERROR(errno != EAGAIN && errno != EWOULDBLOCK, TSyscallException, errno);
-				return false;
+				// ipaddr_t stores IPv4 as IPv4-mapped IPv6, therefore the same
+				// sockaddr_in6 representation works for native IPv6 and dual-stack IPv4.
+				const sockaddr_in6 addr = ConvertToPosixV6(remote_address.ip, remote_address.port);
+				result = sendto(this->handle, msg_buffer.ItemPtr(0), msg_buffer.Count(), 0, (const sockaddr*)&addr, sizeof(addr));
+				break;
 			}
 
-			EL_ERROR(r != (ssys_t)msg_buffer.Count(), TException, TString::Format(U"message truncated to %d bytes (out of %d bytes)", r, msg_buffer.Count()));
-			return true;
+			default:
+				EL_THROW(TLogicException); // LCOV_EXCL_LINE
 		}
+
+		if(result < 0)
+		{
+			EL_ERROR(errno != EAGAIN && errno != EWOULDBLOCK, TSyscallException, errno);
+			return false;
+		}
+
+		EL_ERROR(result != (ssys_t)msg_buffer.Count(), TException, TString::Format(U"UDP datagram truncated to %d bytes (out of %d bytes)", result, msg_buffer.Count()));
+		return true;
+	}
+
+	bool TUdpNode::Send(const ipport_t remote_address, const void* const buffer, const usys_t sz_buffer)
+	{
+		return Send(remote_address, array_t<const byte_t>::FromUnsafePointer((const byte_t*)buffer, sz_buffer));
+	}
+
+	bool TUdpNode::Send(const ipaddr_t remote_ip, const port_t remote_port, const array_t<const byte_t> msg_buffer)
+	{
+		return Send(ipport_t{remote_ip, remote_port}, msg_buffer);
 	}
 
 	bool TUdpNode::Send(const ipaddr_t remote_ip, const port_t remote_port, const void* const buffer, const usys_t sz_buffer)
 	{
-		return Send(remote_ip, remote_port, array_t<const byte_t>::FromUnsafePointer((const byte_t*)buffer, sz_buffer));
+		return Send(ipport_t{remote_ip, remote_port}, buffer, sz_buffer);
+	}
+
+	bool TUdpNode::Send(const TStringView remote_host, const port_t remote_port, const array_t<const byte_t> msg_buffer)
+	{
+		const int domain = SocketDomain(this->handle);
+		for(const ipaddr_t& remote_ip : ResolveHostname(remote_host))
+		{
+			if(domain == AF_INET && !remote_ip.IsV4())
+				continue;
+			return Send(ipport_t{remote_ip, remote_port}, msg_buffer);
+		}
+
+		EL_THROW(TException, TString::Format(U"hostname %q did not resolve to an address compatible with this UDP socket", remote_host));
 	}
 
 	TUdpNode::TUdpNode(const port_t local_port, const EIP version) : on_rx_msg({ .read = true, .write = false, .other = false }), on_tx_ready({ .read = false, .write = true, .other = false })

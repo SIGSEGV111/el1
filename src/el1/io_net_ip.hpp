@@ -7,6 +7,7 @@
 #include "io_text_string.hpp"
 #include "system_handle.hpp"
 #include "system_waitable.hpp"
+#include <optional>
 
 namespace el1::io::net::ip
 {
@@ -92,6 +93,14 @@ namespace el1::io::net::ip
 	{
 		ipaddr_t ip;
 		port_t port;
+
+		constexpr bool operator==(const ipport_t&) const = default;
+	};
+
+	struct udp_datagram_t
+	{
+		ipport_t source;
+		io::collection::list::TList<byte_t> data;
 	};
 
 	io::collection::list::TList<ipaddr_t> EnumMyIpAddresses();
@@ -187,20 +196,29 @@ namespace el1::io::net::ip
 			const system::waitable::THandleWaitable& OnReceiveMsg() const EL_GETTER;
 			const system::waitable::THandleWaitable& OnTransmitReady() const EL_GETTER;
 
-			// returns true if a message was received, false otherwise
-			// if a message was received the msg_buffer will be resized to match the actual size of the message
-			// and remote_ip and remote_port (if not null) will return the ip and port of the sender of the message
+			// Non-blocking datagram receive. Datagram boundaries are preserved.
+			// Returns false/std::nullopt if no datagram is currently queued.
+			bool Receive(udp_datagram_t& datagram);
+			std::optional<udp_datagram_t> Receive();
+
+			// Compatibility overload. msg_buffer is resized to the exact datagram size.
+			bool Receive(collection::list::TList<byte_t>& msg_buffer, ipport_t& remote_address);
 			bool Receive(collection::list::TList<byte_t>& msg_buffer, ipaddr_t* const remote_ip = nullptr, port_t* const remote_port = nullptr);
 
-			// return true if the full message was sent successfully, returns false if the outbound queue is full
-			// throws an exception if the message was sent but truncated for any reason
+			// Returns false only if the non-blocking socket cannot currently accept the datagram.
+			// UDP is atomic: a successful call always submits the complete datagram.
+			bool Send(const ipport_t remote_address, collection::list::array_t<const byte_t> msg_buffer) EL_WARN_UNUSED_RESULT;
+			bool Send(const ipport_t remote_address, const void* const buffer, const usys_t sz_buffer) EL_WARN_UNUSED_RESULT;
 			bool Send(const ipaddr_t remote_ip, const port_t remote_port, collection::list::array_t<const byte_t> msg_buffer) EL_WARN_UNUSED_RESULT;
 			bool Send(const ipaddr_t remote_ip, const port_t remote_port, const void* const buffer, const usys_t sz_buffer) EL_WARN_UNUSED_RESULT;
+			bool Send(const io::text::string::TStringView remote_host, const port_t remote_port, collection::list::array_t<const byte_t> msg_buffer) EL_WARN_UNUSED_RESULT;
 
-			TUdpNode(const port_t local_port, const EIP version = EIP::ANY);
-			TUdpNode(const ipaddr_t bind_ip, const port_t local_port);
+			TUdpNode(const port_t local_port = 0, const EIP version = EIP::ANY);
+			TUdpNode(const ipaddr_t bind_ip, const port_t local_port = 0);
 
 			TUdpNode(TUdpNode&&) = default;
 			TUdpNode(const TUdpNode&) = delete;
 	};
+
+	using TUdpSocket = TUdpNode;
 }
