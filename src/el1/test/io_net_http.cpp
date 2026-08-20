@@ -46,14 +46,21 @@ namespace
 		bool complete = false;
 		u16_t status = 0;
 		std::string body;
+		std::unordered_map<std::string, std::string> response_headers;
+		std::string request_body;
+		bool request_body_sent = false;
 
 		static int RecvHeader(nghttp3_conn*, int64_t, int32_t, nghttp3_rcbuf* name, nghttp3_rcbuf* value, uint8_t, void* user_data, void*)
 		{
 			auto* const self = static_cast<THttp3TestClient*>(user_data);
 			const nghttp3_vec n = nghttp3_rcbuf_get_buf(name);
 			const nghttp3_vec v = nghttp3_rcbuf_get_buf(value);
-			if(std::string((char*)n.base, n.len) == ":status")
-				self->status = (u16_t)atoi(std::string((char*)v.base, v.len).c_str());
+			const std::string header_name((char*)n.base, n.len);
+			const std::string header_value((char*)v.base, v.len);
+			if(header_name == ":status")
+				self->status = (u16_t)atoi(header_value.c_str());
+			else
+				self->response_headers[header_name] = header_value;
 			return 0;
 		}
 
@@ -67,6 +74,23 @@ namespace
 		{
 			static_cast<THttp3TestClient*>(user_data)->complete = true;
 			return 0;
+		}
+
+		static nghttp3_ssize ReadRequestData(nghttp3_conn*, int64_t, nghttp3_vec* const vec, const size_t veccnt, u32_t* const flags, void*, void* const stream_user_data)
+		{
+			auto* const self = static_cast<THttp3TestClient*>(stream_user_data);
+			if(self == nullptr || veccnt == 0)
+				return NGHTTP3_ERR_CALLBACK_FAILURE;
+			if(self->request_body_sent || self->request_body.empty())
+			{
+				*flags |= NGHTTP3_DATA_FLAG_EOF;
+				return 0;
+			}
+			vec[0].base = reinterpret_cast<u8_t*>(self->request_body.data());
+			vec[0].len = self->request_body.size();
+			self->request_body_sent = true;
+			*flags |= NGHTTP3_DATA_FLAG_EOF;
+			return 1;
 		}
 
 		void AddStream(std::unique_ptr<quic::TStream> stream)
@@ -116,18 +140,29 @@ namespace
 					nghttp3_conn_del(session);
 			}
 
-			std::pair<u16_t, std::string> Get(const char* const path)
+			std::pair<u16_t, std::string> Request(const char* const method, const char* const path, const char* const request_data = nullptr)
 			{
+				complete = false;
+				status = 0;
+				body.clear();
+				response_headers.clear();
+				request_body = request_data == nullptr ? std::string() : std::string(request_data);
+				request_body_sent = false;
 				auto request = connection.OpenStream(false);
 				const int64_t request_id = (int64_t)request->Id();
 				AddStream(std::move(request));
 				nghttp3_nv fields[] = {
-					{ (uint8_t*)":method", (uint8_t*)"GET", 7, 3, NGHTTP3_NV_FLAG_NONE },
+					{ (uint8_t*)":method", (uint8_t*)method, 7, strlen(method), NGHTTP3_NV_FLAG_NONE },
 					{ (uint8_t*)":scheme", (uint8_t*)"https", 7, 5, NGHTTP3_NV_FLAG_NONE },
 					{ (uint8_t*)":authority", (uint8_t*)"localhost", 10, 9, NGHTTP3_NV_FLAG_NONE },
 					{ (uint8_t*)":path", (uint8_t*)path, 5, strlen(path), NGHTTP3_NV_FLAG_NONE },
+					{ (uint8_t*)"x-repeat", (uint8_t*)"one", 8, 3, NGHTTP3_NV_FLAG_NONE },
+					{ (uint8_t*)"x-repeat", (uint8_t*)"two", 8, 3, NGHTTP3_NV_FLAG_NONE },
+					{ (uint8_t*)"cookie", (uint8_t*)"a=1", 6, 3, NGHTTP3_NV_FLAG_NONE },
+					{ (uint8_t*)"cookie", (uint8_t*)"b=2", 6, 3, NGHTTP3_NV_FLAG_NONE },
 				};
-				EL_ERROR(nghttp3_conn_submit_request(session, request_id, fields, 4, nullptr, nullptr) != 0, TException, U"failed to submit HTTP/3 test request");
+				nghttp3_data_reader reader = { .read_data = &ReadRequestData };
+				EL_ERROR(nghttp3_conn_submit_request(session, request_id, fields, 8, request_body.empty() ? nullptr : &reader, this) != 0, TException, U"failed to submit HTTP/3 test request");
 
 				for(usys_t iterations = 0; !complete && iterations < 20000U; iterations++)
 				{
@@ -198,6 +233,18 @@ namespace
 				EL_ERROR(!complete, TException, U"HTTP/3 test client timed out");
 				return { status, body };
 			}
+
+			std::pair<u16_t, std::string> Get(const char* const path)
+			{
+				return Request("GET", path);
+			}
+
+			const std::string* ResponseHeader(const std::string& name) const
+			{
+				const auto it = response_headers.find(name);
+				return it == response_headers.end() ? nullptr : &it->second;
+			}
+
 	};
 
 	TEST(io_net_http, HandleSingleRequest_simple)
@@ -1125,6 +1172,246 @@ namespace
 		const TString url = TString::Format(U"http://localhost:%d/upload", tcp_server.LocalAddress().port);
 		TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--fail", U"--http2-prior-knowledge", U"--data-binary", data_arg, url });
 		EXPECT_EQ(received, 128U * 1024U);
+	}
+
+	TEST(io_net_http, THttpServer_curl_http1_http10_delete_and_repeated_headers)
+	{
+		TTcpServer tcp_server;
+		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response)
+		{
+			EXPECT_EQ(request.version, EVersion::HTTP10);
+			EXPECT_EQ(request.method, EMethod::DELETE);
+			EXPECT_EQ(request.url, U"/legacy path");
+			EXPECT_EQ(request.args[U"x"], U"a/b");
+			EXPECT_EQ(request.header_fields[U"x-repeat"], U"one, two");
+			response.status = EStatus::PARTIAL_CONTENT;
+			response.header_fields.ContentLength(6);
+			auto body = el1::New<TFifo<byte_t>>();
+			body->WriteAll(reinterpret_cast<const byte_t*>("legacy"), 6);
+			body->CloseOutput();
+			response.body = std::move(body);
+		});
+
+		const TString url = TString::Format(U"http://localhost:%d/legacy%%20path?x=a%%2fb", tcp_server.LocalAddress().port);
+		const TString result = TProcess::Execute(U"/usr/bin/curl", {
+			U"--silent", U"--fail", U"--http1.0", U"--request", U"DELETE",
+			U"--header", U"X-Repeat: one", U"--header", U"X-Repeat: two", url
+		});
+		EXPECT_EQ(result, U"legacy");
+	}
+
+	TEST(io_net_http, THttpServer_curl_http2_post_query_headers_and_filtered_response_headers)
+	{
+		TTcpServer tcp_server;
+		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response)
+		{
+			EXPECT_EQ(request.version, EVersion::HTTP20);
+			EXPECT_EQ(request.method, EMethod::POST);
+			EXPECT_EQ(request.url, U"/submit");
+			EXPECT_EQ(request.args[U"name"], U"a/b");
+			EXPECT_TRUE(request.args.Contains(U"flag"));
+			EXPECT_EQ(request.header_fields[U"x-repeat"], U"one, two");
+			ASSERT_NE(request.body, nullptr);
+			TList<byte_t> received = request.body->Pipe().Collect();
+			const char expected[] = "curl-http2-upload";
+			ASSERT_EQ(received.Count(), sizeof(expected) - 1U);
+			EXPECT_EQ(memcmp(received.ItemPtr(0), expected, sizeof(expected) - 1U), 0);
+
+			response.status = EStatus::CREATED;
+			response.header_fields.Set(U"Connection", U"close");
+			response.header_fields.Set(U"Transfer-Encoding", U"chunked");
+			response.header_fields.Set(U"Keep-Alive", U"timeout=5");
+			response.header_fields.Set(U"Upgrade", U"h2c");
+			response.header_fields.Set(U"X-Reply", U"h2");
+			auto body = el1::New<TFifo<byte_t>>();
+			body->WriteAll(reinterpret_cast<const byte_t*>("created"), 7);
+			body->CloseOutput();
+			response.body = std::move(body);
+		}, THttpServer::EProtocol::HTTP2);
+
+		const TString url = TString::Format(U"http://localhost:%d/submit?name=a%%2fb&flag", tcp_server.LocalAddress().port);
+		const TString result = TProcess::Execute(U"/usr/bin/curl", {
+			U"--silent", U"--fail", U"--http2-prior-knowledge",
+			U"--header", U"X-Repeat: one", U"--header", U"X-Repeat: two",
+			U"--data-binary", U"curl-http2-upload", url
+		});
+		EXPECT_EQ(result, U"created");
+	}
+
+	TEST(io_net_http, THttpServer_curl_http2_head_suppresses_body)
+	{
+		TTcpServer tcp_server;
+		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t& response)
+		{
+			EXPECT_EQ(request.version, EVersion::HTTP20);
+			EXPECT_EQ(request.method, EMethod::HEAD);
+			response.status = EStatus::OK;
+			response.header_fields.ContentLength(9);
+			auto body = el1::New<TFifo<byte_t>>();
+			body->WriteAll(reinterpret_cast<const byte_t*>("must-not!"), 9);
+			body->CloseOutput();
+			response.body = std::move(body);
+		}, THttpServer::EProtocol::HTTP2);
+
+		const TString url = TString::Format(U"http://localhost:%d/head", tcp_server.LocalAddress().port);
+		const TString headers = TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--http2-prior-knowledge", U"--head", url });
+		EXPECT_TRUE(headers.Contains(TStringView(U"200")));
+		EXPECT_TRUE(headers.Contains(TStringView(U"content-length: 9")) || headers.Contains(TStringView(U"Content-Length: 9")));
+		EXPECT_FALSE(headers.Contains(TStringView(U"must-not!")));
+	}
+
+	TEST(io_net_http, THttpServer_curl_http2_handler_exception_statuses)
+	{
+		TTcpServer tcp_server;
+		THttpServer http_server(&tcp_server, [](const THttpServer::request_t& request, THttpServer::response_t&)
+		{
+			if(request.url == U"/forbidden")
+				EL_THROW(THttpProcessingException, EStatus::FORBIDDEN, U"forbidden");
+			EL_THROW(TException, U"failure");
+		}, THttpServer::EProtocol::HTTP2);
+
+		const TString forbidden = TString::Format(U"http://localhost:%d/forbidden", tcp_server.LocalAddress().port);
+		const TString failure = TString::Format(U"http://localhost:%d/failure", tcp_server.LocalAddress().port);
+		EXPECT_EQ(TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--http2-prior-knowledge", U"--output", U"/dev/null", U"--write-out", U"%{http_code}", forbidden }), U"403");
+		EXPECT_EQ(TProcess::Execute(U"/usr/bin/curl", { U"--silent", U"--http2-prior-knowledge", U"--output", U"/dev/null", U"--write-out", U"%{http_code}", failure }), U"500");
+	}
+
+	TEST(io_net_http, THttpServer_http3_post_query_headers_streaming_and_head)
+	{
+		if(!quic::IsSupported())
+			GTEST_SKIP() << "HTTP/3 requires OpenSSL 3.5 QUIC support";
+
+		TUdpSocket udp(ipaddr_t(U"127.0.0.1"));
+		quic::server_config_t config;
+		config.certificate_chain = tls::TPemSource(TPath(U"support/tls-test-cert.pem"));
+		config.private_key = tls::TPemSource(TPath(U"support/tls-test-key.pem"));
+		config.application_protocol = U"h3";
+		quic::TServer quic_server(&udp, std::move(config));
+		usys_t request_count = 0;
+		THttpServer http_server(&quic_server, [&request_count](const THttpServer::request_t& request, THttpServer::response_t& response)
+		{
+			request_count++;
+			EXPECT_EQ(request.version, EVersion::HTTP30);
+			EXPECT_EQ(request.header_fields[U"x-repeat"], U"one, two");
+			EXPECT_EQ(request.header_fields[U"cookie"], U"a=1; b=2");
+			if(request.method == EMethod::POST)
+			{
+				EXPECT_EQ(request.url, U"/upload");
+				EXPECT_EQ(request.args[U"name"], U"a/b");
+				EXPECT_TRUE(request.args.Contains(U"flag"));
+				ASSERT_NE(request.body, nullptr);
+				usys_t received = 0;
+				byte_t buffer[4096];
+				while(!request.body->Complete())
+				{
+					const usys_t n = request.body->Read(buffer, sizeof(buffer));
+					if(n != 0)
+						received += n;
+					else if(const IWaitable* const waitable = request.body->OnInputReady(); waitable != nullptr)
+						waitable->WaitFor();
+				}
+				EXPECT_EQ(received, 80U * 1024U);
+				response.status = EStatus::CREATED;
+				response.header_fields.Set(U"Connection", U"close");
+				response.header_fields.Set(U"Transfer-Encoding", U"chunked");
+				response.header_fields.Set(U"X-H3", U"yes");
+				auto body = el1::New<TFifo<byte_t>>();
+				body->WriteAll(reinterpret_cast<const byte_t*>("h3-created"), 10);
+				body->CloseOutput();
+				response.body = std::move(body);
+			}
+			else
+			{
+				EXPECT_EQ(request.method, EMethod::HEAD);
+				response.status = EStatus::OK;
+				response.header_fields.ContentLength(7);
+				auto body = el1::New<TFifo<byte_t>>();
+				body->WriteAll(reinterpret_cast<const byte_t*>("hidden!"), 7);
+				body->CloseOutput();
+				response.body = std::move(body);
+			}
+		});
+
+		std::string upload(80U * 1024U, 'x');
+		{
+			THttp3TestClient client({ ipaddr_t(U"127.0.0.1"), quic_server.LocalAddress().port });
+			const auto response = client.Request("POST", "/upload?name=a%2fb&flag", upload.c_str());
+			EXPECT_EQ(response.first, 201U);
+			EXPECT_EQ(response.second, "h3-created");
+			ASSERT_NE(client.ResponseHeader("x-h3"), nullptr);
+			EXPECT_EQ(*client.ResponseHeader("x-h3"), "yes");
+			EXPECT_EQ(client.ResponseHeader("connection"), nullptr);
+			EXPECT_EQ(client.ResponseHeader("transfer-encoding"), nullptr);
+		}
+		{
+			THttp3TestClient client({ ipaddr_t(U"127.0.0.1"), quic_server.LocalAddress().port });
+			const auto response = client.Request("HEAD", "/head");
+			EXPECT_EQ(response.first, 200U);
+			EXPECT_TRUE(response.second.empty());
+		}
+		EXPECT_EQ(request_count, 2U);
+	}
+
+	TEST(io_net_http, THttpServer_http3_handler_exception_statuses)
+	{
+		if(!quic::IsSupported())
+			GTEST_SKIP() << "HTTP/3 requires OpenSSL 3.5 QUIC support";
+
+		TUdpSocket udp(ipaddr_t(U"127.0.0.1"));
+		quic::server_config_t config;
+		config.certificate_chain = tls::TPemSource(TPath(U"support/tls-test-cert.pem"));
+		config.private_key = tls::TPemSource(TPath(U"support/tls-test-key.pem"));
+		config.application_protocol = U"h3";
+		quic::TServer quic_server(&udp, std::move(config));
+		THttpServer http_server(&quic_server, [](const THttpServer::request_t& request, THttpServer::response_t&)
+		{
+			if(request.url == U"/forbidden")
+				EL_THROW(THttpProcessingException, EStatus::FORBIDDEN, U"forbidden");
+			EL_THROW(TException, U"failure");
+		});
+
+		{
+			THttp3TestClient client({ ipaddr_t(U"127.0.0.1"), quic_server.LocalAddress().port });
+			EXPECT_EQ(client.Get("/forbidden").first, 403U);
+		}
+		{
+			THttp3TestClient client({ ipaddr_t(U"127.0.0.1"), quic_server.LocalAddress().port });
+			EXPECT_EQ(client.Get("/failure").first, 500U);
+		}
+	}
+
+	TEST(io_net_http, THttpServer_curl_http3_interop)
+	{
+		if(!quic::IsSupported())
+			GTEST_SKIP() << "HTTP/3 requires OpenSSL 3.5 QUIC support";
+		const TString curl_version = TProcess::Execute(U"/usr/bin/curl", { U"--version" });
+		if(!curl_version.Contains(TStringView(U"HTTP3")))
+			GTEST_SKIP() << "installed curl has no HTTP/3 support";
+
+		TUdpSocket udp(ipaddr_t(U"127.0.0.1"));
+		quic::server_config_t config;
+		config.certificate_chain = tls::TPemSource(TPath(U"support/tls-test-cert.pem"));
+		config.private_key = tls::TPemSource(TPath(U"support/tls-test-key.pem"));
+		config.application_protocol = U"h3";
+		quic::TServer quic_server(&udp, std::move(config));
+		THttpServer http_server(&quic_server, [](const THttpServer::request_t& request, THttpServer::response_t& response)
+		{
+			EXPECT_EQ(request.version, EVersion::HTTP30);
+			EXPECT_EQ(request.url, U"/curl-h3");
+			response.status = EStatus::OK;
+			auto body = el1::New<TFifo<byte_t>>();
+			body->WriteAll(reinterpret_cast<const byte_t*>("curl-http3-ok"), 13);
+			body->CloseOutput();
+			response.body = std::move(body);
+		});
+
+		const u16_t port = quic_server.LocalAddress().port;
+		const TString resolve = TString::Format(U"localhost:%d:127.0.0.1", port);
+		const TString url = TString::Format(U"https://localhost:%d/curl-h3", port);
+		const TString result = TProcess::Execute(U"/usr/bin/curl", {
+			U"--silent", U"--fail", U"--http3-only", U"--cacert", U"support/tls-test-cert.pem", U"--resolve", resolve, url
+		});
+		EXPECT_EQ(result, U"curl-http3-ok");
 	}
 
 }
