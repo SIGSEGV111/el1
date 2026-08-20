@@ -7,10 +7,18 @@
 CXX := clang++
 ARCH ?= $(shell rpm --eval '%{_target_cpu}' 2>/dev/null || uname -m)
 EASY_RPM_VERSION ?= easy-rpm-version.sh
-PACKAGE_VERSION ?= $(shell $(EASY_RPM_VERSION))
+# Normal builds must not depend on the RPM helper's clean-worktree policy.
+# Derive the same automatic version directly from HEAD; packaging/deployment
+# remain protected by ensure-git-clean.sh below. RPM_VERSION and an explicit
+# PACKAGE_VERSION still override the automatic Git version.
+AUTOMATIC_GIT_VERSION := $(strip $(shell \
+	count="$$(git rev-list --count HEAD 2>/dev/null)" && \
+	hash="$$(git show --format=%h --no-patch HEAD 2>/dev/null)" && \
+	printf '%s.%s' "$$count" "$$hash"))
+PACKAGE_VERSION ?= $(if $(RPM_VERSION),$(RPM_VERSION),$(AUTOMATIC_GIT_VERSION))
 PACKAGE_VERSION := $(strip $(PACKAGE_VERSION))
 ifeq ($(PACKAGE_VERSION),)
-$(error unable to determine PACKAGE_VERSION; install easy-rpm or set PACKAGE_VERSION/RPM_VERSION explicitly)
+$(error unable to determine PACKAGE_VERSION; set PACKAGE_VERSION/RPM_VERSION explicitly or build inside a Git repository)
 endif
 VERSION ?= Version $(PACKAGE_VERSION)
 
