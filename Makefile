@@ -435,10 +435,18 @@ check-coverage-tools:
 	@:
 endif
 
-# Keep Release and Debug runs sequential: both use TEST_WORK_DIRS.
+# Keep all test runs sequential: they share TEST_WORK_DIRS.  Run the optimized
+# binary natively first so crashes/assertions are reported without Valgrind's
+# instrumentation overhead, then run the same binary under Valgrind.
 test:
+	$(MAKE) --no-print-directory test-release-native
 	$(MAKE) --no-print-directory test-release
 	$(MAKE) --no-print-directory coverage-report
+
+test-release-native: $(RELEASE_TEST_NAME)
+	./support/generate-testdata.sh "$(OUT_DIR)"
+	rm -rf -- $(TEST_WORK_DIRS) && mkdir -p -- $(TEST_WORK_DIRS)
+	LD_LIBRARY_PATH="$(RELEASE_DIR)" "$(RELEASE_TEST_NAME)" $(TEST_GTEST_FLAGS)
 
 test-release: check-valgrind $(RELEASE_TEST_NAME)
 	./support/generate-testdata.sh "$(OUT_DIR)"
