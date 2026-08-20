@@ -252,9 +252,9 @@ namespace el1::io::net::tls
 				data->tcp_client->OnInputReady()->Reset();
 			}
 
-			const THandleWaitable* HandleWaitable() const final override
+			io::collection::array::array_t<const THandleWaitable*> HandleWaitables() const final override EL_GETTER
 			{
-				return data->tcp_client->OnInputReady();
+				return data->tcp_client->OnInputReady()->HandleWaitables();
 			}
 
 			explicit TInputWaitable(const data_t* const data) : data(data) {}

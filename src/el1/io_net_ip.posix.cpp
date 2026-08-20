@@ -503,27 +503,27 @@ namespace el1::io::net::ip
 
 	/*********************************************************************************/
 
-	handle_t TUdpNode::Handle()
+	handle_t TUdpSocket::Handle()
 	{
 		return this->handle;
 	}
 
-	ipport_t TUdpNode::LocalAddress() const
+	ipport_t TUdpSocket::LocalAddress() const
 	{
 		return AddressFromSocket(this->handle);
 	}
 
-	const THandleWaitable& TUdpNode::OnReceiveMsg() const
+	const THandleWaitable& TUdpSocket::OnReceiveMsg() const
 	{
 		return on_rx_msg;
 	}
 
-	const THandleWaitable& TUdpNode::OnTransmitReady() const
+	const THandleWaitable& TUdpSocket::OnTransmitReady() const
 	{
 		return on_tx_ready;
 	}
 
-	bool TUdpNode::Receive(TList<byte_t>& msg_buffer, ipport_t& remote_address)
+	bool TUdpSocket::Receive(TList<byte_t>& msg_buffer, ipport_t& remote_address)
 	{
 		const ssize_t size = recvfrom(this->handle, nullptr, 0, MSG_TRUNC | MSG_PEEK, nullptr, nullptr);
 		if(size < 0)
@@ -557,7 +557,7 @@ namespace el1::io::net::ip
 		return true;
 	}
 
-	bool TUdpNode::Receive(TList<byte_t>& msg_buffer, ipaddr_t* const remote_ip, port_t* const remote_port)
+	bool TUdpSocket::Receive(TList<byte_t>& msg_buffer, ipaddr_t* const remote_ip, port_t* const remote_port)
 	{
 		ipport_t remote_address;
 		if(!Receive(msg_buffer, remote_address))
@@ -570,12 +570,12 @@ namespace el1::io::net::ip
 		return true;
 	}
 
-	bool TUdpNode::Receive(udp_datagram_t& datagram)
+	bool TUdpSocket::Receive(udp_datagram_t& datagram)
 	{
 		return Receive(datagram.data, datagram.source);
 	}
 
-	std::optional<udp_datagram_t> TUdpNode::Receive()
+	std::optional<udp_datagram_t> TUdpSocket::Receive()
 	{
 		udp_datagram_t datagram;
 		if(!Receive(datagram))
@@ -583,7 +583,7 @@ namespace el1::io::net::ip
 		return std::move(datagram);
 	}
 
-	bool TUdpNode::Send(const ipport_t remote_address, const array_t<const byte_t> msg_buffer)
+	bool TUdpSocket::Send(const ipport_t remote_address, const array_t<const byte_t> msg_buffer)
 	{
 		ssize_t result = -1;
 		switch(SocketDomain(this->handle))
@@ -619,22 +619,22 @@ namespace el1::io::net::ip
 		return true;
 	}
 
-	bool TUdpNode::Send(const ipport_t remote_address, const void* const buffer, const usys_t sz_buffer)
+	bool TUdpSocket::Send(const ipport_t remote_address, const void* const buffer, const usys_t sz_buffer)
 	{
 		return Send(remote_address, array_t<const byte_t>::FromUnsafePointer((const byte_t*)buffer, sz_buffer));
 	}
 
-	bool TUdpNode::Send(const ipaddr_t remote_ip, const port_t remote_port, const array_t<const byte_t> msg_buffer)
+	bool TUdpSocket::Send(const ipaddr_t remote_ip, const port_t remote_port, const array_t<const byte_t> msg_buffer)
 	{
 		return Send(ipport_t{remote_ip, remote_port}, msg_buffer);
 	}
 
-	bool TUdpNode::Send(const ipaddr_t remote_ip, const port_t remote_port, const void* const buffer, const usys_t sz_buffer)
+	bool TUdpSocket::Send(const ipaddr_t remote_ip, const port_t remote_port, const void* const buffer, const usys_t sz_buffer)
 	{
 		return Send(ipport_t{remote_ip, remote_port}, buffer, sz_buffer);
 	}
 
-	bool TUdpNode::Send(const TStringView remote_host, const port_t remote_port, const array_t<const byte_t> msg_buffer)
+	bool TUdpSocket::Send(const TStringView remote_host, const port_t remote_port, const array_t<const byte_t> msg_buffer)
 	{
 		const int domain = SocketDomain(this->handle);
 		for(const ipaddr_t& remote_ip : ResolveHostname(remote_host))
@@ -647,14 +647,14 @@ namespace el1::io::net::ip
 		EL_THROW(TException, TString::Format(U"hostname %q did not resolve to an address compatible with this UDP socket", remote_host));
 	}
 
-	TUdpNode::TUdpNode(const port_t local_port, const EIP version) : on_rx_msg({ .read = true, .write = false, .other = false }), on_tx_ready({ .read = false, .write = true, .other = false })
+	TUdpSocket::TUdpSocket(const port_t local_port, const EIP version) : on_rx_msg({ .read = true, .write = false, .other = false }), on_tx_ready({ .read = false, .write = true, .other = false })
 	{
 		this->handle = CreateSocket(SOCK_DGRAM | SOCK_NONBLOCK, local_port, version);
 		on_rx_msg.Handle(handle);
 		on_tx_ready.Handle(handle);
 	}
 
-	TUdpNode::TUdpNode(const ipaddr_t bind_ip, const port_t local_port) : on_rx_msg({ .read = true, .write = false, .other = false }), on_tx_ready({ .read = false, .write = true, .other = false })
+	TUdpSocket::TUdpSocket(const ipaddr_t bind_ip, const port_t local_port) : on_rx_msg({ .read = true, .write = false, .other = false }), on_tx_ready({ .read = false, .write = true, .other = false })
 	{
 		this->handle = CreateSocket(SOCK_DGRAM | SOCK_NONBLOCK, bind_ip, local_port);
 		on_rx_msg.Handle(handle);

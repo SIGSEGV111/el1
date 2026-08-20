@@ -87,7 +87,7 @@ namespace
 		}
 	}
 
-	TEST(io_net_ip, TUdpNode_construct)
+	TEST(io_net_ip, TUdpSocket_construct)
 	{
 		{
 			TUdpSocket udp;
@@ -95,36 +95,36 @@ namespace
 		}
 
 		{
-			TUdpNode udp(0U, EIP::V4);
+			TUdpSocket udp(0U, EIP::V4);
 			EXPECT_TRUE(udp.LocalAddress().ip.IsV4());
 			EXPECT_FALSE(udp.LocalAddress().ip.IsV6());
 			EXPECT_NE(udp.LocalAddress().port, 0U);
 		}
 
 		{
-			TUdpNode udp(0U, EIP::V6);
+			TUdpSocket udp(0U, EIP::V6);
 			EXPECT_TRUE(udp.LocalAddress().ip.IsV6());
 			EXPECT_FALSE(udp.LocalAddress().ip.IsV4());
 			EXPECT_NE(udp.LocalAddress().port, 0U);
 		}
 
 		{
-			TUdpNode udp(ipaddr_t(U"127.0.0.1"));
+			TUdpSocket udp(ipaddr_t(U"127.0.0.1"));
 			EXPECT_TRUE(udp.LocalAddress().ip.IsV4());
 			EXPECT_FALSE(udp.LocalAddress().ip.IsV6());
 		}
 
 		{
-			TUdpNode udp(ipaddr_t(U"::1"));
+			TUdpSocket udp(ipaddr_t(U"::1"));
 			EXPECT_TRUE(udp.LocalAddress().ip.IsV6());
 			EXPECT_FALSE(udp.LocalAddress().ip.IsV4());
 		}
 	}
 
-	TEST(io_net_ip, TUdpNode_loopback_ipv4)
+	TEST(io_net_ip, TUdpSocket_loopback_ipv4)
 	{
-		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
-		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket sender(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket receiver(ipaddr_t(U"127.0.0.1"));
 		const byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
 
 		EXPECT_TRUE(sender.Send(receiver.LocalAddress(), tx, sizeof(tx)));
@@ -138,10 +138,10 @@ namespace
 		EXPECT_FALSE(receiver.Receive().has_value());
 	}
 
-	TEST(io_net_ip, TUdpNode_loopback_ipv6)
+	TEST(io_net_ip, TUdpSocket_loopback_ipv6)
 	{
-		TUdpNode sender(ipaddr_t(U"::1"));
-		TUdpNode receiver(ipaddr_t(U"::1"));
+		TUdpSocket sender(ipaddr_t(U"::1"));
+		TUdpSocket receiver(ipaddr_t(U"::1"));
 		const byte_t tx[] = { 10,9,8,7,6,5,4,3,2,1 };
 
 		EXPECT_TRUE(sender.Send(receiver.LocalAddress(), tx, sizeof(tx)));
@@ -154,10 +154,10 @@ namespace
 		EXPECT_EQ(memcmp(datagram.data.ItemPtr(0), tx, sizeof(tx)), 0);
 	}
 
-	TEST(io_net_ip, TUdpNode_dualstack_ipv4_send)
+	TEST(io_net_ip, TUdpSocket_dualstack_ipv4_send)
 	{
-		TUdpNode sender;
-		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket sender;
+		TUdpSocket receiver(ipaddr_t(U"127.0.0.1"));
 		const byte_t tx[] = { 1,2,3,4 };
 
 		EXPECT_TRUE(sender.Send(ipport_t{ipaddr_t(U"127.0.0.1"), receiver.LocalAddress().port}, tx, sizeof(tx)));
@@ -169,10 +169,10 @@ namespace
 		EXPECT_EQ(memcmp(datagram->data.ItemPtr(0), tx, sizeof(tx)), 0);
 	}
 
-	TEST(io_net_ip, TUdpNode_dualstack_ipv4_receive)
+	TEST(io_net_ip, TUdpSocket_dualstack_ipv4_receive)
 	{
-		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
-		TUdpNode receiver;
+		TUdpSocket sender(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket receiver;
 		const byte_t tx[] = { 5,6,7,8 };
 
 		EXPECT_TRUE(sender.Send(ipaddr_t(U"127.0.0.1"), receiver.LocalAddress().port, tx, sizeof(tx)));
@@ -185,10 +185,10 @@ namespace
 		EXPECT_EQ(memcmp(datagram->data.ItemPtr(0), tx, sizeof(tx)), 0);
 	}
 
-	TEST(io_net_ip, TUdpNode_preserves_datagram_boundaries_and_empty_datagrams)
+	TEST(io_net_ip, TUdpSocket_preserves_datagram_boundaries_and_empty_datagrams)
 	{
-		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
-		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket sender(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket receiver(ipaddr_t(U"127.0.0.1"));
 		const ipport_t target = receiver.LocalAddress();
 		const byte_t first[] = { 1,2,3 };
 		const byte_t second[] = { 4,5 };
@@ -210,10 +210,10 @@ namespace
 		EXPECT_EQ(c->data[0], 4U);
 	}
 
-	TEST(io_net_ip, TUdpNode_resizes_receive_buffer)
+	TEST(io_net_ip, TUdpSocket_resizes_receive_buffer)
 	{
-		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
-		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket sender(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket receiver(ipaddr_t(U"127.0.0.1"));
 		TList<byte_t> tx;
 		for(usys_t i = 0; i < 4096; i++)
 			tx.Append((byte_t)i);
@@ -226,10 +226,10 @@ namespace
 		EXPECT_EQ(memcmp(datagram->data.ItemPtr(0), tx.ItemPtr(0), tx.Count()), 0);
 	}
 
-	TEST(io_net_ip, TUdpNode_hostname_send)
+	TEST(io_net_ip, TUdpSocket_hostname_send)
 	{
-		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
-		TUdpNode receiver(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket sender(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket receiver(ipaddr_t(U"127.0.0.1"));
 		const byte_t tx[] = { 42 };
 
 		EXPECT_TRUE(sender.Send(U"localhost", receiver.LocalAddress().port, tx));
@@ -240,9 +240,9 @@ namespace
 		EXPECT_EQ(datagram->data[0], 42U);
 	}
 
-	TEST(io_net_ip, TUdpNode_ipv4_socket_rejects_ipv6_target)
+	TEST(io_net_ip, TUdpSocket_ipv4_socket_rejects_ipv6_target)
 	{
-		TUdpNode sender(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket sender(ipaddr_t(U"127.0.0.1"));
 		const byte_t tx[] = { 1 };
 		EXPECT_THROW({ const bool sent = sender.Send(ipport_t{ipaddr_t(U"::1"), 9U}, tx, sizeof(tx)); (void)sent; }, TInvalidArgumentException);
 	}

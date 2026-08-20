@@ -33,14 +33,14 @@ namespace el1::system::time::timer
 			TTimer(const EClock clock, const TTime interval);
 	};
 
-	struct TTimeWaitable : public waitable::IWaitable
+	struct TTimeWaitable final : public waitable::IWaitable
 	{
 		const EClock clock;
 		const TTime ts_wait_until;
 		mutable std::unique_ptr<TTimer> timer;
 
 		bool IsReady() const final override;
-		const system::waitable::THandleWaitable* HandleWaitable() const final override;
+		io::collection::array::array_t<const system::waitable::THandleWaitable*> HandleWaitables() const final override EL_GETTER;
 
 		TTimeWaitable(const EClock clock, const TTime ts_wait_until) : clock(clock), ts_wait_until(ts_wait_until) {}
 	};

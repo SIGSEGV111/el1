@@ -3,6 +3,7 @@
 #include "system_waitable.hpp"
 #include "system_task.hpp"
 #include "system_time_timer.hpp"
+#include "io_collection_array.hpp"
 #include "error.hpp"
 
 namespace el1::system::waitable
@@ -11,6 +12,33 @@ namespace el1::system::waitable
 	using namespace system::handle;
 	using namespace system::time;
 	using namespace system::time::timer;
+	using namespace io::collection::array;
+
+	array_t<const THandleWaitable*> IWaitable::HandleWaitables() const
+	{
+		return {};
+	}
+
+	array_t<const THandleWaitable*> THandleWaitable::HandleWaitables() const
+	{
+		return handle_waitables;
+	}
+
+	THandleWaitable& THandleWaitable::operator=(const THandleWaitable& src)
+	{
+		is_ready = src.is_ready;
+		wait = src.wait;
+		handle = src.handle;
+		return *this;
+	}
+
+	THandleWaitable& THandleWaitable::operator=(THandleWaitable&& src)
+	{
+		is_ready = src.is_ready;
+		wait = src.wait;
+		handle = src.handle;
+		return *this;
+	}
 
 	void IWaitable::WaitFor() const
 	{

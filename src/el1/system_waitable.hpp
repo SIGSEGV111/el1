@@ -10,6 +10,12 @@ namespace el1::system::task
 	class TFiber;
 }
 
+namespace el1::io::collection::array
+{
+	template<typename T>
+	class array_t;
+}
+
 namespace el1::system::waitable
 {
 	// a waitable monitors some asynchronous resource or process
@@ -29,7 +35,7 @@ namespace el1::system::waitable
 		bool WaitFor(const time::TTime timeout, const bool absolute_time = false) const EL_WARN_UNUSED_RESULT;
 		virtual bool IsReady() const = 0;
 		virtual void Reset() const {}
-		virtual const THandleWaitable* HandleWaitable() const { return nullptr; }
+		virtual io::collection::array::array_t<const THandleWaitable*> HandleWaitables() const EL_GETTER;
 	};
 
 	class THandleWaitable : public IWaitable
@@ -48,10 +54,15 @@ namespace el1::system::waitable
 			mutable bool is_ready;
 			wait_t wait;
 			handle::handle_t handle;
+			mutable const THandleWaitable* handle_waitables[1];
 
 		public:
-			THandleWaitable(const wait_t wait) : is_ready(false), wait(wait) {}
-			THandleWaitable(const wait_t wait, const handle::handle_t handle) : is_ready(false), wait(wait), handle(handle) {}
+			THandleWaitable(const wait_t wait) : is_ready(false), wait(wait), handle_waitables{this} {}
+			THandleWaitable(const wait_t wait, const handle::handle_t handle) : is_ready(false), wait(wait), handle(handle), handle_waitables{this} {}
+			THandleWaitable(const THandleWaitable& src) : is_ready(src.is_ready), wait(src.wait), handle(src.handle), handle_waitables{this} {}
+			THandleWaitable(THandleWaitable&& src) : is_ready(src.is_ready), wait(src.wait), handle(src.handle), handle_waitables{this} {}
+			THandleWaitable& operator=(const THandleWaitable& src);
+			THandleWaitable& operator=(THandleWaitable&& src);
 
 			wait_t Wait() const EL_GETTER { return wait; }
 			handle::handle_t Handle() const EL_GETTER { return handle; }
@@ -60,7 +71,7 @@ namespace el1::system::waitable
 			bool IsReady() const final override { return is_ready; }
 			void Reset() const final override { is_ready = false; }
 
-			const THandleWaitable* HandleWaitable() const final override { return this; }
+			io::collection::array::array_t<const THandleWaitable*> HandleWaitables() const final override EL_GETTER;
 	};
 
 	template<typename T>

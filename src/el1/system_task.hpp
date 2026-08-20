@@ -187,7 +187,7 @@ namespace el1::system::task
 			void Raise() final override;
 			bool IsReady() const final override { return handle_waitable.IsReady(); }
 			void Reset() const final override;
-			const THandleWaitable* HandleWaitable() const final override { return &handle_waitable; }
+			io::collection::array::array_t<const THandleWaitable*> HandleWaitables() const final override EL_GETTER;
 
 			TIpcSignal(TIpcSignal&&) = delete;
 			TIpcSignal(const TIpcSignal&) = delete;

@@ -5,6 +5,7 @@
 #include "system_memory.hpp"
 #include "util.hpp"
 #include "io_collection_list.hpp"
+#include "io_collection_array.hpp"
 #include "io_file.hpp"
 #include "io_text_encoding_utf8.hpp"
 #include "io_text_string.hpp"
@@ -122,6 +123,11 @@ namespace el1::system::task
 		signal_handle(EL_SYSERR(eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)), true),
 		handle_waitable({ .read = true, .write = false, .other = false }, signal_handle)
 	{
+	}
+
+	io::collection::array::array_t<const THandleWaitable*> TIpcSignal::HandleWaitables() const
+	{
+		return handle_waitable.HandleWaitables();
 	}
 
 	void TIpcSignal::Raise()
@@ -328,11 +334,10 @@ namespace el1::system::task
 				{
 					if(waitable == nullptr)
 						continue;
-					const THandleWaitable* const handle_waitable = waitable->HandleWaitable();
-					if(handle_waitable != nullptr)
+
+					for(const THandleWaitable* const handle_waitable : waitable->HandleWaitables())
 					{
 						const THandleWaitable::wait_t wait = handle_waitable->Wait();
-
 						pfds.Append({
 							.fd = handle_waitable->Handle(),
 							.events = (short)((wait.read ? (POLLIN | POLLRDHUP) : 0) | (wait.write ? POLLOUT : 0) | (wait.other ? POLLPRI : 0)),

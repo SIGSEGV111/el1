@@ -181,7 +181,7 @@ namespace el1::io::net::ip
 			TTcpServer(const TTcpServer&) = delete;
 	};
 
-	class TUdpNode
+	class TUdpSocket
 	{
 		protected:
 			system::handle::THandle handle;
@@ -213,12 +213,11 @@ namespace el1::io::net::ip
 			bool Send(const ipaddr_t remote_ip, const port_t remote_port, const void* const buffer, const usys_t sz_buffer) EL_WARN_UNUSED_RESULT;
 			bool Send(const io::text::string::TStringView remote_host, const port_t remote_port, collection::list::array_t<const byte_t> msg_buffer) EL_WARN_UNUSED_RESULT;
 
-			TUdpNode(const port_t local_port = 0, const EIP version = EIP::ANY);
-			TUdpNode(const ipaddr_t bind_ip, const port_t local_port = 0);
+			TUdpSocket(const port_t local_port = 0, const EIP version = EIP::ANY);
+			TUdpSocket(const ipaddr_t bind_ip, const port_t local_port = 0);
 
-			TUdpNode(TUdpNode&&) = default;
-			TUdpNode(const TUdpNode&) = delete;
+			TUdpSocket(TUdpSocket&&) = default;
+			TUdpSocket(const TUdpSocket&) = delete;
 	};
 
-	using TUdpSocket = TUdpNode;
 }
