@@ -18,10 +18,25 @@ ln -s nx-file dead-symlink
 ln -s dir dir-symlink
 ln hw.txt hardlink.txt
 
-set +e
-(
-	nc -lkU socket & pid=$!
-	sleep 0.1
-	kill -KILL $pid
-) 2>/dev/null
-exit 0
+if ! command -v nc >/dev/null 2>&1
+then
+	echo "ERROR: nc is required to create the Unix socket test fixture" >&2
+	exit 1
+fi
+
+nc -lkU socket >/dev/null 2>&1 &
+pid=$!
+
+for (( i = 0; i < 50 && ! -S socket; i++ ))
+do
+	sleep 0.01
+done
+
+kill -KILL "$pid" >/dev/null 2>&1 || true
+wait "$pid" 2>/dev/null || true
+
+if [[ ! -S socket ]]
+then
+	echo "ERROR: 'nc -lkU socket' did not create a Unix socket; use a netcat implementation with -U support" >&2
+	exit 1
+fi
