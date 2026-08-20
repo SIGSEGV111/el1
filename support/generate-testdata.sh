@@ -27,8 +27,8 @@ fi
 nc -lkU socket >/dev/null 2>&1 &
 pid=$!
 
-for (( i = 0; i < 50 && ! -S socket; i++ ))
-do
+for (( i = 0; i < 50; i++ )); do
+	[[ -S socket ]] && break
 	sleep 0.01
 done
 
