@@ -1,26 +1,12 @@
 .DEFAULT_GOAL := all
 
-# -----------------------------------------------------------------------------
-# Toolchain and user configuration
-# -----------------------------------------------------------------------------
+STD_PROFILE := custom
+STD_ENABLE_X86_64_V2 := 1
+USE_GIT_PACKAGE_VERSION := 1
+WITH_LIFETIME_DIAGNOSTICS := 1
+WITH_GTEST := 1
 
 CXX := clang++
-ARCH ?= $(shell rpm --eval '%{_target_cpu}' 2>/dev/null || uname -m)
-EASY_RPM_VERSION ?= easy-rpm-version.sh
-# Normal builds must not depend on the RPM helper's clean-worktree policy.
-# Derive the same automatic version directly from HEAD; packaging/deployment
-# remain protected by ensure-git-clean.sh below. RPM_VERSION and an explicit
-# PACKAGE_VERSION still override the automatic Git version.
-AUTOMATIC_GIT_VERSION := $(strip $(shell \
-	count="$$(git rev-list --count HEAD 2>/dev/null)" && \
-	hash="$$(git show --format=%h --no-patch HEAD 2>/dev/null)" && \
-	printf '%s.%s' "$$count" "$$hash"))
-PACKAGE_VERSION ?= $(if $(RPM_VERSION),$(RPM_VERSION),$(AUTOMATIC_GIT_VERSION))
-PACKAGE_VERSION := $(strip $(PACKAGE_VERSION))
-ifeq ($(PACKAGE_VERSION),)
-$(error unable to determine PACKAGE_VERSION; set PACKAGE_VERSION/RPM_VERSION explicitly or build inside a Git repository)
-endif
-VERSION ?= Version $(PACKAGE_VERSION)
 
 WITH_POSTGRES ?= 1
 WITH_POSTGRES_TESTS ?= $(WITH_POSTGRES)
@@ -45,38 +31,7 @@ DEBUG_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
 GTEST_CXXFLAGS ?= -O0 -g3 -fno-omit-frame-pointer
 COVERAGE_CXXFLAGS ?= -fprofile-instr-generate -fcoverage-mapping
 
-ifeq ($(ARCH),x86_64)
-RELEASE_CXXFLAGS += -march=x86-64-v2
-endif
-
-# -----------------------------------------------------------------------------
-# Clang lifetime diagnostics
-# -----------------------------------------------------------------------------
-
-# Emit the warning flag only when the selected Clang understands it. This keeps
-# the Makefile usable with older Clang releases while automatically enabling new
-# lifetime-safety analysis as the compiler gains support.
-define clang_warning_if_supported
-$(strip $(shell printf 'int main(){}\n' | $(CXX) -x c++ -std=c++20 -fsyntax-only \
-	-Werror=unknown-warning-option $(1) - >/dev/null 2>&1 && printf '%s' '$(1)'))
-endef
-
-LIFETIME_PERMISSIVE_FLAG := $(call clang_warning_if_supported,-Wlifetime-safety-permissive)
-LIFETIME_STRICT_FLAG := $(call clang_warning_if_supported,-Wlifetime-safety-strict)
-LIFETIME_VALIDATIONS_FLAG := $(call clang_warning_if_supported,-Wlifetime-safety-validations)
-LIFETIME_SUGGESTIONS_FLAG := $(call clang_warning_if_supported,-Wlifetime-safety-suggestions)
-
-# High-confidence diagnostics are part of every normal Debug compilation.
-BASE_LIFETIME_CXXFLAGS := -Wdangling -Werror=dangling -Werror=return-stack-address
-DEBUG_LIFETIME_CXXFLAGS := $(BASE_LIFETIME_CXXFLAGS) $(LIFETIME_PERMISSIVE_FLAG)
-
-# The dedicated lifetime-check additionally enables diagnostics that may be
-# noisier or intentionally advisory. -Wlifetime-safety-strict already includes
-# invalidation analysis when supported by the compiler.
-LIFETIME_CHECK_CXXFLAGS := \
-	$(LIFETIME_STRICT_FLAG) \
-	$(LIFETIME_VALIDATIONS_FLAG) \
-	$(LIFETIME_SUGGESTIONS_FLAG)
+include submodules/std-make-lib/Makefile.common
 
 # -----------------------------------------------------------------------------
 # Optional features, packages and test selection
@@ -118,10 +73,6 @@ ifneq ($(strip $(TEST_EXCLUDE_PATTERNS)),)
 TEST_GTEST_FLAGS += '--gtest_filter=-$(subst $(space),:,$(strip $(TEST_EXCLUDE_PATTERNS)))'
 endif
 
-ifneq ($(strip $(TEST_JUNIT_XML)),)
-TEST_GTEST_FLAGS += '--gtest_output=xml:$(abspath $(TEST_JUNIT_XML))'
-endif
-
 ifeq ($(WITH_COVERAGE),1)
 DEBUG_COVERAGE_CXXFLAGS := $(COVERAGE_CXXFLAGS)
 else
@@ -132,28 +83,9 @@ endif
 # Build flags
 # -----------------------------------------------------------------------------
 
-COMMON_CXXFLAGS := \
-	-Wall -Wextra \
-	-Wno-unused-command-line-argument \
-	-Wno-unused-parameter \
-	-Wno-unused-const-variable \
-	-Wno-vla-extension \
-	-Wno-deprecated-declarations \
-	-std=c++20 \
-	$(CXXFLAGS)
-
-COMMON_LDFLAGS := -fuse-ld=lld $(LDFLAGS)
-PACKAGE_CXXFLAGS := $(shell pkg-config --cflags $(PACKAGE_NAMES))
-PACKAGE_LDLIBS := $(shell pkg-config --libs $(PACKAGE_NAMES))
 LIB_CXXFLAGS := -fPIC $(PACKAGE_CXXFLAGS)
 EXE_CXXFLAGS := -fPIE
 LIB_LINK_FLAGS := -Wl,--no-undefined
-GTEST_BUILD_CXXFLAGS := \
-	-Wno-unused-command-line-argument \
-	-fuse-ld=lld \
-	-fPIC \
-	$(CXXFLAGS) \
-	$(GTEST_CXXFLAGS)
 
 RELEASE_BUILD_CXXFLAGS := $(RELEASE_CXXFLAGS)
 DEBUG_BUILD_CXXFLAGS := \
@@ -365,12 +297,12 @@ $(SUPER_HEADER): $(LIB_HEADERS)
 	} > "$$tmp"; \
 	mv -f -- "$$tmp" "$@"
 
-$(RELEASE_DIR)/obj/%.o: src/el1/%.cpp Makefile
+$(RELEASE_DIR)/obj/%.o: src/el1/%.cpp $(STD_PROJECT_MAKEFILES)
 	@mkdir -p "$(@D)"
 	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(RELEASE_BUILD_CXXFLAGS) $(LIB_CXXFLAGS) \
 		-MMD -MP -c -o "$@" "$<"
 
-$(DEBUG_DIR)/obj/%.o: src/el1/%.cpp Makefile
+$(DEBUG_DIR)/obj/%.o: src/el1/%.cpp $(STD_PROJECT_MAKEFILES)
 	@mkdir -p "$(@D)"
 	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(DEBUG_BUILD_CXXFLAGS) $(LIB_CXXFLAGS) \
 		-MMD -MP -c -o "$@" "$<"
@@ -391,26 +323,17 @@ $(DEBUG_LIB_NAME): $(DEBUG_LIB_OBJECTS) $(LIB_HEADERS)
 $(DEBUG_LIB_LINK_NAME): $(DEBUG_LIB_NAME)
 	ln -sfn "$(notdir $(DEBUG_LIB_NAME))" "$@"
 
-$(RELEASE_DIR)/test/%.o: src/el1/test/%.cpp Makefile
+$(RELEASE_DIR)/test/%.o: src/el1/test/%.cpp $(STD_PROJECT_MAKEFILES)
 	@mkdir -p "$(@D)"
 	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(RELEASE_TEST_CXXFLAGS) \
 		$(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" $(TEST_OUT_DIR_DEFINE) \
 		-I submodules/googletest/googletest/include -I src -MMD -MP -c -o "$@" "$<"
 
-$(DEBUG_DIR)/test/%.o: src/el1/test/%.cpp Makefile
+$(DEBUG_DIR)/test/%.o: src/el1/test/%.cpp $(STD_PROJECT_MAKEFILES)
 	@mkdir -p "$(@D)"
 	$(CXX) $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(COMMON_CXXFLAGS) $(DEBUG_TEST_CXXFLAGS) \
 		$(EXE_CXXFLAGS) $(PACKAGE_CXXFLAGS) "-DVERSION=\"$(VERSION)\"" $(TEST_OUT_DIR_DEFINE) \
 		-I submodules/googletest/googletest/include -I src -MMD -MP -c -o "$@" "$<"
-
-$(GTEST_LIB): Makefile
-	@mkdir -p "$(GTEST_DIR)"
-	(P="$$PWD"; cd "$(GTEST_DIR)" && \
-		cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="$(GTEST_BUILD_CXXFLAGS)" "$$P/submodules/googletest" && \
-		$(MAKE))
-
-$(GTEST_MAIN_LIB): $(GTEST_LIB)
-	@test -f "$@"
 
 $(RELEASE_TEST_NAME): $(RELEASE_TEST_OBJECTS) $(GTEST_LIB) $(GTEST_MAIN_LIB) $(RELEASE_LIB_LINK_NAME) $(SUPER_HEADER)
 	@mkdir -p "$(@D)"
@@ -500,8 +423,8 @@ endif
 # Packaging and installation
 # -----------------------------------------------------------------------------
 
-RUNTIME_RPM_SOURCE_FILES := $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) Makefile LICENSE.txt
-DEVEL_RPM_SOURCE_FILES := $(LIB_HEADERS) $(DEVEL_SPEC_NAME) Makefile LICENSE.txt
+RUNTIME_RPM_SOURCE_FILES := $(LIB_SOURCES) $(LIB_HEADERS) $(SPEC_NAME) $(STD_PROJECT_MAKEFILES) LICENSE.txt
+DEVEL_RPM_SOURCE_FILES := $(LIB_HEADERS) $(DEVEL_SPEC_NAME) $(STD_PROJECT_MAKEFILES) LICENSE.txt
 
 $(ARCH_RPM_NAME) $(SRC_RPM_NAME) &: $(RELEASE_LIB_NAME) $(RELEASE_LIB_LINK_NAME) $(RUNTIME_RPM_SOURCE_FILES)
 	@mkdir -p "$(RPM_OUT_DIR)"
