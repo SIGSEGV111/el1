@@ -1,0 +1,2 @@
+# Allow members of the traffic-light group to control Cleware USB-Ampel devices.
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0d50", ATTRS{idProduct}=="0008", MODE="0660", GROUP="traffic-light"

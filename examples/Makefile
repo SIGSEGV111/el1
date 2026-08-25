@@ -17,6 +17,7 @@ COMMON_LIBS := -lel1 $(shell pkg-config --libs krb5 zlib) -pthread
 EXAMPLES := \
 	ads111x \
 	bin2cpp \
+	cleware-ampel \
 	dcf77-gpio \
 	gpio-blink \
 	gpio-trigger \
@@ -27,6 +28,7 @@ EXAMPLES := \
 
 SOURCES_ads111x := ads111x/ads111x.cpp
 SOURCES_bin2cpp := bin2cpp/bin2cpp.cpp
+SOURCES_cleware-ampel := cleware-ampel/cleware-ampel.cpp
 SOURCES_dcf77-gpio := dcf77-gpio/dcf77-gpio.cpp
 SOURCES_gpio-blink := gpio/blink.cpp
 SOURCES_gpio-trigger := gpio/trigger.cpp
@@ -65,7 +67,7 @@ smoke-test: all
 	printf '{"text":"line 1\nline 2"}' > "$$TMP_DIR/input.json"; \
 	"$(OUT_DIR)/json-tolerant-parser" -i "$$TMP_DIR/input.json" -o "$$TMP_DIR/output.json"; \
 	grep -q 'line 1' "$$TMP_DIR/output.json"; \
-	for EXAMPLE in ads111x dcf77-gpio gpio-blink gpio-trigger hx711-test neopixel-spi-driver w1-test; do \
+	for EXAMPLE in ads111x cleware-ampel dcf77-gpio gpio-blink gpio-trigger hx711-test neopixel-spi-driver w1-test; do \
 		"$(OUT_DIR)/$$EXAMPLE" --help >/dev/null 2>&1; \
 	done
 
