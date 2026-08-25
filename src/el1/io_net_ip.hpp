@@ -103,8 +103,16 @@ namespace el1::io::net::ip
 		io::collection::list::TList<byte_t> data;
 	};
 
+	struct udp_receive_result_t
+	{
+		ipport_t source;
+		usys_t n_bytes;
+		bool truncated;
+	};
+
 	io::collection::list::TList<ipaddr_t> EnumMyIpAddresses();
 	io::collection::list::TList<ipaddr_t> ResolveHostname(const text::string::TStringView);
+	ipaddr_t RouteLocalAddress(const ipport_t remote_address);
 
 	class IStreamClient : public stream::ISink<byte_t>, public stream::ISource<byte_t>
 	{
@@ -201,6 +209,10 @@ namespace el1::io::net::ip
 			bool Receive(udp_datagram_t& datagram);
 			std::optional<udp_datagram_t> Receive();
 
+			// Allocation-free receive into caller-owned storage. The datagram is consumed even
+			// when it is larger than msg_buffer; truncated reports that condition.
+			std::optional<udp_receive_result_t> Receive(collection::list::array_t<byte_t> msg_buffer);
+
 			// Compatibility overload. msg_buffer is resized to the exact datagram size.
 			bool Receive(collection::list::TList<byte_t>& msg_buffer, ipport_t& remote_address);
 			bool Receive(collection::list::TList<byte_t>& msg_buffer, ipaddr_t* const remote_ip = nullptr, port_t* const remote_port = nullptr);
@@ -212,6 +224,17 @@ namespace el1::io::net::ip
 			bool Send(const ipaddr_t remote_ip, const port_t remote_port, collection::list::array_t<const byte_t> msg_buffer) EL_WARN_UNUSED_RESULT;
 			bool Send(const ipaddr_t remote_ip, const port_t remote_port, const void* const buffer, const usys_t sz_buffer) EL_WARN_UNUSED_RESULT;
 			bool Send(const io::text::string::TStringView remote_host, const port_t remote_port, collection::list::array_t<const byte_t> msg_buffer) EL_WARN_UNUSED_RESULT;
+
+			// Multicast configuration. IPv4 selects an interface by local address, IPv6 by
+			// interface index as required by the POSIX socket API.
+			void JoinMulticastGroup(const ipaddr_t multicast_group, const ipaddr_t local_interface = ipaddr_t(EIP::V4));
+			void LeaveMulticastGroup(const ipaddr_t multicast_group, const ipaddr_t local_interface = ipaddr_t(EIP::V4));
+			void JoinMulticastGroup(const ipaddr_t multicast_group, const u32_t interface_index);
+			void LeaveMulticastGroup(const ipaddr_t multicast_group, const u32_t interface_index);
+			void MulticastInterface(const ipaddr_t local_interface);
+			void MulticastInterface(const u32_t interface_index);
+			void MulticastTtl(const u8_t ttl);
+			void MulticastLoopback(const bool enabled);
 
 			TUdpSocket(const port_t local_port = 0, const EIP version = EIP::ANY);
 			TUdpSocket(const ipaddr_t bind_ip, const port_t local_port = 0);

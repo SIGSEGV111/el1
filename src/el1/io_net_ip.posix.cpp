@@ -285,6 +285,24 @@ namespace el1::io::net::ip
 		return addrs;
 	}
 
+	ipaddr_t RouteLocalAddress(const ipport_t remote_address)
+	{
+		THandle handle(EL_SYSERR(socket(remote_address.ip.IsV4() ? AF_INET : AF_INET6, SOCK_DGRAM | SOCK_CLOEXEC, 0)), true);
+
+		if(remote_address.ip.IsV4())
+		{
+			const sockaddr_in addr = ConvertToPosixV4(remote_address.ip, remote_address.port);
+			EL_SYSERR(connect(handle, (const sockaddr*)&addr, sizeof(addr)));
+		}
+		else
+		{
+			const sockaddr_in6 addr = ConvertToPosixV6(remote_address.ip, remote_address.port);
+			EL_SYSERR(connect(handle, (const sockaddr*)&addr, sizeof(addr)));
+		}
+
+		return AddressFromSocket(handle).ip;
+	}
+
 	/*********************************************************************************/
 
 	handle_t TTcpClient::Handle()
@@ -583,6 +601,33 @@ namespace el1::io::net::ip
 		return std::move(datagram);
 	}
 
+	std::optional<udp_receive_result_t> TUdpSocket::Receive(array_t<byte_t> msg_buffer)
+	{
+		sockaddr_storage addr = {};
+		socklen_t addr_size = sizeof(addr);
+		const ssize_t received = recvfrom(
+			this->handle,
+			msg_buffer.IsEmpty() ? nullptr : msg_buffer.ItemPtr(0),
+			msg_buffer.Count(),
+			MSG_TRUNC,
+			(sockaddr*)&addr,
+			&addr_size
+		);
+
+		if(received < 0)
+		{
+			EL_ERROR(errno != EAGAIN && errno != EWOULDBLOCK, TSyscallException, errno);
+			return std::nullopt;
+		}
+
+		const usys_t n_datagram_bytes = (usys_t)received;
+		return udp_receive_result_t{
+			.source = ConvertFromPosix(*(const sockaddr*)&addr),
+			.n_bytes = util::Min(n_datagram_bytes, msg_buffer.Count()),
+			.truncated = n_datagram_bytes > msg_buffer.Count()
+		};
+	}
+
 	bool TUdpSocket::Send(const ipport_t remote_address, const array_t<const byte_t> msg_buffer)
 	{
 		ssize_t result = -1;
@@ -645,6 +690,124 @@ namespace el1::io::net::ip
 		}
 
 		EL_THROW(TException, TString::Format(U"hostname %q did not resolve to an address compatible with this UDP socket", remote_host));
+	}
+
+	static void ValidateMulticastV4(const ipaddr_t multicast_group)
+	{
+		EL_ERROR(!multicast_group.IsV4(), TInvalidArgumentException, "multicast_group", "multicast group must be IPv4");
+		EL_ERROR(!IN_MULTICAST(ntohl(multicast_group.IPv4())), TInvalidArgumentException, "multicast_group", "address is not an IPv4 multicast group");
+	}
+
+	static void ValidateMulticastV6(const ipaddr_t multicast_group)
+	{
+		EL_ERROR(!multicast_group.IsV6(), TInvalidArgumentException, "multicast_group", "multicast group must be IPv6");
+		in6_addr addr = {};
+		memcpy(addr.s6_addr, multicast_group.octet, sizeof(addr.s6_addr));
+		EL_ERROR(!IN6_IS_ADDR_MULTICAST(&addr), TInvalidArgumentException, "multicast_group", "address is not an IPv6 multicast group");
+	}
+
+	void TUdpSocket::JoinMulticastGroup(const ipaddr_t multicast_group, const ipaddr_t local_interface)
+	{
+		ValidateMulticastV4(multicast_group);
+		EL_ERROR(!local_interface.IsV4(), TInvalidArgumentException, "local_interface", "IPv4 multicast requires an IPv4 local interface address");
+		EL_ERROR(SocketDomain(this->handle) != AF_INET, TInvalidArgumentException, "multicast_group", "IPv4 multicast requires an IPv4 UDP socket");
+
+		ip_mreq membership = {};
+		membership.imr_multiaddr.s_addr = multicast_group.IPv4();
+		membership.imr_interface.s_addr = local_interface.IPv4();
+		EL_SYSERR(setsockopt(this->handle, IPPROTO_IP, IP_ADD_MEMBERSHIP, &membership, sizeof(membership)));
+	}
+
+	void TUdpSocket::LeaveMulticastGroup(const ipaddr_t multicast_group, const ipaddr_t local_interface)
+	{
+		ValidateMulticastV4(multicast_group);
+		EL_ERROR(!local_interface.IsV4(), TInvalidArgumentException, "local_interface", "IPv4 multicast requires an IPv4 local interface address");
+		EL_ERROR(SocketDomain(this->handle) != AF_INET, TInvalidArgumentException, "multicast_group", "IPv4 multicast requires an IPv4 UDP socket");
+
+		ip_mreq membership = {};
+		membership.imr_multiaddr.s_addr = multicast_group.IPv4();
+		membership.imr_interface.s_addr = local_interface.IPv4();
+		EL_SYSERR(setsockopt(this->handle, IPPROTO_IP, IP_DROP_MEMBERSHIP, &membership, sizeof(membership)));
+	}
+
+	void TUdpSocket::JoinMulticastGroup(const ipaddr_t multicast_group, const u32_t interface_index)
+	{
+		ValidateMulticastV6(multicast_group);
+		EL_ERROR(SocketDomain(this->handle) != AF_INET6, TInvalidArgumentException, "multicast_group", "IPv6 multicast requires an IPv6 UDP socket");
+
+		ipv6_mreq membership = {};
+		memcpy(membership.ipv6mr_multiaddr.s6_addr, multicast_group.octet, sizeof(membership.ipv6mr_multiaddr.s6_addr));
+		membership.ipv6mr_interface = interface_index;
+		EL_SYSERR(setsockopt(this->handle, IPPROTO_IPV6, IPV6_JOIN_GROUP, &membership, sizeof(membership)));
+	}
+
+	void TUdpSocket::LeaveMulticastGroup(const ipaddr_t multicast_group, const u32_t interface_index)
+	{
+		ValidateMulticastV6(multicast_group);
+		EL_ERROR(SocketDomain(this->handle) != AF_INET6, TInvalidArgumentException, "multicast_group", "IPv6 multicast requires an IPv6 UDP socket");
+
+		ipv6_mreq membership = {};
+		memcpy(membership.ipv6mr_multiaddr.s6_addr, multicast_group.octet, sizeof(membership.ipv6mr_multiaddr.s6_addr));
+		membership.ipv6mr_interface = interface_index;
+		EL_SYSERR(setsockopt(this->handle, IPPROTO_IPV6, IPV6_LEAVE_GROUP, &membership, sizeof(membership)));
+	}
+
+	void TUdpSocket::MulticastInterface(const ipaddr_t local_interface)
+	{
+		EL_ERROR(!local_interface.IsV4(), TInvalidArgumentException, "local_interface", "IPv4 multicast requires an IPv4 local interface address");
+		EL_ERROR(SocketDomain(this->handle) != AF_INET, TInvalidArgumentException, "local_interface", "IPv4 multicast interface requires an IPv4 UDP socket");
+
+		in_addr addr = {};
+		addr.s_addr = local_interface.IPv4();
+		EL_SYSERR(setsockopt(this->handle, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof(addr)));
+	}
+
+	void TUdpSocket::MulticastInterface(const u32_t interface_index)
+	{
+		EL_ERROR(SocketDomain(this->handle) != AF_INET6, TInvalidArgumentException, "interface_index", "IPv6 multicast interface requires an IPv6 UDP socket");
+		EL_SYSERR(setsockopt(this->handle, IPPROTO_IPV6, IPV6_MULTICAST_IF, &interface_index, sizeof(interface_index)));
+	}
+
+	void TUdpSocket::MulticastTtl(const u8_t ttl)
+	{
+		switch(SocketDomain(this->handle))
+		{
+			case AF_INET:
+			{
+				const u8_t value = ttl;
+				EL_SYSERR(setsockopt(this->handle, IPPROTO_IP, IP_MULTICAST_TTL, &value, sizeof(value)));
+				break;
+			}
+			case AF_INET6:
+			{
+				const int value = ttl;
+				EL_SYSERR(setsockopt(this->handle, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &value, sizeof(value)));
+				break;
+			}
+			default:
+				EL_THROW(TLogicException); // LCOV_EXCL_LINE
+		}
+	}
+
+	void TUdpSocket::MulticastLoopback(const bool enabled)
+	{
+		switch(SocketDomain(this->handle))
+		{
+			case AF_INET:
+			{
+				const u8_t value = enabled ? 1U : 0U;
+				EL_SYSERR(setsockopt(this->handle, IPPROTO_IP, IP_MULTICAST_LOOP, &value, sizeof(value)));
+				break;
+			}
+			case AF_INET6:
+			{
+				const int value = enabled ? 1 : 0;
+				EL_SYSERR(setsockopt(this->handle, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &value, sizeof(value)));
+				break;
+			}
+			default:
+				EL_THROW(TLogicException); // LCOV_EXCL_LINE
+		}
 	}
 
 	TUdpSocket::TUdpSocket(const port_t local_port, const EIP version) : on_rx_msg({ .read = true, .write = false, .other = false }), on_tx_ready({ .read = false, .write = true, .other = false })

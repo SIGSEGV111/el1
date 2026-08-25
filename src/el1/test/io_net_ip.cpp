@@ -87,6 +87,12 @@ namespace
 		}
 	}
 
+	TEST(io_net_ip, RouteLocalAddress_loopback)
+	{
+		EXPECT_EQ(RouteLocalAddress({ ipaddr_t(U"127.0.0.1"), 9U }), ipaddr_t(U"127.0.0.1"));
+		EXPECT_EQ(RouteLocalAddress({ ipaddr_t(U"::1"), 9U }), ipaddr_t(U"::1"));
+	}
+
 	TEST(io_net_ip, TUdpSocket_construct)
 	{
 		{
@@ -208,6 +214,44 @@ namespace
 		EXPECT_EQ(c->data.Count(), 2U);
 		EXPECT_EQ(a->data[0], 1U);
 		EXPECT_EQ(c->data[0], 4U);
+	}
+
+	TEST(io_net_ip, TUdpSocket_fixed_receive_buffer_reports_truncation)
+	{
+		TUdpSocket sender(ipaddr_t(U"127.0.0.1"));
+		TUdpSocket receiver(ipaddr_t(U"127.0.0.1"));
+		const byte_t tx[] = { 0,1,2,3,4,5,6,7,8,9 };
+		byte_t rx[4] = {};
+
+		EXPECT_TRUE(sender.Send(receiver.LocalAddress(), tx, sizeof(tx)));
+		EXPECT_TRUE(receiver.OnReceiveMsg().WaitFor(1));
+		auto result = receiver.Receive(array_t<byte_t>(rx));
+		ASSERT_TRUE(result.has_value());
+		EXPECT_EQ(result->source, sender.LocalAddress());
+		EXPECT_EQ(result->n_bytes, sizeof(rx));
+		EXPECT_TRUE(result->truncated);
+		EXPECT_EQ(memcmp(rx, tx, sizeof(rx)), 0);
+	}
+
+	TEST(io_net_ip, TUdpSocket_multicast_ipv4_loopback)
+	{
+		const ipaddr_t group(U"239.255.42.99");
+		const ipaddr_t loopback(U"127.0.0.1");
+		TUdpSocket receiver(0U, EIP::V4);
+		TUdpSocket sender(0U, EIP::V4);
+		receiver.JoinMulticastGroup(group, loopback);
+		sender.MulticastInterface(loopback);
+		sender.MulticastTtl(1);
+		sender.MulticastLoopback(true);
+
+		const byte_t tx[] = { 9,8,7,6 };
+		EXPECT_TRUE(sender.Send(group, receiver.LocalAddress().port, tx, sizeof(tx)));
+		EXPECT_TRUE(receiver.OnReceiveMsg().WaitFor(1));
+		auto datagram = receiver.Receive();
+		ASSERT_TRUE(datagram.has_value());
+		ASSERT_EQ(datagram->data.Count(), sizeof(tx));
+		EXPECT_EQ(memcmp(datagram->data.ItemPtr(0), tx, sizeof(tx)), 0);
+		receiver.LeaveMulticastGroup(group, loopback);
 	}
 
 	TEST(io_net_ip, TUdpSocket_resizes_receive_buffer)
