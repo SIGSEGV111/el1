@@ -1,4 +1,5 @@
 #include "system_task.hpp"
+#include "system_logbook.hpp"
 #include "system_time_timer.hpp"
 #include "system_memory.hpp"
 #include "error.hpp"
@@ -115,7 +116,7 @@ namespace el1::system::task
 
 	/***************************************************/
 
-	TThread::TThread(const TString name, TFunction<void> main_func, const bool autostart) : name(name), mutex(), on_state_change(&this->mutex), thread_handle(nullptr), constructor_pid(TThread::Self()->ThreadPID()), thread_pid(-1), starter_pid(-1), terminator_pid(-1), state(EChildState::CONSTRUCTED), main_fiber(this)
+	TThread::TThread(const TString name, TFunction<void> main_func, const bool autostart) : name(name), mutex(), on_state_change(&this->mutex), thread_handle(nullptr), constructor_pid(TThread::Self()->ThreadPID()), thread_pid(-1), starter_pid(-1), terminator_pid(-1), state(EChildState::CONSTRUCTED), main_fiber(this), flight_recorder(New<logbook::TFlightRecorder>(this))
 	{
 		this->active_fiber = &this->main_fiber;
 		this->previous_fiber = &this->main_fiber;

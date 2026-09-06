@@ -18,6 +18,20 @@ namespace el1::io::text::string
 
 namespace el1::io::text::format
 {
+	template<std::size_t N>
+	struct TFixedString
+	{
+		char32_t data[N];
+
+		consteval TFixedString(const char32_t (&value)[N]) noexcept
+		{
+			for(std::size_t i = 0; i < N; i++)
+				data[i] = value[i];
+		}
+
+		constexpr bool operator==(const TFixedString&) const noexcept = default;
+	};
+
 	template<typename TLeft, typename TRight>
 	class TConcatenatedFormatString;
 	using namespace io::types;

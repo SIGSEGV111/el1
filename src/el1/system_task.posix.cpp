@@ -2,6 +2,7 @@
 #ifdef EL_OS_CLASS_POSIX
 
 #include "system_task.hpp"
+#include "system_logbook.hpp"
 #include "io_collection_list.hpp"
 #include "io_collection_map.hpp"
 #include <unistd.h>

@@ -13,6 +13,11 @@
 #include "error.hpp"
 #include <optional>
 
+namespace el1::system::logbook
+{
+	class TFlightRecorder;
+}
+
 namespace el1::system::task
 {
 	using namespace io::text::string;
@@ -117,6 +122,8 @@ namespace el1::system::task
 			bool IsAcquired() const final override EL_GETTER;
 
 	};
+
+	class TSpinLock;
 
 	class TSimpleMutex : public IMutex
 	{
@@ -596,6 +603,7 @@ namespace el1::system::task
 			TFiber main_fiber;
 			TFiber* volatile active_fiber;
 			TFiber* volatile previous_fiber;
+			std::unique_ptr<::el1::system::logbook::TFlightRecorder> flight_recorder;
 
 			TThread();
 
@@ -622,6 +630,7 @@ namespace el1::system::task
 			TFiber*       ActiveFiber()       { return this->active_fiber; }
 
 			TFiber& MainFiber() { return main_fiber; }
+			::el1::system::logbook::TFlightRecorder& FlightRecorder() { return *flight_recorder; }
 
 			const TList<TFiber*>& Fibers() { return fibers; }
 

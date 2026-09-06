@@ -61,11 +61,13 @@ namespace el1::io::serialization::binary::packed
 
 		void String(const TStringView value)
 		{
-			TString copy(value);
-			TList<byte_t> bytes = copy.chars.Pipe().Transform(TUTF8Encoder()).Collect();
-			VarUInt(bytes.Count());
-			if(bytes.Count() != 0)
-				sink->WriteAll(bytes.Data(), bytes.Count());
+			u64_t n_bytes = 0;
+			for(const char32_t chr : value)
+				n_bytes += GetEncodedSequenceLength(chr);
+
+			VarUInt(n_bytes);
+			if(n_bytes != 0)
+				value.Pipe().Transform(TUTF8Encoder()).ToStream(*sink);
 		}
 
 		void BeginObject(const TTypeInfo& info)

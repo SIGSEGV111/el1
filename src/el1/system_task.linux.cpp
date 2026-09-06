@@ -2,6 +2,7 @@
 #ifdef EL_OS_LINUX
 
 #include "system_task.hpp"
+#include "system_logbook.hpp"
 #include "system_memory.hpp"
 #include "util.hpp"
 #include "io_collection_list.hpp"
@@ -234,7 +235,7 @@ namespace el1::system::task
 	}
 
 	// main thread self-constructor
-	TThread::TThread() : name("main"), mutex(), on_state_change(&this->mutex), thread_handle(new pthread_t(pthread_self())), constructor_pid(gettid()), thread_pid(gettid()), starter_pid(getppid()), terminator_pid(-1), state(EChildState::ALIVE), main_fiber(this)
+	TThread::TThread() : name("main"), mutex(), on_state_change(&this->mutex), thread_handle(new pthread_t(pthread_self())), constructor_pid(gettid()), thread_pid(gettid()), starter_pid(getppid()), terminator_pid(-1), state(EChildState::ALIVE), main_fiber(this), flight_recorder(New<logbook::TFlightRecorder>(this))
 	{
 		this->active_fiber = &this->main_fiber;
 		this->previous_fiber = &this->main_fiber;

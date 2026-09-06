@@ -32,9 +32,11 @@
 
 #if (defined EL_CC_GCC || defined EL_CC_CLANG)
 	#define EL_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+	#define EL_NOINLINE __attribute__((noinline))
 	#define EL_THREADLOCAL __thread
 #else
 	#define EL_WARN_UNUSED_RESULT
+	#define EL_NOINLINE
 #endif
 
 #if (defined EL_CC_GCC || defined EL_CC_CLANG)
@@ -60,6 +62,9 @@
 
 #define EL_GETTER EL_NO_SIDE_EFFECTS EL_WARN_UNUSED_RESULT
 #define EL_SETTER
+
+#define EL1_TOKEN(x) x
+#define EL1_CONCAT(a,b) EL1_TOKEN(a)##EL1_TOKEN(b)
 
 namespace el1
 {
