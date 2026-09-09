@@ -126,3 +126,42 @@
    ...
    fun:_ZN3el12io3net4quic7TServer19TryAcceptConnectionEv
 }
+
+# MIT Kerberos/GSS loads mechanism plugins lazily while libpq establishes a
+# GSS-authenticated PostgreSQL connection.  glibc's dynamic-loader bookkeeping
+# remains referenced only from loader-internal state and is reported as
+# "possibly lost" when fork/death-test children terminate without normal
+# process teardown.  The allocation originates entirely in the system loader.
+{
+	krb5_gss_dynamic_plugin_loader_cache
+	Memcheck:Leak
+	match-leak-kinds: possible
+	fun:malloc
+	fun:_dl_find_object_update
+	...
+	fun:krb5int_open_plugin
+	...
+	fun:krb5_get_init_creds_keytab
+	...
+	fun:gss_init_sec_context
+	fun:PQconnectPoll
+}
+
+# Same PostgreSQL/GSS initialization path, but caused by glibc lazily loading
+# an NSS module from getaddrinfo().  This is loader/NSS process-lifetime state,
+# not memory owned by EL1.
+{
+	krb5_gss_nss_dynamic_loader_cache
+	Memcheck:Leak
+	match-leak-kinds: possible
+	fun:malloc
+	fun:_dl_find_object_update
+	...
+	fun:__nss_module_get_function
+	fun:getaddrinfo
+	...
+	fun:krb5_get_init_creds_keytab
+	...
+	fun:gss_init_sec_context
+	fun:PQconnectPoll
+}
