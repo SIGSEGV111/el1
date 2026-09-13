@@ -53,6 +53,60 @@ namespace el1::system::logbook
 		TERSE
 	};
 
+	struct TLogFilter
+	{
+		using mask_t = u64_t;
+
+		mask_t mask = 0;
+
+		static constexpr usys_t N_CATEGORIES = static_cast<usys_t>(ECategory::EXCEPTION) + 1;
+		static constexpr usys_t N_VERBOSITIES = static_cast<usys_t>(EVerbosity::TERSE) + 1;
+		static_assert(N_CATEGORIES * N_VERBOSITIES <= sizeof(mask_t) * 8U);
+
+		constexpr bool Matches(const ECategory category, const EVerbosity verbosity) const noexcept
+		{
+			return (mask & Bit(category, verbosity)) != 0;
+		}
+
+		constexpr TLogFilter operator|(const TLogFilter other) const noexcept
+		{
+			return TLogFilter{mask | other.mask};
+		}
+
+		static constexpr TLogFilter None() noexcept
+		{
+			return {};
+		}
+
+		static constexpr TLogFilter All() noexcept
+		{
+			return TLogFilter{(mask_t{1} << (N_CATEGORIES * N_VERBOSITIES)) - 1};
+		}
+
+		static constexpr TLogFilter AtLeastVerbosity(const EVerbosity minimum) noexcept
+		{
+			mask_t result = 0;
+			for(usys_t category = 0; category < N_CATEGORIES; category++)
+				for(usys_t verbosity = static_cast<usys_t>(minimum); verbosity < N_VERBOSITIES; verbosity++)
+					result |= mask_t{1} << (category * N_VERBOSITIES + verbosity);
+			return TLogFilter{result};
+		}
+
+		static constexpr TLogFilter Category(const ECategory category, const EVerbosity minimum = EVerbosity::TRACE) noexcept
+		{
+			mask_t result = 0;
+			for(usys_t verbosity = static_cast<usys_t>(minimum); verbosity < N_VERBOSITIES; verbosity++)
+				result |= Bit(category, static_cast<EVerbosity>(verbosity));
+			return TLogFilter{result};
+		}
+
+	private:
+		static constexpr mask_t Bit(const ECategory category, const EVerbosity verbosity) noexcept
+		{
+			return mask_t{1} << (static_cast<usys_t>(category) * N_VERBOSITIES + static_cast<usys_t>(verbosity));
+		}
+	};
+
 	struct TLogContextDataBase
 	{
 		mutable TLogContextDataBase* prev = nullptr;
@@ -203,6 +257,13 @@ namespace el1::system::logbook
 
 	struct ILogSink
 	{
+		const TLogFilter pass_through_filter;
+
+		explicit ILogSink(const TLogFilter pass_through_filter = TLogFilter::None()) noexcept :
+			pass_through_filter(pass_through_filter)
+		{
+		}
+
 		virtual void Write(
 			const task::TThread* thread,
 			array_t<const byte_t> records,
@@ -215,6 +276,11 @@ namespace el1::system::logbook
 	class TLogBook
 	{
 		friend class TFlightRecorder;
+		static bool ShouldPassThrough(const ILogSiteBase& site) noexcept;
+		static void PassThrough(
+			const task::TThread* thread,
+			array_t<const byte_t> record
+		) noexcept;
 		static void Write(
 			const task::TThread* thread,
 			array_t<const byte_t> records,
@@ -334,6 +400,23 @@ namespace el1::system::logbook
 
 				sz_used += sz_record;
 				discarded = false;
+
+				if(TLogBook::ShouldPassThrough(*site))
+				{
+					try
+					{
+						TList<byte_t> record_data;
+						record_data.Clear(sz_record);
+						const usys_t n_first = util::Min(sz_record, sz_buffer - tail_before);
+						record_data.Append(buffer.get() + tail_before, n_first);
+						if(n_first != sz_record)
+							record_data.Append(buffer.get(), sz_record - n_first);
+						TLogBook::PassThrough(thread, record_data.View());
+					}
+					catch(...)
+					{
+					}
+				}
 			}
 			catch(...)
 			{

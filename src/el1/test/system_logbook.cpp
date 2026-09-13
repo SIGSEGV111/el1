@@ -34,7 +34,13 @@ namespace
 		TList<byte_t> records;
 		u64_t n_overwritten_events = 0;
 		u64_t n_dropped_events = 0;
+		u64_t n_write_calls = 0;
 		const TThread* thread = nullptr;
+
+		explicit TTestSink(const TLogFilter pass_through_filter = TLogFilter::None()) :
+			ILogSink(pass_through_filter)
+		{
+		}
 
 		void Write(const TThread* const thread, const array_t<const byte_t> records, const u64_t n_overwritten_events, const u64_t n_dropped_events) final override
 		{
@@ -42,6 +48,7 @@ namespace
 			this->records.Append(records);
 			this->n_overwritten_events += n_overwritten_events;
 			this->n_dropped_events += n_dropped_events;
+			this->n_write_calls++;
 		}
 
 		const TLogRecord& Record(const usys_t index) const
@@ -118,6 +125,27 @@ namespace
 		ASSERT_NE(sink.Record(1).call_site, nullptr);
 		EXPECT_NE(sink.Record(0).call_site, sink.Record(1).call_site);
 		EXPECT_EQ(sink.Record(0).site, sink.Record(1).site);
+	}
+
+	TEST(system_logbook, PassThroughFilterWritesImmediatelyAndCommitKeepsFullHistory)
+	{
+		TTestSink sink(TLogFilter::AtLeastVerbosity(EVerbosity::OPERATIONAL));
+		TSinkRegistration registration(&sink);
+		TThread::Self()->FlightRecorder().Discard();
+
+		WriteLog<ECategory::LIVENESS, EVerbosity::DEBUG, U"debug=%d">(1);
+		EXPECT_EQ(sink.n_write_calls, 0U);
+
+		WriteLog<ECategory::STATE_CHANGE, EVerbosity::OPERATIONAL, U"operational=%d">(2);
+		ASSERT_EQ(sink.n_write_calls, 1U);
+		ASSERT_GT(sink.records.Count(), 0U);
+		EXPECT_EQ(sink.Record(0).site->FormatMessage(sink.Record(0)), U"operational=2");
+
+		TThread::Self()->FlightRecorder().Commit();
+
+		ASSERT_EQ(sink.n_write_calls, 2U);
+		ASSERT_EQ(sink.Record(1).site->FormatMessage(sink.Record(1)), U"debug=1");
+		ASSERT_EQ(sink.Record(2).site->FormatMessage(sink.Record(2)), U"operational=2");
 	}
 
 	TEST(system_logbook, DiscardSuppressesCommit)

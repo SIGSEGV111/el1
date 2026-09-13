@@ -1,5 +1,6 @@
 #include "system_logbook.hpp"
 
+#include <atomic>
 #include <string.h>
 
 namespace el1::system::logbook
@@ -24,12 +25,21 @@ namespace el1::system::logbook
 		{
 			task::TSimpleMutex lock;
 			TList<ILogSink*> sinks;
+			std::atomic<TLogFilter::mask_t> pass_through_mask{0};
 		};
 
 		TLogBookState& LogBookState()
 		{
 			static TLogBookState* const state = new TLogBookState;
 			return *state;
+		}
+
+		void UpdatePassThroughMask(TLogBookState& state) noexcept
+		{
+			TLogFilter::mask_t mask = 0;
+			for(const ILogSink* const sink : state.sinks)
+				mask |= sink->pass_through_filter.mask;
+			state.pass_through_mask.store(mask, std::memory_order_release);
 		}
 	}
 
@@ -68,7 +78,10 @@ namespace el1::system::logbook
 		TLogBookState& state = LogBookState();
 		const task::TMutexAutoLock guard(&state.lock);
 		if(!state.sinks.Contains(sink))
+		{
 			state.sinks.Append(sink);
+			UpdatePassThroughMask(state);
+		}
 	}
 
 	void TLogBook::UnregisterSink(ILogSink* const sink)
@@ -76,6 +89,53 @@ namespace el1::system::logbook
 		TLogBookState& state = LogBookState();
 		const task::TMutexAutoLock guard(&state.lock);
 		state.sinks.RemoveItem(sink, NEG1);
+		UpdatePassThroughMask(state);
+	}
+
+	bool TLogBook::ShouldPassThrough(const ILogSiteBase& site) noexcept
+	{
+		const TLogBookState& state = LogBookState();
+		const TLogFilter aggregate{state.pass_through_mask.load(std::memory_order_acquire)};
+		return aggregate.Matches(site.category, site.verbosity);
+	}
+
+	void TLogBook::PassThrough(
+		const task::TThread* const thread,
+		const array_t<const byte_t> record
+	) noexcept
+	{
+		try
+		{
+			if(record.Count() < sizeof(TLogRecord))
+				return;
+
+			const TLogRecord& log_record = *reinterpret_cast<const TLogRecord*>(record.Data());
+			if(log_record.site == nullptr || log_record.Size() != record.Count())
+				return;
+
+			TList<ILogSink*> matching_sinks;
+			{
+				TLogBookState& state = LogBookState();
+				const task::TMutexAutoLock guard(&state.lock);
+				for(ILogSink* const sink : state.sinks)
+					if(sink->pass_through_filter.Matches(log_record.site->category, log_record.site->verbosity))
+						matching_sinks.Append(sink);
+			}
+
+			for(ILogSink* const sink : matching_sinks)
+			{
+				try
+				{
+					sink->Write(thread, record, 0, 0);
+				}
+				catch(...)
+				{
+				}
+			}
+		}
+		catch(...)
+		{
+		}
 	}
 
 	void TLogBook::Write(
