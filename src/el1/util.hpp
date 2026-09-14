@@ -13,7 +13,7 @@ namespace el1::util
 	using namespace io::types;
 
 	template<typename T>
-	static T Abs(const T v)
+	[[maybe_unused]] static T Abs(const T v)
 	{
 		return v < 0 ? -v : v;
 	}

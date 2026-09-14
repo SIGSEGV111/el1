@@ -30,19 +30,19 @@ namespace el1::io::collection::array
 	struct TArraySource;
 
 	template<typename T>
-	static bool EqualsComparator(const T& a, const T& b) EL_GETTER;
+	[[maybe_unused]] static bool EqualsComparator(const T& a, const T& b) EL_GETTER;
 
 	template<typename T>
-	static int StdSorter(const T& a, const T& b) EL_GETTER;
+	[[maybe_unused]] static int StdSorter(const T& a, const T& b) EL_GETTER;
 
 	template<typename T>
-	static bool EqualsComparator(const T& a, const T& b)
+	[[maybe_unused]] static bool EqualsComparator(const T& a, const T& b)
 	{
 		return a == b;
 	}
 
 	template<typename T>
-	static int StdSorter(const T& a, const T& b)
+	[[maybe_unused]] static int StdSorter(const T& a, const T& b)
 	{
 		if(a == b)
 			return 0;

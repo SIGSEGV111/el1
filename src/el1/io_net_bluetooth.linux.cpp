@@ -67,10 +67,11 @@ namespace el1::io::net::bluetooth
 			::sdp_uuid128_create(&destination, source.octet);
 		}
 
-		TString getSdpString(const sdp_record_t* const record, int (*const getter)(const sdp_record_t*, char*, int))
+		template<typename TGetter>
+		TString getSdpString(const sdp_record_t* const record, TGetter getter)
 		{
 			std::array<char, 1024> buffer = {};
-			if(getter(record, buffer.data(), static_cast<int>(buffer.size())) < 0)
+			if(getter(record, buffer.data(), buffer.size()) < 0)
 				return TString();
 			return TString(buffer.data());
 		}

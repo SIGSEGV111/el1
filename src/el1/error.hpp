@@ -128,7 +128,7 @@ namespace el1::error
 	};
 
 	template<typename E>
-	static void Throw [[ noreturn ]] (IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function)
+	[[maybe_unused]] static void Throw [[ noreturn ]] (IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function)
 	{
 		E e;
 		e.Configure(nested, expression, file, line, function);
@@ -136,7 +136,7 @@ namespace el1::error
 	}
 
 	template<typename E, typename ...A>
-	static void Throw [[ noreturn ]] (IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function, A&&... a)
+	[[maybe_unused]] static void Throw [[ noreturn ]] (IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function, A&&... a)
 	{
 		E e(a...);
 		e.Configure(nested, expression, file, line, function);
@@ -144,7 +144,7 @@ namespace el1::error
 	}
 
 	template<typename E>
-	static void Warning(IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function)
+	[[maybe_unused]] static void Warning(IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function)
 	{
 		E e;
 		e.Configure(nested, expression, file, line, function);
@@ -152,7 +152,7 @@ namespace el1::error
 	}
 
 	template<typename E, typename ...A>
-	static void Warning(IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function, A&&... a)
+	[[maybe_unused]] static void Warning(IException* nested, const char* const expression, const char* const file, const unsigned line, const char* const function, A&&... a)
 	{
 		E e(a...);
 		e.Configure(nested, expression, file, line, function);
