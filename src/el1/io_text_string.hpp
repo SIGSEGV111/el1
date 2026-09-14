@@ -143,10 +143,7 @@ namespace el1::io::text::string
 
 			TList<TString> Split(const TStringView delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			template<std::size_t N>
-			TList<TString> Split(const char32_t (&delimiter EL_LIFETIME_BOUND)[N], const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER
-			{
-				return Split(TStringView(delimiter), n_max, skip_empty);
-			}
+			TList<TString> Split(const char32_t (&delimiter EL_LIFETIME_BOUND)[N], const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			TList<TString> Split(const char32_t delimiter, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			TList<TString> Split(const array_t<const char32_t> split_chars, const usys_t n_max = NEG1, const bool skip_empty = false) const EL_GETTER;
 			kv_pair_tt<TString,TString> SplitKV(const TStringView delimiter) const;
@@ -223,6 +220,12 @@ namespace el1::io::text::string
 			TString& operator=(const TString&) = default;
 			TString& operator=(TString&&) = default;
 	};
+
+	template<std::size_t N>
+	EL_GETTER TList<TString> TString::Split(const char32_t (&delimiter EL_LIFETIME_BOUND)[N], const usys_t n_max, const bool skip_empty) const
+	{
+		return Split(TStringView(delimiter), n_max, skip_empty);
+	}
 
 	inline TStringView::TStringView(const TString& string EL_LIFETIME_BOUND) noexcept : TBase(string.chars.View()) {}
 
