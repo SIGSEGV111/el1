@@ -198,8 +198,13 @@ LLVM_PROFDATA ?= llvm-profdata
 LLVM_COV ?= llvm-cov
 
 ifeq ($(WITH_VALGRIND),1)
+# Valgrind writes vgcore.<pid> when the test process terminates via a
+# core-dumping signal. Some death/crash tests do this intentionally. Keep the
+# native test runner unchanged, but suppress core files for Valgrind runs.
+TEST_RUNNER_SETUP := ulimit -c 0;
 TEST_RUNNER := $(VALGRIND) $(VALGRIND_FLAGS)
 else
+TEST_RUNNER_SETUP :=
 TEST_RUNNER :=
 endif
 
@@ -389,14 +394,14 @@ test-release: check-valgrind $(RELEASE_TEST_NAME)
 	@if [ -n "$(TEST_JUNIT_XML)" ]; then mkdir -p "$(dir $(TEST_JUNIT_XML))"; fi
 	./support/generate-testdata.sh "$(OUT_DIR)"
 	rm -rf -- $(TEST_WORK_DIRS) && mkdir -p -- $(TEST_WORK_DIRS)
-	LD_LIBRARY_PATH="$(RELEASE_DIR)" $(TEST_RUNNER) "$(RELEASE_TEST_NAME)" $(TEST_GTEST_FLAGS)
+	$(TEST_RUNNER_SETUP) LD_LIBRARY_PATH="$(RELEASE_DIR)" $(TEST_RUNNER) "$(RELEASE_TEST_NAME)" $(TEST_GTEST_FLAGS)
 
 test-debug: check-valgrind $(DEBUG_TEST_NAME)
 	@if [ -n "$(TEST_JUNIT_XML)" ]; then mkdir -p "$(dir $(TEST_JUNIT_XML))"; fi
 	./support/generate-testdata.sh "$(OUT_DIR)"
 	rm -rf -- $(TEST_WORK_DIRS) "$(COVERAGE_PROFILE_DIR)" && mkdir -p -- $(TEST_WORK_DIRS)
 	mkdir -p "$(COVERAGE_PROFILE_DIR)"
-	LLVM_PROFILE_FILE="$(abspath $(COVERAGE_PROFILE_DIR))/%m-%p.profraw" \
+	$(TEST_RUNNER_SETUP) LLVM_PROFILE_FILE="$(abspath $(COVERAGE_PROFILE_DIR))/%m-%p.profraw" \
 		LD_LIBRARY_PATH="$(DEBUG_DIR)" \
 		$(TEST_RUNNER) "$(DEBUG_TEST_NAME)" $(TEST_GTEST_FLAGS)
 
