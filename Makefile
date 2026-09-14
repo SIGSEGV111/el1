@@ -40,6 +40,10 @@ include submodules/std-make-lib/Makefile.common
 PROJECT_CPPFLAGS :=
 PACKAGE_NAMES := krb5 krb5-gssapi zlib openssl libnghttp2 libnghttp3
 
+ifeq ($(WITH_BLUETOOTH),1)
+PACKAGE_NAMES += bluez
+endif
+
 ifeq ($(WITH_POSTGRES),1)
 PROJECT_CPPFLAGS += -DEL1_WITH_POSTGRES
 PACKAGE_NAMES += libpq
