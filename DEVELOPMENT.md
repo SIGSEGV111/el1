@@ -16,6 +16,30 @@ Example:
 ./compile-loop.sh --target=test --jobs=8
 ```
 
+## Test selection
+
+The test targets accept a GoogleTest-compatible filter via the `TEST_FILTER`
+make variable:
+
+```bash
+make test TEST_FILTER='system_time.*'
+make test-debug TEST_FILTER='system_time.TTime_*:system_logbook.*'
+```
+
+`GTEST_FILTER` can be used as an environment variable instead. This also makes
+`compile-loop.sh --gtest_filter=...` work with the normal make test targets:
+
+```bash
+GTEST_FILTER='system_time.*' make test
+./compile-loop.sh --target=test-debug --gtest_filter='system_time.*'
+```
+
+The filter uses the normal GoogleTest syntax, including `:` separated positive
+patterns and `-` separated negative patterns. An explicit `TEST_FILTER` or
+`GTEST_FILTER` takes precedence over the automatic exclusions controlled by the
+`WITH_*_TESTS` make variables. Without an explicit filter, the existing
+automatic exclusions remain unchanged.
+
 ## `el1-env.sh`
 
 Shell helper for projects built directly against the current el1 source tree.

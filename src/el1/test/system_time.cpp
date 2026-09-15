@@ -2,6 +2,7 @@
 #include <el1/system_time.hpp>
 #include <el1/error.hpp>
 #include <limits>
+#include <time.h>
 #include "util.hpp"
 
 using namespace ::testing;
@@ -13,6 +14,50 @@ namespace
 	static const u64_t ATTOS_PS  = 1000000000000000000;
 	static const u64_t NANOS_PS  = 1000000000;
 	static const u64_t MICROS_PS = 1000000;
+
+
+#ifdef __GLIBC__
+	static time_t MakeGlibcUtcTime(const int year, const int month, const int day, const int hour = 0, const int minute = 0, const int second = 0)
+	{
+		struct tm calendar = {};
+		calendar.tm_year = year - 1900;
+		calendar.tm_mon = month - 1;
+		calendar.tm_mday = day;
+		calendar.tm_hour = hour;
+		calendar.tm_min = minute;
+		calendar.tm_sec = second;
+		return timegm(&calendar);
+	}
+
+	static void ExpectGregorianCalendarMatchesGlibc(const s64_t timestamp)
+	{
+		const time_t libc_timestamp = static_cast<time_t>(timestamp);
+		ASSERT_EQ(static_cast<s64_t>(libc_timestamp), timestamp) << "time_t cannot represent timestamp " << timestamp;
+
+		struct tm libc_calendar = {};
+		ASSERT_NE(gmtime_r(&libc_timestamp, &libc_calendar), nullptr) << "gmtime_r failed for timestamp " << timestamp;
+
+		const TCalendar calendar(TTime(timestamp, 0));
+		ASSERT_EQ(calendar.calendar_system, ECalendarSystem::GREGORIAN) << "timestamp=" << timestamp;
+		ASSERT_TRUE(
+			calendar.year == static_cast<s64_t>(libc_calendar.tm_year) + 1900 &&
+			calendar.month == static_cast<unsigned>(libc_calendar.tm_mon + 1) &&
+			calendar.day == static_cast<unsigned>(libc_calendar.tm_mday) &&
+			calendar.hour == static_cast<unsigned>(libc_calendar.tm_hour) &&
+			calendar.minute == static_cast<unsigned>(libc_calendar.tm_min) &&
+			calendar.second == static_cast<unsigned>(libc_calendar.tm_sec)
+		) << "timestamp=" << timestamp
+		  << " el1=" << calendar.year << '-' << static_cast<unsigned>(calendar.month) << '-' << static_cast<unsigned>(calendar.day)
+		  << ' ' << static_cast<unsigned>(calendar.hour) << ':' << static_cast<unsigned>(calendar.minute) << ':' << static_cast<unsigned>(calendar.second)
+		  << " glibc=" << libc_calendar.tm_year + 1900 << '-' << libc_calendar.tm_mon + 1 << '-' << libc_calendar.tm_mday
+		  << ' ' << libc_calendar.tm_hour << ':' << libc_calendar.tm_min << ':' << libc_calendar.tm_sec;
+
+		struct tm reverse = libc_calendar;
+		const time_t libc_round_trip = timegm(&reverse);
+		ASSERT_EQ(static_cast<s64_t>(libc_round_trip), timestamp) << "glibc round-trip mismatch for timestamp " << timestamp;
+		ASSERT_EQ(calendar.ConvertToTime(), TTime(timestamp, 0)) << "el1 round-trip mismatch for timestamp " << timestamp;
+	}
+#endif
 
 	TEST(system_time, TTime_Construct)
 	{
@@ -206,6 +251,140 @@ namespace
 		EXPECT_EQ(below_minimum_fraction.ConvertToCalendar().ConvertToTime(), below_minimum_fraction);
 	}
 
+
+	TEST(system_time, TCalendar_FractionalSecondAndDayBoundaries)
+	{
+		struct TCase
+		{
+			s64_t seconds;
+			s64_t attoseconds;
+			s64_t year;
+			unsigned month;
+			unsigned day;
+			unsigned hour;
+			unsigned minute;
+			unsigned second;
+			u64_t calendar_attoseconds;
+		};
+
+		static constexpr TCase CASES[] = {
+			{ -86400, 0, 1969, 12, 31, 0, 0, 0, 0 },
+			{ -86399, 0, 1969, 12, 31, 0, 0, 1, 0 },
+			{ -1, 0, 1969, 12, 31, 23, 59, 59, 0 },
+			{ 0, -1, 1969, 12, 31, 23, 59, 59, ATTOS_PS - 1 },
+			{ 0, 0, 1970, 1, 1, 0, 0, 0, 0 },
+			{ 0, 1, 1970, 1, 1, 0, 0, 0, 1 },
+			{ 86399, ATTOS_PS - 1, 1970, 1, 1, 23, 59, 59, ATTOS_PS - 1 },
+			{ 86400, 0, 1970, 1, 2, 0, 0, 0, 0 },
+		};
+
+		for(const TCase& test_case : CASES)
+		{
+			const TTime timestamp(test_case.seconds, test_case.attoseconds);
+			const TCalendar calendar(timestamp);
+			EXPECT_EQ(calendar.year, test_case.year);
+			EXPECT_EQ(calendar.month, test_case.month);
+			EXPECT_EQ(calendar.day, test_case.day);
+			EXPECT_EQ(calendar.hour, test_case.hour);
+			EXPECT_EQ(calendar.minute, test_case.minute);
+			EXPECT_EQ(calendar.second, test_case.second);
+			EXPECT_EQ(calendar.attoseconds, test_case.calendar_attoseconds);
+			EXPECT_EQ(calendar.ConvertToTime(), timestamp);
+		}
+	}
+
+	TEST(system_time, TCalendar_DenseRoundTripAcrossGregorianReform)
+	{
+		const TTime start = TCalendar(1582, 9, 1).ConvertToTime();
+		const TTime end = TCalendar(1582, 11, 30, 23, 59, 59).ConvertToTime();
+		const TTime step = TTime::ConvertFrom(EUnit::HOURS, 1LL);
+
+		for(TTime timestamp = start; timestamp <= end; timestamp += step)
+		{
+			const TCalendar calendar(timestamp);
+			EXPECT_EQ(calendar.ConvertToTime(), timestamp);
+			EXPECT_FALSE(calendar.year == 1582 && calendar.month == 10 && calendar.day >= 5 && calendar.day <= 14);
+		}
+	}
+
+	TEST(system_time, TCalendar_PosixLeapSecondSemantics)
+	{
+		const TCalendar before(2016, 12, 31, 23, 59, 59);
+		const TCalendar after(before.ConvertToTime() + TTime(1));
+
+		EXPECT_EQ(after.year, 2017);
+		EXPECT_EQ(after.month, 1);
+		EXPECT_EQ(after.day, 1);
+		EXPECT_EQ(after.hour, 0);
+		EXPECT_EQ(after.minute, 0);
+		EXPECT_EQ(after.second, 0);
+		EXPECT_EQ(after.ConvertToTime() - before.ConvertToTime(), TTime(1));
+		EXPECT_THROW(TCalendar(2016, 12, 31, 23, 59, 60), el1::error::TInvalidArgumentException);
+	}
+
+#ifdef __GLIBC__
+	TEST(system_time, TCalendar_GlibcGregorianBoundarySamples)
+	{
+		static constexpr s64_t TIMESTAMPS[] = {
+			-12219292800LL, // 1582-10-15 00:00:00, first Gregorian date used by TCalendar
+			-11676096000LL, // 1600-01-01
+			-2208988800LL,  // 1900-01-01
+			-1LL,
+			0LL,
+			1LL,
+			951782400LL,    // 2000-02-29
+			1483228799LL,   // 2016-12-31 23:59:59, immediately before a real UTC leap second
+			2147483647LL,
+			4107542400LL,   // 2100-03-01
+			13574563200LL,  // 2400-02-29
+		};
+
+		for(const s64_t timestamp : TIMESTAMPS)
+			ExpectGregorianCalendarMatchesGlibc(timestamp);
+	}
+
+	TEST(system_time, TCalendar_GlibcGregorianDailyAgreement)
+	{
+		const s64_t start = static_cast<s64_t>(MakeGlibcUtcTime(1582, 10, 15));
+		const s64_t end = static_cast<s64_t>(MakeGlibcUtcTime(2401, 1, 1));
+		static constexpr s64_t SECONDS_PER_POSIX_DAY = 86400;
+
+		s64_t day_index = 0;
+		for(s64_t day = start; day < end; day += SECONDS_PER_POSIX_DAY, day_index++)
+		{
+			// Exercise a different time-of-day on each day while still checking every civil date.
+			const s64_t second_of_day = (day_index * 7919LL) % SECONDS_PER_POSIX_DAY;
+			ExpectGregorianCalendarMatchesGlibc(day + second_of_day);
+		}
+	}
+
+	TEST(system_time, TCalendar_GlibcIsProlepticGregorianBeforeReform)
+	{
+		const TCalendar last_julian(1582, 10, 4);
+		const s64_t timestamp = last_julian.ConvertToTime().Seconds();
+		const time_t libc_timestamp = static_cast<time_t>(timestamp);
+		struct tm libc_calendar = {};
+		ASSERT_NE(gmtime_r(&libc_timestamp, &libc_calendar), nullptr);
+
+		// glibc gmtime_r uses the proleptic Gregorian calendar here, while TCalendar
+		// deliberately follows the historical reform and therefore reports Julian 1582-10-04.
+		EXPECT_EQ(libc_calendar.tm_year + 1900, 1582);
+		EXPECT_EQ(libc_calendar.tm_mon + 1, 10);
+		EXPECT_EQ(libc_calendar.tm_mday, 14);
+		EXPECT_EQ(last_julian.calendar_system, ECalendarSystem::JULIAN);
+
+		const time_t glibc_october_4 = MakeGlibcUtcTime(1582, 10, 4);
+		EXPECT_EQ(timestamp - static_cast<s64_t>(glibc_october_4), 10LL * 86400LL);
+
+		ExpectGregorianCalendarMatchesGlibc(TCalendar(1582, 10, 15).ConvertToTime().Seconds());
+	}
+#else
+	TEST(system_time, TCalendar_GlibcReferenceTestsUnavailable)
+	{
+		GTEST_SKIP() << "glibc reference tests require glibc";
+	}
+#endif
+
 	TEST(system_time, TCalendar_InvalidFields)
 	{
 		EXPECT_THROW(TCalendar(2026, 0, 1), el1::error::TInvalidArgumentException);
@@ -231,6 +410,37 @@ namespace
 		const timeval c = TTime(1.5);
 		EXPECT_TRUE(memcmp(&c, &ts, sizeof(c)) == 0);
 		EXPECT_EQ( TTime(1.5), TTime(ts) );
+	}
+
+
+	TEST(system_time, TTime_timespecNegative)
+	{
+		const timespec source = { -1, static_cast<long>(NANOS_PS / 2) };
+		const TTime timestamp(source);
+		const timespec round_trip = timestamp;
+
+		EXPECT_EQ(timestamp, TTime(0, -static_cast<s64_t>(ATTOS_PS / 2)));
+		EXPECT_EQ(round_trip.tv_sec, source.tv_sec);
+		EXPECT_EQ(round_trip.tv_nsec, source.tv_nsec);
+
+		const timespec sub_nanosecond = TTime(0, -1);
+		EXPECT_EQ(sub_nanosecond.tv_sec, 0);
+		EXPECT_EQ(sub_nanosecond.tv_nsec, 0);
+	}
+
+	TEST(system_time, TTime_timevalNegative)
+	{
+		const timeval source = { -1, static_cast<suseconds_t>(MICROS_PS / 2) };
+		const TTime timestamp(source);
+		const timeval round_trip = timestamp;
+
+		EXPECT_EQ(timestamp, TTime(0, -static_cast<s64_t>(ATTOS_PS / 2)));
+		EXPECT_EQ(round_trip.tv_sec, source.tv_sec);
+		EXPECT_EQ(round_trip.tv_usec, source.tv_usec);
+
+		const timeval sub_microsecond = TTime(0, -1);
+		EXPECT_EQ(sub_microsecond.tv_sec, 0);
+		EXPECT_EQ(sub_microsecond.tv_usec, 0);
 	}
 
 	TEST(system_time, TTime_Now)

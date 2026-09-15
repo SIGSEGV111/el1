@@ -58,14 +58,28 @@ namespace el1::system::time
 
 	TTime::operator timespec() const noexcept
 	{
-		timespec t = { (time_t)(sec), (long)(asec / 1000000000LL) };
-		return t;
+		time_t out_sec = static_cast<time_t>(sec);
+		long out_nsec = static_cast<long>(asec / 1000000000LL);
+		if(out_nsec < 0)
+		{
+			out_sec--;
+			out_nsec += 1000000000L;
+		}
+
+		return timespec { out_sec, out_nsec };
 	}
 
 	TTime::operator timeval() const noexcept
 	{
-		timeval t = { (time_t)(sec), (long)(asec / 1000000000000LL) };
-		return t;
+		time_t out_sec = static_cast<time_t>(sec);
+		long out_usec = static_cast<long>(asec / 1000000000000LL);
+		if(out_usec < 0)
+		{
+			out_sec--;
+			out_usec += 1000000L;
+		}
+
+		return timeval { out_sec, out_usec };
 	}
 }
 

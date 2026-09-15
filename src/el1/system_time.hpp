@@ -35,7 +35,7 @@ namespace el1::system::time
 		SECONDS =     1,
 		MINUTES =    60,
 		HOURS   =  3600,
-		DAYS    = 86400,
+		DAYS    = 86400,	// fixed 24-hour duration in POSIX/Unix seconds; not a leap-second-aware civil day
 		//	no month, year, etc. because they are not constant
 	};
 
@@ -57,7 +57,7 @@ namespace el1::system::time
 			void	Normalize	() noexcept;
 
 		protected:
-			s64_t	sec;	//	seconds since 1970-01-01 00:00 +0000 (UTC)
+			s64_t	sec;	//	POSIX/Unix timestamp seconds since 1970-01-01 00:00:00 +0000; leap seconds are not represented
 			s64_t	asec;	//	atto-seconds (10^-18) of current second
 
 		public:
@@ -121,7 +121,9 @@ namespace el1::system::time
 	};
 
 	/**
-	 * Civil UTC date/time using the historical Gregorian calendar reform.
+	 * Civil date/time obtained from POSIX/Unix timestamp semantics. POSIX time
+ * does not represent leap seconds; every timestamp day contains 86400 seconds.
+ * Uses the historical Gregorian calendar reform.
 	 * Dates through 1582-10-04 use the Julian calendar; 1582-10-15 and later
 	 * use the Gregorian calendar. 1582-10-05 through 1582-10-14 do not exist.
 	 * Years use astronomical numbering, i.e. year 0 is 1 BCE.

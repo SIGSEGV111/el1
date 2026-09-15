@@ -23,6 +23,7 @@ LDFLAGS ?=
 EXEFLAGS ?=
 TEST_CXXFLAGS ?=
 TEST_GTEST_FLAGS ?=
+TEST_FILTER ?= $(GTEST_FILTER)
 TEST_JUNIT_XML ?=
 LIFETIME_EXTRA_CXXFLAGS ?=
 
@@ -73,7 +74,9 @@ endif
 
 empty :=
 space := $(empty) $(empty)
-ifneq ($(strip $(TEST_EXCLUDE_PATTERNS)),)
+ifneq ($(strip $(TEST_FILTER)),)
+TEST_GTEST_FLAGS += '--gtest_filter=$(strip $(TEST_FILTER))'
+else ifneq ($(strip $(TEST_EXCLUDE_PATTERNS)),)
 TEST_GTEST_FLAGS += '--gtest_filter=-$(subst $(space),:,$(strip $(TEST_EXCLUDE_PATTERNS)))'
 endif
 

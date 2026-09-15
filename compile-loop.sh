@@ -1,7 +1,7 @@
 #!/bin/bash -eu
 exec </dev/null
 source "/opt/amp-bash-commons/shell-util.sh"
-parseCommandlineArguments "f:follow" "t:target=string?test" "j:jobs:NUMCPUS=integer?1" "gtest_filter=string?*" -- "$@"
+parseCommandlineArguments "f:follow" "t:target=string?test" "j:jobs:NUMCPUS=integer?1" "gtest_filter:GTEST_FILTER=string?" -- "$@"
 
 less_args=("--RAW-CONTROL-CHARS" "--clear-screen" "--tabs=4" "--ignore-case" "--SILENT")
 
@@ -25,7 +25,11 @@ trap "" ERR
 set +e +o pipefail +o errtrace
 
 export GTEST_COLOR=yes
-export GTEST_FILTER="$__gtest_filter"
+if [[ -n "$__gtest_filter" ]]; then
+	export GTEST_FILTER="$__gtest_filter"
+else
+	unset GTEST_FILTER
+fi
 while true; do
 	make -j $__jobs "$__target" 2>&1 | less "${less_args[@]}"
 	sleep 0.5

@@ -9,7 +9,7 @@ namespace el1::system::time
 	namespace
 	{
 		static constexpr s64_t ATTOS_PER_SECOND = 1000000000000000000LL;
-		static constexpr s64_t SECONDS_PER_DAY = 86400LL;
+		static constexpr s64_t SECONDS_PER_POSIX_DAY = 86400LL;	// POSIX/Unix time does not represent leap seconds.
 		static constexpr s64_t UNIX_EPOCH_JDN = 2440588LL;
 		static constexpr s64_t GREGORIAN_START_JDN = 2299161LL;
 
@@ -407,12 +407,12 @@ namespace el1::system::time
 
 	TCalendar::TFields TCalendar::Decode(const TTime timestamp)
 	{
-		s64_t days = timestamp.Seconds() / SECONDS_PER_DAY;
-		s64_t second_of_day = timestamp.Seconds() % SECONDS_PER_DAY;
+		s64_t days = timestamp.Seconds() / SECONDS_PER_POSIX_DAY;
+		s64_t second_of_day = timestamp.Seconds() % SECONDS_PER_POSIX_DAY;
 		if(second_of_day < 0)
 		{
 			days--;
-			second_of_day += SECONDS_PER_DAY;
+			second_of_day += SECONDS_PER_POSIX_DAY;
 		}
 
 		s64_t attoseconds = timestamp.Attoseconds();
@@ -424,7 +424,7 @@ namespace el1::system::time
 			else
 			{
 				days--;
-				second_of_day = SECONDS_PER_DAY - 1;
+				second_of_day = SECONDS_PER_POSIX_DAY - 1;
 			}
 		}
 
@@ -477,13 +477,13 @@ namespace el1::system::time
 		s64_t seconds;
 		if(days >= 0)
 		{
-			const u64_t magnitude = static_cast<u64_t>(days) * static_cast<u64_t>(SECONDS_PER_DAY) + static_cast<u64_t>(second_of_day);
+			const u64_t magnitude = static_cast<u64_t>(days) * static_cast<u64_t>(SECONDS_PER_POSIX_DAY) + static_cast<u64_t>(second_of_day);
 			EL_ERROR(magnitude > static_cast<u64_t>(std::numeric_limits<s64_t>::max()), error::TInvalidArgumentException, "year", "date is outside the TTime timestamp range");
 			seconds = static_cast<s64_t>(magnitude);
 		}
 		else
 		{
-			const u64_t magnitude = static_cast<u64_t>(-days) * static_cast<u64_t>(SECONDS_PER_DAY) - static_cast<u64_t>(second_of_day);
+			const u64_t magnitude = static_cast<u64_t>(-days) * static_cast<u64_t>(SECONDS_PER_POSIX_DAY) - static_cast<u64_t>(second_of_day);
 			const u64_t max_negative_magnitude = static_cast<u64_t>(std::numeric_limits<s64_t>::max()) + 1U;
 			if(magnitude == max_negative_magnitude + 1U && attoseconds > 0)
 				return TTime(std::numeric_limits<s64_t>::min(), static_cast<s64_t>(attoseconds) - ATTOS_PER_SECOND);
