@@ -376,12 +376,12 @@ namespace el1::system::time
 		const u64_t attoseconds
 	) :
 		year(year),
+		attoseconds(attoseconds),
 		month(static_cast<u8_t>(month)),
 		day(static_cast<u8_t>(day)),
 		hour(static_cast<u8_t>(hour)),
 		minute(static_cast<u8_t>(minute)),
 		second(static_cast<u8_t>(second)),
-		attoseconds(attoseconds),
 		calendar_system(CalendarSystemForDate(year, month, day))
 	{
 		EL_ERROR(month < 1 || month > 12, error::TInvalidArgumentException, "month", "month must be in the range 1..12");
@@ -395,12 +395,12 @@ namespace el1::system::time
 
 	TCalendar::TCalendar(const TFields& fields) :
 		year(fields.year),
+		attoseconds(fields.attoseconds),
 		month(fields.month),
 		day(fields.day),
 		hour(fields.hour),
 		minute(fields.minute),
 		second(fields.second),
-		attoseconds(fields.attoseconds),
 		calendar_system(fields.calendar_system)
 	{
 	}

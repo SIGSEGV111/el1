@@ -18,7 +18,7 @@ namespace el1::system::time
 
 	class TCalendar;
 
-	enum class ECalendarSystem
+	enum class ECalendarSystem : u8_t
 	{
 		JULIAN,
 		GREGORIAN,
@@ -122,8 +122,8 @@ namespace el1::system::time
 
 	/**
 	 * Civil date/time obtained from POSIX/Unix timestamp semantics. POSIX time
- * does not represent leap seconds; every timestamp day contains 86400 seconds.
- * Uses the historical Gregorian calendar reform.
+	 * does not represent leap seconds; every timestamp day contains 86400 seconds.
+	 * Uses the historical Gregorian calendar reform.
 	 * Dates through 1582-10-04 use the Julian calendar; 1582-10-15 and later
 	 * use the Gregorian calendar. 1582-10-05 through 1582-10-14 do not exist.
 	 * Years use astronomical numbering, i.e. year 0 is 1 BCE.
@@ -137,12 +137,12 @@ namespace el1::system::time
 
 		public:
 			const s64_t year;
+			const u64_t attoseconds;
 			const u8_t month;
 			const u8_t day;
 			const u8_t hour;
 			const u8_t minute;
 			const u8_t second;
-			const u64_t attoseconds;
 			const ECalendarSystem calendar_system;
 
 			TCalendar(
