@@ -216,6 +216,41 @@ namespace
 		EXPECT_EQ(sink.Record(0).site->FormatMessage(sink.Record(0)), U"value=17");
 	}
 
+	TEST(system_logbook, CleanThreadTerminationDiscardsPendingRecords)
+	{
+		TTestSink sink;
+		TSinkRegistration registration(&sink);
+
+		{
+			TThread thread(U"log-clean", []()
+			{
+				WriteLog<ECategory::LIVENESS, EVerbosity::DEBUG, U"clean thread record">();
+			});
+			const auto exception = thread.Join();
+			EXPECT_EQ(exception, nullptr);
+		}
+
+		EXPECT_EQ(sink.n_write_calls, 0U);
+	}
+
+	TEST(system_logbook, ShutdownThreadTerminationDiscardsPendingRecords)
+	{
+		TTestSink sink;
+		TSinkRegistration registration(&sink);
+
+		{
+			TThread thread(U"log-shutdown", []()
+			{
+				WriteLog<ECategory::LIVENESS, EVerbosity::DEBUG, U"shutdown thread record">();
+				throw shutdown_t();
+			});
+			const auto exception = thread.Join();
+			EXPECT_EQ(exception, nullptr);
+		}
+
+		EXPECT_EQ(sink.n_write_calls, 0U);
+	}
+
 	TEST(system_logbook, RingBufferOverwritesCompleteOldRecords)
 	{
 		TTestSink sink;

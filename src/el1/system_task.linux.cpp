@@ -225,6 +225,11 @@ namespace el1::system::task
 
 			// EL_SYSERR(signal(SIGCHLD, SIG_IGN));
 		}
+
+		~TMainThread()
+		{
+			this->FlightRecorder().Discard();
+		}
 	};
 
 	static TMainThread thread_main;
@@ -284,6 +289,7 @@ namespace el1::system::task
 			try
 			{
 				myself->main_fiber.main_func();
+				myself->FlightRecorder().Discard();
 				const TMutexAutoLock lock(&myself->mutex);
 				myself->state = EChildState::FINISHED;
 				myself->on_state_change.Raise();
@@ -299,6 +305,7 @@ namespace el1::system::task
 			}
 			catch(shutdown_t)
 			{
+				myself->FlightRecorder().Discard();
 				const TMutexAutoLock lock(&myself->mutex);
 				myself->state = EChildState::FINISHED;
 				myself->on_state_change.Raise();

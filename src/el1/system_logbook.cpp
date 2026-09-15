@@ -4,6 +4,7 @@
 #include <atomic>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 namespace el1::system::logbook
 {
@@ -93,6 +94,21 @@ namespace el1::system::logbook
 				mask |= sink->PassThroughFilter().mask;
 			state.pass_through_mask.store(mask, std::memory_order_release);
 		}
+
+		TString ConsoleTimestamp(const TLogRecord& record)
+		{
+			const TTime record_monotonic = TLogRecord::T_PROGRAM_START + TTime::ConvertFrom(EUnit::MICROSECONDS, static_cast<s64_t>(record.ts));
+			const TTime age = TTime::Now(EClock::MONOTONIC) - record_monotonic;
+			const TTime record_realtime = TTime::Now(EClock::REALTIME) - age;
+			const time_t seconds = static_cast<time_t>(record_realtime.Seconds());
+			tm local_time = {};
+			EL_ERROR(localtime_r(&seconds, &local_time) == nullptr, error::TException, U"failed to convert console timestamp to local time");
+
+			char time[16] = {};
+			EL_ERROR(strftime(time, sizeof(time), "%H:%M:%S", &local_time) == 0, error::TException, U"failed to format console timestamp");
+			const u64_t tenths = static_cast<u64_t>(record_realtime.Attoseconds() / 100000000000000000LL);
+			return TString::Format(U"%s.%d", TString(time), tenths);
+		}
 	}
 
 	usys_t TFlightRecorder::DEFAULT_SIZE_BYTES = 64U * 1024U;
@@ -174,13 +190,10 @@ namespace el1::system::logbook
 			if(record.site == nullptr || sz_record < sizeof(TLogRecord) || sz_record > records.Count() - offset)
 				break;
 
-			const u64_t seconds = record.ts / 1000000ULL;
-			const u64_t microseconds = record.ts % 1000000ULL;
 			const TString message = record.site->FormatMessage(record);
 			io::text::terminal::term << TString::Format(
-				U"[+%d.%06d] %s/%s [%s] %s\n",
-				seconds,
-				microseconds,
+				U"[%s] %s/%s [%s] %s\n",
+				ConsoleTimestamp(record),
 				VerbosityName(record.site->verbosity),
 				CategoryName(record.site->category),
 				thread_name,

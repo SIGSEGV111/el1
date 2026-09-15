@@ -16,6 +16,14 @@ namespace el1::system::time
 {
 	using namespace io::types;
 
+	class TCalendar;
+
+	enum class ECalendarSystem
+	{
+		JULIAN,
+		GREGORIAN,
+	};
+
 	enum class EUnit : s32_t
 	{
 		ATTOSECONDS  = -6,	// 1.000.000.000.000.000.000
@@ -89,6 +97,7 @@ namespace el1::system::time
 			static TTime	ConvertFrom	(const double tps, double value) noexcept EL_GETTER;
 
 			static	TTime	Now			(const EClock clock = EClock::REALTIME);
+			TCalendar		ConvertToCalendar() const EL_GETTER;
 
 			inline TTime() noexcept : sec(0), asec(0) {}
 			constexpr TTime(const int seconds) noexcept : sec(seconds), asec(0) {}
@@ -96,6 +105,7 @@ namespace el1::system::time
 			constexpr TTime(double seconds) noexcept : sec((s64_t)seconds), asec((s64_t)((seconds - sec) * 1000000000000000000.0)) {}
 
 			TTime(const s64_t seconds, const s64_t attoseconds) noexcept;
+			explicit TTime(const TCalendar& calendar);
 
 			#ifdef EL_OS_CLASS_POSIX
 				operator timespec() const noexcept;
@@ -108,5 +118,42 @@ namespace el1::system::time
 				operator FILETIME() const noexcept;
 				TTime(const FILETIME ts) noexcept;
 			#endif
+	};
+
+	/**
+	 * Civil UTC date/time using the historical Gregorian calendar reform.
+	 * Dates through 1582-10-04 use the Julian calendar; 1582-10-15 and later
+	 * use the Gregorian calendar. 1582-10-05 through 1582-10-14 do not exist.
+	 * Years use astronomical numbering, i.e. year 0 is 1 BCE.
+	 */
+	class TCalendar
+	{
+		private:
+			struct TFields;
+			static TFields Decode(const TTime timestamp);
+			explicit TCalendar(const TFields& fields);
+
+		public:
+			const s64_t year;
+			const u8_t month;
+			const u8_t day;
+			const u8_t hour;
+			const u8_t minute;
+			const u8_t second;
+			const u64_t attoseconds;
+			const ECalendarSystem calendar_system;
+
+			TCalendar(
+				const s64_t year,
+				const unsigned month,
+				const unsigned day,
+				const unsigned hour = 0,
+				const unsigned minute = 0,
+				const unsigned second = 0,
+				const u64_t attoseconds = 0
+			);
+			explicit TCalendar(const TTime timestamp);
+
+			TTime ConvertToTime() const EL_GETTER;
 	};
 }
