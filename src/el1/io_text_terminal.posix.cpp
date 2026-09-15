@@ -40,16 +40,18 @@ namespace el1::io::text::terminal
 
 	ITerminal& TNoTerminal::operator<<(const string::TStringView str)
 	{
-		str.Pipe().Transform(encoding::utf8::TUTF8Encoder()).ToStream(stdout);
+		// ITerminal is the human-facing text channel. Keep stdout reserved for
+		// pipeline/data output so diagnostics never corrupt redirected output.
+		str.Pipe().Transform(encoding::utf8::TUTF8Encoder()).ToStream(stderr);
 		return *this;
 	}
 
-	string::TString TNoTerminal::TextColorCode(rgba8_t rgb) const
+	string::TString TNoTerminal::TextColorCode(const rgba8_t) const
 	{
 		return string::TString();
 	}
 
-	string::TString TNoTerminal::BackgroundColorCode(rgba8_t rgb) const
+	string::TString TNoTerminal::BackgroundColorCode(const rgba8_t) const
 	{
 		return string::TString();
 	}

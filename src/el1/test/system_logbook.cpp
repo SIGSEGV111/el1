@@ -37,8 +37,11 @@ namespace
 		u64_t n_write_calls = 0;
 		const TThread* thread = nullptr;
 
-		explicit TTestSink(const TLogFilter pass_through_filter = TLogFilter::None()) :
-			ILogSink(pass_through_filter)
+		explicit TTestSink(
+			const TLogFilter pass_through_filter = TLogFilter::None(),
+			const bool receive_committed_records = true
+		) :
+			ILogSink(pass_through_filter, receive_committed_records)
 		{
 		}
 
@@ -146,6 +149,40 @@ namespace
 		ASSERT_EQ(sink.n_write_calls, 2U);
 		ASSERT_EQ(sink.Record(1).site->FormatMessage(sink.Record(1)), U"debug=1");
 		ASSERT_EQ(sink.Record(2).site->FormatMessage(sink.Record(2)), U"operational=2");
+	}
+
+	TEST(system_logbook, PassThroughOnlySinkIsNotReplayedOnCommit)
+	{
+		TTestSink sink(TLogFilter::AtLeastVerbosity(EVerbosity::OPERATIONAL), false);
+		TSinkRegistration registration(&sink);
+		TThread::Self()->FlightRecorder().Discard();
+
+		WriteLog<ECategory::STATE_CHANGE, EVerbosity::OPERATIONAL, U"value=%d">(17);
+		ASSERT_EQ(sink.n_write_calls, 1U);
+		TThread::Self()->FlightRecorder().Commit();
+		EXPECT_EQ(sink.n_write_calls, 1U);
+	}
+
+	TEST(system_logbook, DefaultConsoleReceivesCommittedFlightRecorder)
+	{
+		TConsoleLogSink sink;
+		EXPECT_TRUE(sink.receive_committed_records);
+	}
+
+	TEST(system_logbook, DefaultConsoleCanBeConfigured)
+	{
+		const bool enabled_before = TLogBook::ConsoleEnabled();
+		const TLogFilter filter_before = TLogBook::ConsoleFilter();
+
+		TLogBook::SetConsoleEnabled(false);
+		EXPECT_FALSE(TLogBook::ConsoleEnabled());
+
+		const TLogFilter debug_filter = TLogFilter::AtLeastVerbosity(EVerbosity::DEBUG);
+		TLogBook::SetConsoleFilter(debug_filter);
+		EXPECT_EQ(TLogBook::ConsoleFilter().mask, debug_filter.mask);
+
+		TLogBook::SetConsoleFilter(filter_before);
+		TLogBook::SetConsoleEnabled(enabled_before);
 	}
 
 	TEST(system_logbook, DiscardSuppressesCommit)

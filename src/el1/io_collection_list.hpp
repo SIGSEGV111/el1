@@ -799,6 +799,7 @@ namespace el1::io::stream
 	collection::list::TList<std::remove_const_t<TOut>> IPipe<TStream, TOut>::Collect(const usys_t n_prealloc)
 	{
 		collection::list::TList<std::remove_const_t<TOut>> list;
+		list.Clear(n_prealloc);
 		TStream* source = static_cast<TStream*>(this);
 
 		for(TOut* item = source->NextItem(); item != nullptr; item = source->NextItem())

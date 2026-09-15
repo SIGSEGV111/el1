@@ -159,7 +159,7 @@ namespace el1::io::format::json
 
 			template<std::integral T>
 			requires (!std::same_as<std::remove_cv_t<T>, bool>)
-			T ToInteger() const EL_GETTER
+			EL_GETTER T ToInteger() const
 			{
 				using value_t = std::remove_cv_t<T>;
 				EL_ERROR(Type() != EType::NUMBER, TException, TString::Format(U"requested integer value, but contains %s", JsonTypeToString(Type())));
@@ -192,7 +192,7 @@ namespace el1::io::format::json
 
 			template<std::integral T>
 			requires (!std::same_as<std::remove_cv_t<T>, bool>)
-			T ToInteger(const T _default) const EL_GETTER
+			EL_GETTER T ToInteger(const T _default) const
 			{
 				return IsNull() ? _default : ToInteger<T>();
 			}

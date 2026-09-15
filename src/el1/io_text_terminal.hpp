@@ -51,6 +51,7 @@ namespace el1::io::text::terminal
 	// the terminal should NOT be used to drive data in a pipline-style program
 	// instead the underlying byte-oriented I/O-streams should be used directly (see below)
 	// el1 will auto-detect the terminal type and instantiate the correct driver class
+	// human-facing terminal output uses stderr; stdout remains available for pipeline/data output
 	// when run standalone the terminal uses stdin and stderr to communicate
 	// if el1 detects that the program is used in a pipeline-style then it will use TNoTerminal
 	// and not connect stdin at all - all input operations always return EOF

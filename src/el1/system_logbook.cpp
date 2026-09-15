@@ -1,6 +1,8 @@
 #include "system_logbook.hpp"
+#include "io_text_terminal.hpp"
 
 #include <atomic>
+#include <stdlib.h>
 #include <string.h>
 
 namespace el1::system::logbook
@@ -21,11 +23,61 @@ namespace el1::system::logbook
 			return *state;
 		}
 
+		bool IsFalseEnvironmentValue(const char* const value) noexcept
+		{
+			if(value == nullptr)
+				return false;
+			return strcmp(value, "0") == 0 ||
+				strcmp(value, "false") == 0 || strcmp(value, "FALSE") == 0 ||
+				strcmp(value, "off") == 0 || strcmp(value, "OFF") == 0 ||
+				strcmp(value, "no") == 0 || strcmp(value, "NO") == 0;
+		}
+
+		TLogFilter ConsoleFilterFromEnvironment() noexcept
+		{
+			const char* value = getenv("EL1_LOG_CONSOLE_VERBOSITY");
+			if(value == nullptr || *value == 0)
+				value = getenv("EL1_LOG_VERBOSITY");
+			if(value == nullptr || *value == 0)
+				return TLogBook::DEFAULT_CONSOLE_FILTER;
+
+			if(strcmp(value, "trace") == 0 || strcmp(value, "TRACE") == 0)
+				return TLogFilter::AtLeastVerbosity(EVerbosity::TRACE);
+			if(strcmp(value, "debug") == 0 || strcmp(value, "DEBUG") == 0)
+				return TLogFilter::AtLeastVerbosity(EVerbosity::DEBUG);
+			if(strcmp(value, "diag") == 0 || strcmp(value, "DIAG") == 0)
+				return TLogFilter::AtLeastVerbosity(EVerbosity::DIAG);
+			if(strcmp(value, "verbose") == 0 || strcmp(value, "VERBOSE") == 0)
+				return TLogFilter::AtLeastVerbosity(EVerbosity::VERBOSE);
+			if(strcmp(value, "operational") == 0 || strcmp(value, "OPERATIONAL") == 0 ||
+				strcmp(value, "info") == 0 || strcmp(value, "INFO") == 0)
+				return TLogFilter::AtLeastVerbosity(EVerbosity::OPERATIONAL);
+			if(strcmp(value, "terse") == 0 || strcmp(value, "TERSE") == 0)
+				return TLogFilter::AtLeastVerbosity(EVerbosity::TERSE);
+			if(strcmp(value, "off") == 0 || strcmp(value, "OFF") == 0 || strcmp(value, "none") == 0 || strcmp(value, "NONE") == 0)
+				return TLogFilter::None();
+
+			return TLogBook::DEFAULT_CONSOLE_FILTER;
+		}
+
 		struct TLogBookState
 		{
 			task::TSimpleMutex lock;
+			TConsoleLogSink console_sink;
 			TList<ILogSink*> sinks;
+			bool console_enabled;
 			std::atomic<TLogFilter::mask_t> pass_through_mask{0};
+
+			TLogBookState() :
+				console_sink(ConsoleFilterFromEnvironment()),
+				console_enabled(!IsFalseEnvironmentValue(getenv("EL1_LOG_CONSOLE")))
+			{
+				if(console_enabled)
+				{
+					sinks.Append(&console_sink);
+					pass_through_mask.store(console_sink.PassThroughFilter().mask, std::memory_order_relaxed);
+				}
+			}
 		};
 
 		TLogBookState& LogBookState()
@@ -38,7 +90,7 @@ namespace el1::system::logbook
 		{
 			TLogFilter::mask_t mask = 0;
 			for(const ILogSink* const sink : state.sinks)
-				mask |= sink->pass_through_filter.mask;
+				mask |= sink->PassThroughFilter().mask;
 			state.pass_through_mask.store(mask, std::memory_order_release);
 		}
 	}
@@ -72,6 +124,109 @@ namespace el1::system::logbook
 			state.tail = prev;
 	}
 
+	TStringView CategoryName(const ECategory category) noexcept
+	{
+		switch(category)
+		{
+			case ECategory::LIVENESS:    return U"LIVENESS";
+			case ECategory::STATE_CHANGE:return U"STATE_CHANGE";
+			case ECategory::DEGRADED:    return U"DEGRADED";
+			case ECategory::PERFORMANCE: return U"PERFORMANCE";
+			case ECategory::PROGRESS:    return U"PROGRESS";
+			case ECategory::EXCEPTION:   return U"EXCEPTION";
+		}
+		return U"UNKNOWN";
+	}
+
+	TStringView VerbosityName(const EVerbosity verbosity) noexcept
+	{
+		switch(verbosity)
+		{
+			case EVerbosity::TRACE:      return U"TRACE";
+			case EVerbosity::DEBUG:      return U"DEBUG";
+			case EVerbosity::DIAG:       return U"DIAG";
+			case EVerbosity::VERBOSE:    return U"VERBOSE";
+			case EVerbosity::OPERATIONAL:return U"OPERATIONAL";
+			case EVerbosity::TERSE:      return U"TERSE";
+		}
+		return U"UNKNOWN";
+	}
+
+	TConsoleLogSink::TConsoleLogSink(const TLogFilter filter) noexcept :
+		ILogSink(filter, true)
+	{
+	}
+
+	void TConsoleLogSink::WriteUnlocked(
+		const task::TThread* const thread,
+		const array_t<const byte_t> records,
+		const u64_t n_overwritten_events,
+		const u64_t n_dropped_events
+	)
+	{
+		const TStringView thread_name = thread == nullptr ? TStringView(U"-") : thread->Name().View();
+
+		usys_t offset = 0;
+		while(offset + sizeof(TLogRecord) <= records.Count())
+		{
+			const TLogRecord& record = *reinterpret_cast<const TLogRecord*>(records.Data() + offset);
+			const usys_t sz_record = record.Size();
+			if(record.site == nullptr || sz_record < sizeof(TLogRecord) || sz_record > records.Count() - offset)
+				break;
+
+			const u64_t seconds = record.ts / 1000000ULL;
+			const u64_t microseconds = record.ts % 1000000ULL;
+			const TString message = record.site->FormatMessage(record);
+			io::text::terminal::term << TString::Format(
+				U"[+%d.%06d] %s/%s [%s] %s\n",
+				seconds,
+				microseconds,
+				VerbosityName(record.site->verbosity),
+				CategoryName(record.site->category),
+				thread_name,
+				message
+			);
+			offset += sz_record;
+		}
+
+		if(n_overwritten_events != 0 || n_dropped_events != 0)
+		{
+			io::text::terminal::term << TString::Format(
+				U"[logbook] [%s] flight recorder lost events: overwritten=%d dropped=%d\n",
+				thread_name,
+				n_overwritten_events,
+				n_dropped_events
+			);
+		}
+	}
+
+	void TConsoleLogSink::Write(
+		const task::TThread* const thread,
+		const array_t<const byte_t> records,
+		const u64_t n_overwritten_events,
+		const u64_t n_dropped_events
+	)
+	{
+		const task::TMutexAutoLock guard(&write_lock);
+		WriteUnlocked(thread, records, n_overwritten_events, n_dropped_events);
+	}
+
+	void TConsoleLogSink::WriteCommitted(
+		const task::TThread* const thread,
+		const array_t<const byte_t> records,
+		const u64_t n_overwritten_events,
+		const u64_t n_dropped_events
+	)
+	{
+		const task::TMutexAutoLock guard(&write_lock);
+		const TStringView thread_name = thread == nullptr ? TStringView(U"-") : thread->Name().View();
+		io::text::terminal::term << TString::Format(
+			U"[logbook] [%s] --- flight recorder replay ---\n",
+			thread_name
+		);
+		WriteUnlocked(thread, records, n_overwritten_events, n_dropped_events);
+	}
+
 	void TLogBook::RegisterSink(ILogSink* const sink)
 	{
 		EL_ERROR(sink == nullptr, error::TLogicException);
@@ -90,6 +245,46 @@ namespace el1::system::logbook
 		const task::TMutexAutoLock guard(&state.lock);
 		state.sinks.RemoveItem(sink, NEG1);
 		UpdatePassThroughMask(state);
+	}
+
+	void TLogBook::SetConsoleEnabled(const bool enabled)
+	{
+		TLogBookState& state = LogBookState();
+		const task::TMutexAutoLock guard(&state.lock);
+		if(state.console_enabled == enabled)
+			return;
+
+		state.console_enabled = enabled;
+		if(enabled)
+		{
+			if(!state.sinks.Contains(&state.console_sink))
+				state.sinks.Append(&state.console_sink);
+		}
+		else
+			state.sinks.RemoveItem(&state.console_sink, NEG1);
+		UpdatePassThroughMask(state);
+	}
+
+	bool TLogBook::ConsoleEnabled()
+	{
+		TLogBookState& state = LogBookState();
+		const task::TMutexAutoLock guard(&state.lock);
+		return state.console_enabled;
+	}
+
+	void TLogBook::SetConsoleFilter(const TLogFilter filter)
+	{
+		TLogBookState& state = LogBookState();
+		const task::TMutexAutoLock guard(&state.lock);
+		state.console_sink.pass_through_filter = filter;
+		UpdatePassThroughMask(state);
+	}
+
+	TLogFilter TLogBook::ConsoleFilter()
+	{
+		TLogBookState& state = LogBookState();
+		const task::TMutexAutoLock guard(&state.lock);
+		return state.console_sink.pass_through_filter;
 	}
 
 	bool TLogBook::ShouldPassThrough(const ILogSiteBase& site) noexcept
@@ -118,7 +313,7 @@ namespace el1::system::logbook
 				TLogBookState& state = LogBookState();
 				const task::TMutexAutoLock guard(&state.lock);
 				for(ILogSink* const sink : state.sinks)
-					if(sink->pass_through_filter.Matches(log_record.site->category, log_record.site->verbosity))
+					if(sink->PassThroughFilter().Matches(log_record.site->category, log_record.site->verbosity))
 						matching_sinks.Append(sink);
 			}
 
@@ -158,7 +353,10 @@ namespace el1::system::logbook
 			{
 				try
 				{
-					sink->Write(thread, records, n_overwritten_events, n_dropped_events);
+					if(sink->receive_committed_records)
+						sink->WriteCommitted(thread, records, n_overwritten_events, n_dropped_events);
+					else if(n_overwritten_events != 0 || n_dropped_events != 0)
+						sink->WriteCommitted(thread, {}, n_overwritten_events, n_dropped_events);
 				}
 				catch(...)
 				{

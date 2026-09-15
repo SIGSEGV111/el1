@@ -257,12 +257,23 @@ namespace el1::system::logbook
 
 	struct ILogSink
 	{
-		const TLogFilter pass_through_filter;
+	private:
+		friend class TLogBook;
+		TLogFilter pass_through_filter;
 
-		explicit ILogSink(const TLogFilter pass_through_filter = TLogFilter::None()) noexcept :
-			pass_through_filter(pass_through_filter)
+	public:
+		const bool receive_committed_records;
+
+		explicit ILogSink(
+			const TLogFilter pass_through_filter = TLogFilter::None(),
+			const bool receive_committed_records = true
+		) noexcept :
+			pass_through_filter(pass_through_filter),
+			receive_committed_records(receive_committed_records)
 		{
 		}
+
+		TLogFilter PassThroughFilter() const noexcept { return pass_through_filter; }
 
 		virtual void Write(
 			const task::TThread* thread,
@@ -270,8 +281,65 @@ namespace el1::system::logbook
 			u64_t n_overwritten_events,
 			u64_t n_dropped_events
 		) = 0;
+
+		/**
+		 * Delivery of a complete committed flight recorder. The default keeps
+		 * existing sinks source-compatible by forwarding to Write().
+		 */
+		virtual void WriteCommitted(
+			const task::TThread* thread,
+			array_t<const byte_t> records,
+			u64_t n_overwritten_events,
+			u64_t n_dropped_events
+		)
+		{
+			Write(thread, records, n_overwritten_events, n_dropped_events);
+		}
+
 		virtual ~ILogSink() = default;
 	};
+
+	/**
+	 * Human-readable stderr sink. TLogBook owns and enables one process-wide
+	 * instance by default; applications normally configure it through TLogBook.
+	 *
+	 * Matching console records are delivered immediately through pass-through.
+	 * When a thread commits its flight recorder, the console receives the complete
+	 * recorder again in recorder order, including records below the live filter.
+	 */
+	class TConsoleLogSink final : public ILogSink
+	{
+		task::TSimpleMutex write_lock;
+
+		void WriteUnlocked(
+			const task::TThread* thread,
+			array_t<const byte_t> records,
+			u64_t n_overwritten_events,
+			u64_t n_dropped_events
+		);
+
+	public:
+		explicit TConsoleLogSink(
+			TLogFilter filter = TLogFilter::AtLeastVerbosity(EVerbosity::OPERATIONAL)
+		) noexcept;
+
+		void Write(
+			const task::TThread* thread,
+			array_t<const byte_t> records,
+			u64_t n_overwritten_events,
+			u64_t n_dropped_events
+		) final override;
+
+		void WriteCommitted(
+			const task::TThread* thread,
+			array_t<const byte_t> records,
+			u64_t n_overwritten_events,
+			u64_t n_dropped_events
+		) final override;
+	};
+
+	TStringView CategoryName(ECategory category) noexcept;
+	TStringView VerbosityName(EVerbosity verbosity) noexcept;
 
 	class TLogBook
 	{
@@ -289,8 +357,18 @@ namespace el1::system::logbook
 		) noexcept;
 
 	public:
+		static constexpr TLogFilter DEFAULT_CONSOLE_FILTER = TLogFilter::AtLeastVerbosity(EVerbosity::OPERATIONAL);
+
 		static void RegisterSink(ILogSink* sink);
 		static void UnregisterSink(ILogSink* sink);
+
+		/** Enable/disable the process-wide stderr console sink. Enabled by default. */
+		static void SetConsoleEnabled(bool enabled);
+		static bool ConsoleEnabled();
+
+		/** Configure which records are printed immediately by the default console sink. */
+		static void SetConsoleFilter(TLogFilter filter);
+		static TLogFilter ConsoleFilter();
 	};
 
 	class TFlightRecorder
