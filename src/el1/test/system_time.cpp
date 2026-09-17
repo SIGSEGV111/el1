@@ -17,6 +17,28 @@ namespace
 
 
 #ifdef __GLIBC__
+	static bool IsRepresentableAsTimeT(const s64_t timestamp)
+	{
+		if constexpr(std::numeric_limits<time_t>::is_signed)
+		{
+			if constexpr(std::numeric_limits<time_t>::digits >= std::numeric_limits<s64_t>::digits)
+				return true;
+
+			return timestamp >= static_cast<s64_t>(std::numeric_limits<time_t>::min()) &&
+			       timestamp <= static_cast<s64_t>(std::numeric_limits<time_t>::max());
+		}
+		else
+		{
+			if(timestamp < 0)
+				return false;
+
+			if constexpr(std::numeric_limits<time_t>::digits >= std::numeric_limits<s64_t>::digits)
+				return true;
+
+			return static_cast<u64_t>(timestamp) <= static_cast<u64_t>(std::numeric_limits<time_t>::max());
+		}
+	}
+
 	static time_t MakeGlibcUtcTime(const int year, const int month, const int day, const int hour = 0, const int minute = 0, const int second = 0)
 	{
 		struct tm calendar = {};
@@ -31,8 +53,8 @@ namespace
 
 	static void ExpectGregorianCalendarMatchesGlibc(const s64_t timestamp)
 	{
+		ASSERT_TRUE(IsRepresentableAsTimeT(timestamp)) << "time_t cannot represent timestamp " << timestamp;
 		const time_t libc_timestamp = static_cast<time_t>(timestamp);
-		ASSERT_EQ(static_cast<s64_t>(libc_timestamp), timestamp) << "time_t cannot represent timestamp " << timestamp;
 
 		struct tm libc_calendar = {};
 		ASSERT_NE(gmtime_r(&libc_timestamp, &libc_calendar), nullptr) << "gmtime_r failed for timestamp " << timestamp;
@@ -340,21 +362,25 @@ namespace
 		};
 
 		for(const s64_t timestamp : TIMESTAMPS)
-			ExpectGregorianCalendarMatchesGlibc(timestamp);
+			if(IsRepresentableAsTimeT(timestamp))
+				ExpectGregorianCalendarMatchesGlibc(timestamp);
 	}
 
 	TEST(system_time, TCalendar_GlibcGregorianDailyAgreement)
 	{
-		const s64_t start = static_cast<s64_t>(MakeGlibcUtcTime(1582, 10, 15));
-		const s64_t end = static_cast<s64_t>(MakeGlibcUtcTime(2401, 1, 1));
+		const s64_t start = TCalendar(1582, 10, 15).ConvertToTime().Seconds();
+		const s64_t end = TCalendar(2401, 1, 1).ConvertToTime().Seconds();
 		static constexpr s64_t SECONDS_PER_POSIX_DAY = 86400;
 
 		s64_t day_index = 0;
 		for(s64_t day = start; day < end; day += SECONDS_PER_POSIX_DAY, day_index++)
 		{
-			// Exercise a different time-of-day on each day while still checking every civil date.
+			// Exercise a different time-of-day on each day while still checking every civil date
+			// that can be represented by the platform's time_t.
 			const s64_t second_of_day = (day_index * 7919LL) % SECONDS_PER_POSIX_DAY;
-			ExpectGregorianCalendarMatchesGlibc(day + second_of_day);
+			const s64_t timestamp = day + second_of_day;
+			if(IsRepresentableAsTimeT(timestamp))
+				ExpectGregorianCalendarMatchesGlibc(timestamp);
 		}
 	}
 
@@ -362,6 +388,9 @@ namespace
 	{
 		const TCalendar last_julian(1582, 10, 4);
 		const s64_t timestamp = last_julian.ConvertToTime().Seconds();
+		if(!IsRepresentableAsTimeT(timestamp))
+			GTEST_SKIP() << "time_t cannot represent dates around the Gregorian reform";
+
 		const time_t libc_timestamp = static_cast<time_t>(timestamp);
 		struct tm libc_calendar = {};
 		ASSERT_NE(gmtime_r(&libc_timestamp, &libc_calendar), nullptr);
