@@ -16,31 +16,34 @@ namespace el1::dev::gnss::nmea
 		bool valid = false;
 		double latitude_deg = 0.0;
 		double longitude_deg = 0.0;
-		double altitude_m = 0.0;
-		double speed_mps = -1.0;
-		double heading_deg = -1.0;
-		double horizontal_dop = 0.0;
-		u32_t satellites = 0;
-		bool has_altitude = false;
-		bool has_speed = false;
-		bool has_heading = false;
-		bool has_horizontal_dop = false;
+		std::optional<double> altitude_m;
+		std::optional<double> speed_mps;
+		std::optional<double> heading_deg;
+		std::optional<double> horizontal_dop;
+		std::optional<u32_t> satellites;
 	};
 
 	class TParser
 	{
 		private:
-			TString line;
 			TFix fix;
 
-			static std::optional<double> parseCoordinate(TStringView value, TStringView hemisphere);
-			std::optional<TFix> parseSentence(TStringView sentence);
-
 		public:
+			using TIn = TString;
+			using TOut = TFix;
+
 			static constexpr usys_t MAX_SENTENCE_LENGTH = 1024;
 
-			std::optional<TFix> feedByte(byte_t byte);
-			std::optional<TFix> feedSentence(TStringView sentence);
-			const TFix& currentFix() const EL_GETTER { return fix; }
+			std::optional<TFix> parseSentence(TStringView sentence);
+
+			template<typename TSourceStream>
+			TFix* NextItem(TSourceStream* const source)
+			{
+				const TString* sentence;
+				while((sentence = source->NextItem()) != nullptr)
+					if(parseSentence(*sentence).has_value())
+						return &fix;
+				return nullptr;
+			}
 	};
 }
