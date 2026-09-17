@@ -1,6 +1,6 @@
 #include "io_text_string.hpp"
 #include "io_text_encoding_utf8.hpp"
-#include "io_bcd.hpp"
+#include "io_text_number.hpp"
 #include <string.h>
 #include <iostream>
 #include <math.h>
@@ -139,90 +139,16 @@ namespace el1::io::text::string
 
 	double TStringView::ToDouble() const
 	{
-		EL_ERROR(Length() == 0, TInvalidArgumentException, "str", "empty string cannot be parsed as double");
-
-		double number = 0.0;
-		double divider = 10.0;
-		u8_t integer_part[22];
-		bool parse_int = true;
-		bool negative = false;
-		unsigned ii = 0;
-
-		for(usys_t i = 0; i < Length(); i++)
-		{
-			const char32_t chr = (*this)[i];
-			if(chr == '-' && parse_int && ii == 0 && !negative)
-			{
-				negative = true;
-			}
-			else if(chr == '.' && parse_int)
-			{
-				parse_int = false;
-			}
-			else if(chr >= '0' && chr <= '9')
-			{
-				if(parse_int)
-				{
-					EL_ERROR(ii >= sizeof(integer_part), TException, U"number integer-part is too big");
-					integer_part[ii++] = static_cast<u8_t>(chr - '0');
-				}
-				else
-				{
-					number += (chr - '0') / divider;
-					divider *= 10.0;
-				}
-			}
-			else
-			{
-				EL_THROW(TException, TString::Format(U"encountered non-numeric character '%c' at index %d", chr, i));
-			}
-		}
-
-		u64_t m = 1;
-		for(usys_t i = ii; i > 0; i--)
-		{
-			number += m * integer_part[i - 1];
-			m *= 10;
-		}
-
-		return negative ? -number : number;
+		const auto value = number::TryParseDecimal<double>(*this);
+		EL_ERROR(!value.has_value(), TInvalidArgumentException, "str", "string is not a valid decimal number");
+		return *value;
 	}
 
 	s64_t TStringView::ToInteger() const
 	{
-		EL_ERROR(Length() == 0, TInvalidArgumentException, "str", "empty string cannot be parsed as integer");
-
-		u8_t integer_part[22];
-		bool negative = false;
-		unsigned ii = 0;
-
-		for(usys_t i = 0; i < Length(); i++)
-		{
-			const char32_t chr = (*this)[i];
-			if(chr == '-' && ii == 0 && !negative)
-			{
-				negative = true;
-			}
-			else if(chr >= '0' && chr <= '9')
-			{
-				EL_ERROR(ii >= sizeof(integer_part), TException, U"number integer-part is too big");
-				integer_part[ii++] = static_cast<u8_t>(chr - '0');
-			}
-			else
-			{
-				EL_THROW(TException, TString::Format(U"encountered non-numeric character '%c' at index %d", chr, i));
-			}
-		}
-
-		s64_t number = 0;
-		u64_t m = 1;
-		for(usys_t i = ii; i > 0; i--)
-		{
-			number += m * integer_part[i - 1];
-			m *= 10;
-		}
-
-		return negative ? -number : number;
+		const auto value = number::TryParseInteger<s64_t>(*this);
+		EL_ERROR(!value.has_value(), TInvalidArgumentException, "str", "string is not a valid decimal integer");
+		return *value;
 	}
 
 	bool TStringView::operator==(const TStringView rhs) const

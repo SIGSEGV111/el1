@@ -623,16 +623,14 @@ namespace el1::io::format::json
 
 	u16_t TJsonParser::ConvertCodeUnit(const TStringView token)
 	{
-		TStringViewTextReader reader(token);
-		u16_t value = 0;
-		reader.Scan(U"%x", value);
-		EL_ERROR(reader.Ensure(1), TLogicException);
-		return value;
+		const auto value = text::number::TryParseHex<u16_t>(token);
+		EL_ERROR(!value.has_value(), TLogicException);
+		return *value;
 	}
 
 	std::optional<TJsonValue> TJsonParser::ConvertNumber(const TStringView token)
 	{
-		const auto value = text::scan::ParseNumber<double>(token, 10);
+		const auto value = text::number::TryParseNumber<double>(token, 10, true);
 		return value ? std::optional<TJsonValue>(TJsonValue(*value)) : std::nullopt;
 	}
 
@@ -642,10 +640,10 @@ namespace el1::io::format::json
 		{
 			if(token[0] == U'-')
 			{
-				if(const auto value = text::scan::ParseNumber<s64_t>(token, 10))
+				if(const auto value = text::number::TryParseInteger<s64_t>(token))
 					return TJsonValue(*value);
 			}
-			else if(const auto value = text::scan::ParseNumber<u64_t>(token, 10))
+			else if(const auto value = text::number::TryParseInteger<u64_t>(token))
 			{
 				return TJsonValue(*value);
 			}

@@ -37,7 +37,6 @@ namespace el1::dev::obd2::elm327
 			void FlushInput();
 			void ExpectOk(const io::text::string::TStringView command);
 			static void AppendHexLine(io::text::string::TString& hex, const io::text::string::TStringView line);
-			static u8_t DecodeHexDigit(const char32_t character);
 
 		public:
 			TELM327(io::stream::IBinarySource& source, io::stream::IBinarySink& sink, const system::time::TTime command_timeout = 5);

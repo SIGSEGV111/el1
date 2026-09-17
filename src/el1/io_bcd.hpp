@@ -42,6 +42,22 @@ namespace el1::io::bcd
 		NOT_A_NUMBER
 	};
 
+	constexpr unsigned DigitValue(const char32_t chr) noexcept
+	{
+		if(chr >= U'0' && chr <= U'9') return (unsigned)(chr - U'0');
+		if(chr >= U'a' && chr <= U'z') return 10U + (unsigned)(chr - U'a');
+		if(chr >= U'A' && chr <= U'Z') return 10U + (unsigned)(chr - U'A');
+		return 255U;
+	}
+
+	constexpr unsigned DigitValue(const char32_t chr, const io::collection::array::array_t<const char32_t> digits) noexcept
+	{
+		for(usys_t i = 0; i < digits.Count(); i++)
+			if(digits.Data()[i] == chr)
+				return (unsigned)i;
+		return 256U;
+	}
+
 	namespace detail
 	{
 		template<typename T, bool IS_ENUM = std::is_enum_v<T>>
@@ -49,14 +65,6 @@ namespace el1::io::bcd
 
 		template<typename T>
 		struct TIntegerValueType<T, true> { using type = std::underlying_type_t<T>; };
-
-		constexpr unsigned MSDDigitValue(const char32_t chr) noexcept
-		{
-			if(chr >= U'0' && chr <= U'9') return (unsigned)(chr - U'0');
-			if(chr >= U'a' && chr <= U'z') return 10U + (unsigned)(chr - U'a');
-			if(chr >= U'A' && chr <= U'Z') return 10U + (unsigned)(chr - U'A');
-			return 255U;
-		}
 
 		struct TBinaryFloatParts
 		{
@@ -830,6 +838,69 @@ namespace el1::io::bcd
 
 			double ToDouble() const EL_GETTER;
 
+			template<typename T>
+			requires std::is_integral_v<T>
+			bool TryToInteger(T& out) const noexcept
+			{
+				if(!IsFinite())
+					return false;
+				for(usys_t i = 0; i < n_decimal; i++)
+					if(Digit(-(ssys_t)i - 1) != 0)
+						return false;
+
+				if constexpr(std::same_as<std::remove_cv_t<T>, bool>)
+				{
+					if(IsNegative())
+						return false;
+					unsigned magnitude = 0;
+					for(usys_t i = n_integer; i > 0; i--)
+					{
+						const unsigned digit = (unsigned)Digit((ssys_t)i - 1);
+						if(digit > 1U || magnitude != 0U)
+							return false;
+						magnitude = digit;
+					}
+					out = magnitude != 0U;
+					return true;
+				}
+				else
+				{
+					using unsigned_t = std::make_unsigned_t<T>;
+					if constexpr(!std::is_signed_v<T>)
+						if(IsNegative())
+							return false;
+
+					const bool negative = std::is_signed_v<T> && IsNegative();
+					const unsigned_t limit = [&]() -> unsigned_t
+					{
+						if constexpr(std::is_signed_v<T>)
+							return negative
+								? (unsigned_t)0 - (unsigned_t)std::numeric_limits<T>::min()
+								: (unsigned_t)std::numeric_limits<T>::max();
+						else
+							return std::numeric_limits<T>::max();
+					}();
+
+					unsigned_t magnitude = 0;
+					const unsigned_t radix = (unsigned_t)Radix();
+					for(usys_t i = n_integer; i > 0; i--)
+					{
+						const unsigned_t digit = (unsigned_t)Digit((ssys_t)i - 1);
+						if(digit > limit || magnitude > (limit - digit) / radix)
+							return false;
+						magnitude = magnitude * radix + digit;
+					}
+
+					if constexpr(std::is_signed_v<T>)
+						out = negative
+							? (magnitude == limit ? std::numeric_limits<T>::min() : (T)-(T)magnitude)
+							: (T)magnitude;
+					else
+						out = (T)magnitude;
+					return true;
+				}
+			}
+
 			// Removes the decimal digits and only returns the integer part.
 			s64_t ToSignedInt() const EL_GETTER;
 			u64_t ToUnsignedInt() const EL_GETTER;
@@ -928,7 +999,7 @@ namespace el1::io::bcd
 
 				auto parse_digit = [&](const usys_t i, unsigned& digit) -> bool
 				{
-					digit = detail::MSDDigitValue(str[i]);
+					digit = DigitValue(str[i]);
 					return digit < radix;
 				};
 

@@ -7,6 +7,7 @@
 #include "io_text_encoding.hpp"
 #include "io_text_encoding_utf8.hpp"
 #include "io_text_format.hpp"
+#include "io_text_number.hpp"
 #include "io_text_parser.hpp"
 #include "io_text_scan.hpp"
 #include "io_text_string.hpp"

@@ -3,9 +3,8 @@
 #include "io_text_format.hpp"
 #include "io_text_parser.hpp"
 #include "io_text_string.hpp"
-#include "io_bcd.hpp"
+#include "io_text_number.hpp"
 
-#include <cmath>
 #include <limits>
 #include <optional>
 #include <tuple>
@@ -76,14 +75,6 @@ namespace el1::io::text::scan
 			char32_t chr;
 			while(detail::At(input, pos, chr) && IsWhitespace(chr))
 				pos++;
-		}
-
-		constexpr int DigitValue(const char32_t chr) noexcept
-		{
-			if(chr >= U'0' && chr <= U'9') return (int)(chr - U'0');
-			if(chr >= U'a' && chr <= U'f') return 10 + (int)(chr - U'a');
-			if(chr >= U'A' && chr <= U'F') return 10 + (int)(chr - U'A');
-			return -1;
 		}
 
 		struct TNumericScannerBase
@@ -184,7 +175,7 @@ namespace el1::io::text::scan
 			bool have_decimal = false;
 			while(within(p) && detail::At(input, p, chr))
 			{
-				const int digit = DigitValue(chr);
+				const int digit = number::DigitValue(chr);
 				if(digit >= 0 && (unsigned)digit < radix)
 				{
 					have_digit = true;
@@ -209,7 +200,7 @@ namespace el1::io::text::scan
 					p++;
 
 				bool have_exponent_digit = false;
-				while(within(p) && detail::At(input, p, chr) && chr >= U'0' && chr <= U'9')
+				while(within(p) && detail::At(input, p, chr) && number::IsDigit(chr, 10))
 				{
 					have_exponent_digit = true;
 					p++;
@@ -223,65 +214,19 @@ namespace el1::io::text::scan
 			return input.Capture(field_begin, p);
 		}
 
-		template<typename T>
-		requires (std::is_integral_v<T> || std::is_enum_v<T>)
-		std::optional<T> TokenToInteger(const string::TStringView token, const unsigned radix)
-		{
-			T result;
-			bool ok;
-			switch(radix)
-			{
-				case 2: ok = bcd::TBCD::ParseIntegerMSD<T, 2>(token, result); break;
-				case 8: ok = bcd::TBCD::ParseIntegerMSD<T, 8>(token, result); break;
-				case 10: ok = bcd::TBCD::ParseIntegerMSD<T, 10>(token, result); break;
-				case 16: ok = bcd::TBCD::ParseIntegerMSD<T, 16>(token, result); break;
-				default: return std::nullopt;
-			}
-			if(!ok)
-				return std::nullopt;
-			return result;
-		}
-
 		inline bcd::TBCD TokenToBCD(const string::TStringView token, const unsigned radix)
 		{
 			EL_ERROR(radix < 2 || radix > 36, error::TLogicException);
 			return bcd::TBCD::FromStringMSD(token, (bcd::digit_t)radix);
 		}
 
-		template<typename T>
-		requires std::is_floating_point_v<T>
-		std::optional<T> TokenToFloating(const string::TStringView token)
-		{
-			try
-			{
-				const T result = (T)bcd::TBCD::ParseDoubleMSD(token, 10, 0, true);
-				if(!std::isfinite(result))
-					return std::nullopt;
-				return result;
-			}
-			catch(const error::IException&)
-			{
-				return std::nullopt;
-			}
-		}
-
 	}
 
 	template<typename T>
 	requires (((std::is_integral_v<T> && !format::detail::IsCharacterType<T>) || std::is_enum_v<T>) || std::is_floating_point_v<T>)
-	std::optional<T> ParseNumber(const string::TStringView token, const unsigned radix = 10)
+	std::optional<T> ParseNumber(const string::TStringView token, const unsigned radix = 10) noexcept
 	{
-		if constexpr(std::is_floating_point_v<T>)
-		{
-			if(radix == 10)
-				return detail::TokenToFloating<T>(token);
-			try { return (T)bcd::TBCD::ParseDoubleMSD(token, (bcd::digit_t)radix); }
-			catch(const error::IException&) { return std::nullopt; }
-		}
-		else
-		{
-			return detail::TokenToInteger<T>(token, radix);
-		}
+		return number::TryParseNumber<T>(token, radix, true);
 	}
 
 	template<typename T>

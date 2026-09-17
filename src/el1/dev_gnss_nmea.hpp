@@ -34,15 +34,15 @@ namespace el1::dev::gnss::nmea
 
 			static constexpr usys_t MAX_SENTENCE_LENGTH = 1024;
 
-			std::optional<TFix> parseSentence(TStringView sentence);
+			TFix* parseSentence(TStringView sentence);
 
 			template<typename TSourceStream>
 			TFix* NextItem(TSourceStream* const source)
 			{
 				const TString* sentence;
 				while((sentence = source->NextItem()) != nullptr)
-					if(parseSentence(*sentence).has_value())
-						return &fix;
+					if(TFix* const parsed = parseSentence(*sentence))
+						return parsed;
 				return nullptr;
 			}
 	};

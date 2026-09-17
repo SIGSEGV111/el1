@@ -1651,7 +1651,7 @@ namespace el1::io::bcd
 				const char32_t chr = str[i - 1U];
 				if(chr == decimal_seperator)
 					continue;
-				const digit_t value = (digit_t)detail::MSDDigitValue(chr);
+				const digit_t value = (digit_t)DigitValue(chr);
 				result.DigitsPointer()[output++] = value;
 				if(value != 0)
 					result.is_zero = 0;
@@ -1707,7 +1707,7 @@ namespace el1::io::bcd
 				const char32_t chr = str[i - 1U];
 				if(chr == decimal_seperator)
 					continue;
-				const digit_t value = (digit_t)detail::MSDDigitValue(chr);
+				const digit_t value = (digit_t)DigitValue(chr);
 				if(output < n_integer_digits + n_decimal_digits)
 					result.DigitsPointer()[output] = value;
 				output++;
@@ -1755,7 +1755,7 @@ namespace el1::io::bcd
 				after_decimal = true;
 				continue;
 			}
-			value = value * radix + detail::MSDDigitValue(chr);
+			value = value * radix + DigitValue(chr);
 			(after_decimal ? source_decimal : source_integer)++;
 		}
 
@@ -1772,7 +1772,7 @@ namespace el1::io::bcd
 			usys_t exponent = 0;
 			for(usys_t i = exponent_begin; i < str.Length(); i++)
 			{
-				const unsigned digit = (unsigned)(str[i] - U'0');
+				const unsigned digit = DigitValue(str[i]);
 				if(exponent > (MAX_PRECISION - util::Min<usys_t>(digit, MAX_PRECISION)) / 10U)
 					return std::numeric_limits<double>::quiet_NaN();
 				exponent = exponent * 10U + digit;

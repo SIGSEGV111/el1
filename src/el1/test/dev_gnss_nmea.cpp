@@ -18,7 +18,7 @@ namespace
 		TParser parser;
 
 		const auto gga = parser.parseSentence(U"$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47");
-		ASSERT_TRUE(gga.has_value());
+		ASSERT_NE(gga, nullptr);
 		EXPECT_TRUE(gga->valid);
 		EXPECT_NEAR(gga->latitude_deg, 48.1173, 1e-6);
 		EXPECT_NEAR(gga->longitude_deg, 11.516666667, 1e-6);
@@ -30,7 +30,7 @@ namespace
 		EXPECT_NEAR(*gga->altitude_m, 545.4, 1e-9);
 
 		const auto rmc = parser.parseSentence(U"$GPRMC,123519,A,4807.038,N,01131.000,E,022.4,084.4,230394,003.1,W*6A");
-		ASSERT_TRUE(rmc.has_value());
+		ASSERT_NE(rmc, nullptr);
 		EXPECT_TRUE(rmc->valid);
 		EXPECT_NEAR(rmc->latitude_deg, 48.1173, 1e-6);
 		EXPECT_NEAR(rmc->longitude_deg, 11.516666667, 1e-6);
@@ -45,7 +45,7 @@ namespace
 	TEST(dev_gnss_nmea, RejectsBadChecksum)
 	{
 		TParser parser;
-		EXPECT_FALSE(parser.parseSentence(U"$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*00").has_value());
+		EXPECT_EQ(parser.parseSentence(U"$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*00"), nullptr);
 	}
 
 	TEST(dev_gnss_nmea, GnTalkerFromAndroid)
@@ -53,7 +53,7 @@ namespace
 		TParser parser;
 
 		const auto gga = parser.parseSentence(U"$GNGGA,065612.000,7057.9677,N,02420.5912,E,1,32,0.4,12.1,M,25.4,M,,*71");
-		ASSERT_TRUE(gga.has_value());
+		ASSERT_NE(gga, nullptr);
 		EXPECT_TRUE(gga->valid);
 		EXPECT_NEAR(gga->latitude_deg, 70.966128333, 1e-6);
 		EXPECT_NEAR(gga->longitude_deg, 24.343186667, 1e-6);
@@ -65,7 +65,7 @@ namespace
 		EXPECT_EQ(*gga->satellites, 32U);
 
 		const auto rmc = parser.parseSentence(U"$GNRMC,065612.000,A,7057.9677,N,02420.5912,E,12.1,229.2,130926,,,A*41");
-		ASSERT_TRUE(rmc.has_value());
+		ASSERT_NE(rmc, nullptr);
 		ASSERT_TRUE(rmc->speed_mps.has_value());
 		EXPECT_NEAR(*rmc->speed_mps, 6.224777778, 1e-6);
 		ASSERT_TRUE(rmc->heading_deg.has_value());
@@ -77,12 +77,12 @@ namespace
 		TParser parser;
 
 		const auto void_rmc = parser.parseSentence(U"$GNRMC,065612.000,V,,,,,,,130926,,,N");
-		ASSERT_TRUE(void_rmc.has_value());
+		ASSERT_NE(void_rmc, nullptr);
 		EXPECT_FALSE(void_rmc->valid);
 
-		EXPECT_FALSE(parser.parseSentence(U"$GNGGA,065612.000,9960.0000,N,02420.5912,E,1,32,0.4,12.1,M,25.4,M,,").has_value());
-		EXPECT_FALSE(parser.parseSentence(U"$GPGSV,1,1,01,01,45,180,40").has_value());
-		EXPECT_FALSE(parser.parseSentence(U"garbage$GPGGA,000000,4807.038,N,01131.000,E,1,08,0.9,545.4").has_value());
+		EXPECT_EQ(parser.parseSentence(U"$GNGGA,065612.000,9960.0000,N,02420.5912,E,1,32,0.4,12.1,M,25.4,M,,"), nullptr);
+		EXPECT_EQ(parser.parseSentence(U"$GPGSV,1,1,01,01,45,180,40"), nullptr);
+		EXPECT_EQ(parser.parseSentence(U"garbage$GPGGA,000000,4807.038,N,01131.000,E,1,08,0.9,545.4"), nullptr);
 	}
 
 	TEST(dev_gnss_nmea, CoordinateValidation)
@@ -90,23 +90,23 @@ namespace
 		TParser parser;
 
 		const auto edge = parser.parseSentence(U"$GPGGA,000000,9000.000,N,18000.000,E,1,01,,");
-		ASSERT_TRUE(edge.has_value());
+		ASSERT_NE(edge, nullptr);
 		EXPECT_DOUBLE_EQ(edge->latitude_deg, 90.0);
 		EXPECT_DOUBLE_EQ(edge->longitude_deg, 180.0);
 
-		EXPECT_FALSE(parser.parseSentence(U"$GPGGA,000000,9000.001,N,18000.000,E,1,01,,").has_value());
-		EXPECT_FALSE(parser.parseSentence(U"$GPGGA,000000,9000.000,N,18000.001,E,1,01,,").has_value());
-		EXPECT_FALSE(parser.parseSentence(U"$GPGGA,000000,4807.038,E,01131.000,E,1,08,0.9,545.4").has_value());
-		EXPECT_FALSE(parser.parseSentence(U"$GPGGA,000000,4807.038,N,01131.000,N,1,08,0.9,545.4").has_value());
+		EXPECT_EQ(parser.parseSentence(U"$GPGGA,000000,9000.001,N,18000.000,E,1,01,,"), nullptr);
+		EXPECT_EQ(parser.parseSentence(U"$GPGGA,000000,9000.000,N,18000.001,E,1,01,,"), nullptr);
+		EXPECT_EQ(parser.parseSentence(U"$GPGGA,000000,4807.038,E,01131.000,E,1,08,0.9,545.4"), nullptr);
+		EXPECT_EQ(parser.parseSentence(U"$GPGGA,000000,4807.038,N,01131.000,N,1,08,0.9,545.4"), nullptr);
 	}
 
 	TEST(dev_gnss_nmea, RejectsMalformedFields)
 	{
 		TParser parser;
 
-		EXPECT_FALSE(parser.parseSentence(U"$GPGGA,123519,4807.038,N,01131.000,E,1,4294967296,0.9,545.4").has_value());
-		EXPECT_FALSE(parser.parseSentence(U"$GPRMC,123519,A,4807.038,N,01131.000,E,22.,084.4").has_value());
-		EXPECT_FALSE(parser.parseSentence(U"$GPRMC,123519,A,4807.038,N,01131.000,E,22.4,084.4\n,trailing").has_value());
+		EXPECT_EQ(parser.parseSentence(U"$GPGGA,123519,4807.038,N,01131.000,E,1,4294967296,0.9,545.4"), nullptr);
+		EXPECT_EQ(parser.parseSentence(U"$GPRMC,123519,A,4807.038,N,01131.000,E,22.,084.4"), nullptr);
+		EXPECT_EQ(parser.parseSentence(U"$GPRMC,123519,A,4807.038,N,01131.000,E,22.4,084.4\n,trailing"), nullptr);
 	}
 
 	TEST(dev_gnss_nmea, StreamPipeline)

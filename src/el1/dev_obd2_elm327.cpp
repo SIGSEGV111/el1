@@ -1,5 +1,6 @@
 #include "dev_obd2_elm327.hpp"
 #include "error.hpp"
+#include "io_text_number.hpp"
 
 namespace el1::dev::obd2::elm327
 {
@@ -18,7 +19,7 @@ namespace el1::dev::obd2::elm327
 
 		bool IsHexDigit(const char32_t character)
 		{
-			return (character >= '0' && character <= '9') || (character >= 'A' && character <= 'F');
+			return io::text::number::IsDigit(character, 16);
 		}
 	}
 
@@ -220,14 +221,6 @@ namespace el1::dev::obd2::elm327
 			ExpectOk(command);
 	}
 
-	u8_t TELM327::DecodeHexDigit(const char32_t character)
-	{
-		if(character >= '0' && character <= '9')
-			return static_cast<u8_t>(character - '0');
-		EL_ERROR(character < 'A' || character > 'F', TInvalidArgumentException, "hex digit", "invalid hexadecimal character");
-		return static_cast<u8_t>(character - 'A' + 10);
-	}
-
 	void TELM327::AppendHexLine(TString& hex, const TStringView line)
 	{
 		usys_t start = 0;
@@ -277,7 +270,11 @@ namespace el1::dev::obd2::elm327
 		const usys_t data_position = marker_position + marker.Length();
 		TList<u8_t> data((hex.Length() - data_position) / 2);
 		for(usys_t i = data_position; i + 1 < hex.Length(); i += 2)
-			data.Append(static_cast<u8_t>((DecodeHexDigit(hex[i]) << 4) | DecodeHexDigit(hex[i + 1])));
+		{
+			const auto value = io::text::number::TryParseHex<u8_t>(hex.View().SliceSL(i, 2));
+			EL_ERROR(!value.has_value(), TLogicException);
+			data.Append(*value);
+		}
 		return data;
 	}
 

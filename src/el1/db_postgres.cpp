@@ -5,11 +5,10 @@
 #include "io_format_json.hpp"
 #include "io_path.hpp"
 #include "io_text_encoding_utf8.hpp"
+#include "io_text_number.hpp"
 #include "error.hpp"
 #include <atomic>
-#include <cerrno>
 #include <cstring>
-#include <cstdlib>
 #include <endian.h>
 #include <limits>
 #include <memory>
@@ -453,11 +452,10 @@ namespace el1::db::postgres
 
 	static oid_t ParseOid(const char* const oid_text)
 	{
-		char* oid_end = nullptr;
-		errno = 0;
-		const unsigned long parsed_oid = strtoul(oid_text, &oid_end, 10);
-		EL_ERROR(errno != 0 || oid_end == oid_text || *oid_end != 0 || parsed_oid > std::numeric_limits<oid_t>::max(), TLogicException);
-		return (oid_t)parsed_oid;
+		const TString text(oid_text);
+		const auto oid = io::text::number::TryParseInteger<oid_t>(text);
+		EL_ERROR(!oid.has_value(), TLogicException);
+		return *oid;
 	}
 
 	TTypeMap TTypeMap::LoadTypeMap(TPostgresConnection& conn, const TCodecRegistry& registry)

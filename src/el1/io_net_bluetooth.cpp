@@ -1,6 +1,6 @@
 #include "io_net_bluetooth.hpp"
 #include "error.hpp"
-#include <cstdio>
+#include "io_text_number.hpp"
 #include <cstring>
 
 namespace el1::io::net::bluetooth
@@ -48,40 +48,32 @@ namespace el1::io::net::bluetooth
 
 	TUuid::TUuid(const TStringView uuid) : octet{}
 	{
-		const std::unique_ptr<char[]> text = uuid.MakeCStr();
-		u32_t values[16] = {};
-		int consumed = 0;
-
 		if(uuid.Length() == 4)
 		{
-			u32_t value = 0;
-			const int count = ::sscanf(text.get(), "%4x%n", &value, &consumed);
-			EL_ERROR(count != 1 || consumed != 4, TInvalidArgumentException, "uuid", "must be a 16/32/128-bit Bluetooth UUID");
-			*this = TUuid(static_cast<u16_t>(value));
+			const auto value = text::number::TryParseHex<u16_t>(uuid);
+			EL_ERROR(!value.has_value(), TInvalidArgumentException, "uuid", "must be a 16/32/128-bit Bluetooth UUID");
+			*this = TUuid(*value);
 			return;
 		}
 
 		if(uuid.Length() == 8)
 		{
-			u32_t value = 0;
-			const int count = ::sscanf(text.get(), "%8x%n", &value, &consumed);
-			EL_ERROR(count != 1 || consumed != 8, TInvalidArgumentException, "uuid", "must be a 16/32/128-bit Bluetooth UUID");
-			*this = TUuid(value);
+			const auto value = text::number::TryParseHex<u32_t>(uuid);
+			EL_ERROR(!value.has_value(), TInvalidArgumentException, "uuid", "must be a 16/32/128-bit Bluetooth UUID");
+			*this = TUuid(*value);
 			return;
 		}
 
-		const int count = ::sscanf(
-			text.get(),
-			"%2x%2x%2x%2x-%2x%2x-%2x%2x-%2x%2x-%2x%2x%2x%2x%2x%2x%n",
-			&values[0], &values[1], &values[2], &values[3],
-			&values[4], &values[5], &values[6], &values[7],
-			&values[8], &values[9], &values[10], &values[11],
-			&values[12], &values[13], &values[14], &values[15],
-			&consumed
-		);
-		EL_ERROR(count != 16 || consumed != static_cast<int>(uuid.Length()), TInvalidArgumentException, "uuid", "must be a 16/32/128-bit Bluetooth UUID");
+		static constexpr usys_t OCTET_POSITIONS[16] = { 0, 2, 4, 6, 9, 11, 14, 16, 19, 21, 24, 26, 28, 30, 32, 34 };
+		EL_ERROR(uuid.Length() != 36 || uuid[8] != U'-' || uuid[13] != U'-' || uuid[18] != U'-' || uuid[23] != U'-',
+			TInvalidArgumentException, "uuid", "must be a 16/32/128-bit Bluetooth UUID");
+
 		for(usys_t i = 0; i < 16; i++)
-			octet[i] = static_cast<byte_t>(values[i]);
+		{
+			const auto value = text::number::TryParseHex<byte_t>(uuid.SliceSL(OCTET_POSITIONS[i], 2));
+			EL_ERROR(!value.has_value(), TInvalidArgumentException, "uuid", "must be a 16/32/128-bit Bluetooth UUID");
+			octet[i] = *value;
+		}
 	}
 
 	TUuid::operator TString() const
@@ -200,17 +192,15 @@ namespace el1::io::net::bluetooth
 
 	address_t::address_t(const TStringView address) : octet{}
 	{
-		auto c_str = address.MakeCStr();
-		u32_t parsed[6] = {};
-		int consumed = 0;
-		const int count = ::sscanf(
-			c_str.get(),
-			"%2x:%2x:%2x:%2x:%2x:%2x%n",
-			&parsed[0], &parsed[1], &parsed[2], &parsed[3], &parsed[4], &parsed[5], &consumed
-		);
-		EL_ERROR(count != 6 || consumed != static_cast<int>(::strlen(c_str.get())), TInvalidArgumentException, "address", "must use XX:XX:XX:XX:XX:XX format");
+		EL_ERROR(address.Length() != 17 || address[2] != U':' || address[5] != U':' || address[8] != U':' ||
+			address[11] != U':' || address[14] != U':', TInvalidArgumentException, "address", "must use XX:XX:XX:XX:XX:XX format");
+
 		for(usys_t i = 0; i < 6; i++)
-			octet[i] = static_cast<byte_t>(parsed[i]);
+		{
+			const auto value = text::number::TryParseHex<byte_t>(address.SliceSL(i * 3, 2));
+			EL_ERROR(!value.has_value(), TInvalidArgumentException, "address", "must use XX:XX:XX:XX:XX:XX format");
+			octet[i] = *value;
+		}
 	}
 
 	address_t::operator TString() const

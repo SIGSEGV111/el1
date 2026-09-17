@@ -1,7 +1,7 @@
 #include "io_net_eth.hpp"
 #include "io_text_string.hpp"
+#include "io_text_number.hpp"
 #include "error.hpp"
-#include <stdio.h>
 
 namespace el1::io::net::eth
 {
@@ -17,6 +17,14 @@ namespace el1::io::net::eth
 
 	TMAC::TMAC(const text::string::TStringView str)
 	{
-		EL_ERROR(sscanf(str.MakeCStr().get(), "%hhx:%hhx:%hhx:%hhx:%hhx:%hhx", octets + 0, octets + 1, octets + 2, octets + 3, octets + 4, octets + 5) != 6, TException, TString::Format(U"invalid MAC-address %q", str));
+		EL_ERROR(str.Length() != 17 || str[2] != U':' || str[5] != U':' || str[8] != U':' || str[11] != U':' || str[14] != U':',
+			TException, TString::Format(U"invalid MAC-address %q", str));
+
+		for(usys_t i = 0; i < 6; i++)
+		{
+			const auto value = text::number::TryParseHex<byte_t>(str.SliceSL(i * 3, 2));
+			EL_ERROR(!value.has_value(), TException, TString::Format(U"invalid MAC-address %q", str));
+			octets[i] = *value;
+		}
 	}
 }

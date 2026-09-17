@@ -1,5 +1,6 @@
 #include "dev_w1.hpp"
 #include "io_text_string.hpp"
+#include "io_text_number.hpp"
 #include <string.h>
 
 namespace el1::dev::w1
@@ -72,22 +73,12 @@ namespace el1::dev::w1
 			|| text[11] != ':' || text[14] != ':' || text[17] != ':' || text[20] != '|',
 			TInvalidArgumentException, "text", "invalid 1-wire ROM; expected xx|xx:xx:xx:xx:xx:xx|xx");
 
-		const auto parse_hex_nibble = [](const u32_t code) -> u8_t
-		{
-			if(code >= '0' && code <= '9')
-				return static_cast<u8_t>(code - '0');
-			if(code >= 'a' && code <= 'f')
-				return static_cast<u8_t>(code - 'a' + 10);
-			if(code >= 'A' && code <= 'F')
-				return static_cast<u8_t>(code - 'A' + 10);
-			EL_THROW(TInvalidArgumentException, "text", "1-wire ROM contains a non-hexadecimal digit");
-		};
-
 		u8_t values[8];
 		for(usys_t i = 0; i < sizeof(values); i++)
 		{
-			const usys_t pos = OCTET_POSITIONS[i];
-			values[i] = static_cast<u8_t>((parse_hex_nibble(text[pos]) << 4) | parse_hex_nibble(text[pos + 1]));
+			const auto value = io::text::number::TryParseHex<u8_t>(text.SliceSL(OCTET_POSITIONS[i], 2));
+			EL_ERROR(!value.has_value(), TInvalidArgumentException, "text", "1-wire ROM contains a non-hexadecimal digit");
+			values[i] = *value;
 		}
 
 		uuid_t uuid;

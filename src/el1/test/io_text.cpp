@@ -371,6 +371,52 @@ namespace
 		EXPECT_EQ(hex_overflow.CharacterIndex(), (iosize_t)0);
 	}
 
+	TEST(io_text, NumberConversionUsesBcdBackend)
+	{
+		const auto hexadecimal = number::TryParseHex<u16_t>(U"fFfF");
+		ASSERT_TRUE(hexadecimal);
+		EXPECT_EQ(*hexadecimal, 0xffffu);
+		EXPECT_FALSE(number::TryParseHex<u8_t>(U"100"));
+		EXPECT_FALSE(number::TryParseHex<u8_t>(U"fg"));
+
+		const auto decimal = number::TryParseDecimal<double>(U"-12.5");
+		ASSERT_TRUE(decimal);
+		EXPECT_DOUBLE_EQ(*decimal, -12.5);
+		EXPECT_FALSE(number::TryParseDecimal<double>(U"12.5x"));
+
+		const auto scientific = number::TryParseDecimal<double>(U"+.5e2", true);
+		ASSERT_TRUE(scientific);
+		EXPECT_DOUBLE_EQ(*scientific, 50.0);
+	}
+
+	TEST(io_text, NumberConversionSupportsCustomDigitSet)
+	{
+		constexpr TStringView ARABIC_INDIC_DIGITS = U"٠١٢٣٤٥٦٧٨٩";
+		EXPECT_EQ(number::DigitValue(U'٧', ARABIC_INDIC_DIGITS), 7);
+		EXPECT_EQ(number::DigitValue(U'7', ARABIC_INDIC_DIGITS), -1);
+
+		const auto integer = number::TryParseInteger<s16_t>(U"-١٢٣", ARABIC_INDIC_DIGITS);
+		ASSERT_TRUE(integer);
+		EXPECT_EQ(*integer, -123);
+		EXPECT_FALSE(number::TryParseInteger<u8_t>(U"٢٥٦", ARABIC_INDIC_DIGITS));
+
+		const auto decimal = number::TryParseDecimal<double>(U"١٢.٥", ARABIC_INDIC_DIGITS);
+		ASSERT_TRUE(decimal);
+		EXPECT_DOUBLE_EQ(*decimal, 12.5);
+
+		const auto scientific = number::TryParseDecimal<double>(U"٥e٢", ARABIC_INDIC_DIGITS, true);
+		ASSERT_TRUE(scientific);
+		EXPECT_DOUBLE_EQ(*scientific, 500.0);
+
+		constexpr TStringView BINARY_DIGITS = U"ab";
+		const auto binary = number::TryParseInteger<u8_t>(U"baab", BINARY_DIGITS);
+		ASSERT_TRUE(binary);
+		EXPECT_EQ(*binary, 9);
+
+		EXPECT_FALSE(number::TryParseInteger<u8_t>(U"abc", U"aab"));
+		EXPECT_FALSE(number::TryParseDecimal<double>(U"12.5", ARABIC_INDIC_DIGITS));
+	}
+
 	TEST(io_text, ParseNumberUsesScannerConversionBackend)
 	{
 		const auto decimal = scan::ParseNumber<s64_t>(U"-9223372036854775808", 10);

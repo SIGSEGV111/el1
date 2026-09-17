@@ -1,6 +1,5 @@
 #include "io_net_http.hpp"
 #include "io_text.hpp"
-#include "io_bcd.hpp"
 #include "io_text_encoding_utf8.hpp"
 
 #include <stdio.h>
@@ -15,7 +14,6 @@ namespace el1::io::net::http
 	using namespace text::string;
 	using namespace text::encoding;
 	using namespace text::encoding::utf8;
-	using namespace bcd;
 	using namespace ip;
 	using namespace file;
 	using namespace collection::list;
@@ -303,19 +301,9 @@ namespace el1::io::net::http
 	static usys_t ParseHex(const TStringView str)
 	{
 		EL_ERROR(str.Length() == 0, TException, U"empty HTTP chunk size");
-		usys_t value = 0;
-		for(usys_t i = 0; i < str.Length(); i++)
-		{
-			const char32_t chr = str[i];
-			u8_t digit;
-			if(chr >= '0' && chr <= '9') digit = chr - '0';
-			else if(chr >= 'a' && chr <= 'f') digit = chr - 'a' + 10;
-			else if(chr >= 'A' && chr <= 'F') digit = chr - 'A' + 10;
-			else EL_THROW(TException, U"invalid HTTP chunk size");
-			EL_ERROR(value > (NEG1 - digit) / 16U, TException, U"HTTP chunk size overflow");
-			value = value * 16U + digit;
-		}
-		return value;
+		const auto value = number::TryParseHex<usys_t>(str);
+		EL_ERROR(!value.has_value(), TException, U"invalid or overflowing HTTP chunk size");
+		return *value;
 	}
 
 
@@ -1071,37 +1059,38 @@ namespace el1::io::net::http
 		return (s64_t)era * 146097 + (s64_t)day_of_era - 719468;
 	}
 
-	static bool AsciiEqualsIgnoreCase(const char* a, const char* b)
+	static bool AsciiEqualsIgnoreCase(const TStringView a, const TStringView b)
 	{
-		while(*a != '\0' && *b != '\0')
+		if(a.Length() != b.Length())
+			return false;
+
+		for(usys_t i = 0; i < a.Length(); i++)
 		{
-			char ca = *a++;
-			char cb = *b++;
-			if(ca >= 'A' && ca <= 'Z')
-				ca = (char)(ca - 'A' + 'a');
-			if(cb >= 'A' && cb <= 'Z')
-				cb = (char)(cb - 'A' + 'a');
+			const char32_t ca = a[i] >= U'A' && a[i] <= U'Z' ? a[i] - U'A' + U'a' : a[i];
+			const char32_t cb = b[i] >= U'A' && b[i] <= U'Z' ? b[i] - U'A' + U'a' : b[i];
 			if(ca != cb)
 				return false;
 		}
-		return *a == *b;
+		return true;
 	}
 
 	static bool ParseCookieExpires(const TStringView value, s64_t& unix_time)
 	{
-		auto cstr = value.MakeCStr();
-		char weekday[4] = {};
-		char month_name[4] = {};
-		char zone[8] = {};
-		int day = 0;
-		int year = 0;
-		int hour = 0;
-		int minute = 0;
-		int second = 0;
-		if(sscanf(cstr.get(), "%3[^,], %d %3s %d %d:%d:%d %7s", weekday, &day, month_name, &year, &hour, &minute, &second, zone) != 8)
+		TString weekday;
+		TString month_name;
+		TString zone;
+		u32_t day = 0;
+		u32_t year = 0;
+		u32_t hour = 0;
+		u32_t minute = 0;
+		u32_t second = 0;
+		TStringViewTextReader reader(value);
+		if(!reader.TryScan(U"%s %u %s %u %u:%u:%u %s", weekday, day, month_name, year, hour, minute, second, zone) || reader.Ensure(1))
+			return false;
+		if(weekday.Length() != 4 || weekday[3] != U',')
 			return false;
 
-		static const char* const MONTHS[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+		static constexpr TStringView MONTHS[] = { U"Jan", U"Feb", U"Mar", U"Apr", U"May", U"Jun", U"Jul", U"Aug", U"Sep", U"Oct", U"Nov", U"Dec" };
 		unsigned month = 0;
 		for(unsigned i = 0; i < 12; i++)
 			if(AsciiEqualsIgnoreCase(month_name, MONTHS[i]))
@@ -1110,10 +1099,10 @@ namespace el1::io::net::http
 				break;
 			}
 
-		if(month == 0 || day < 1 || day > 31 || year < 1601 || hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 60 || !AsciiEqualsIgnoreCase(zone, "GMT"))
+		if(month == 0 || day < 1 || day > 31 || year < 1601 || hour > 23 || minute > 59 || second > 60 || !AsciiEqualsIgnoreCase(zone, U"GMT"))
 			return false;
 
-		unix_time = DaysFromCivil(year, month, (unsigned)day) * 86400 + hour * 3600 + minute * 60 + second;
+		unix_time = DaysFromCivil((int)year, month, day) * 86400 + hour * 3600 + minute * 60 + second;
 		return true;
 	}
 
@@ -1522,12 +1511,12 @@ namespace el1::io::net::http
 	{
 		TString url(input);
 		if(url.Length() == 0) return url;
-		const TString hex = U"0123456789abcdef";
 		for(usys_t i = 0; i + 2 < url.Length(); i++)
 			if(url[i] == '%')
 			{
-				auto str = url.SliceSL(i + 1, 2).ToLower().Reverse();
-				url.chars[i] = TBCD::FromString(str, hex).ToUnsignedInt();
+				const auto value = number::TryParseHex<byte_t>(url.View().SliceSL(i + 1, 2));
+				EL_ERROR(!value.has_value(), TInvalidArgumentException, "input", "invalid percent-encoding");
+				url.chars[i] = *value;
 				url.chars.Remove(i + 1, 2);
 			}
 		return url.chars.Pipe().Map([](char32_t chr){ return (byte_t)chr; }).Transform(TUTF8Decoder()).Collect();
