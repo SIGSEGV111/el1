@@ -156,7 +156,7 @@ namespace el1::io::serialization
 		template<typename T> struct TIsList<io::collection::list::TList<T>> : std::true_type { using value_t = T; };
 
 		template<typename T> struct TIsStringMap : std::false_type {};
-		template<typename V> struct TIsStringMap<io::collection::map::TSortedMap<TString, V>> : std::true_type { using value_t = V; };
+		template<typename V, auto SORTER> struct TIsStringMap<io::collection::map::TSortedMap<TString, V, SORTER>> : std::true_type { using value_t = V; };
 
 		template<typename T> struct TIsOptional : std::false_type {};
 		template<typename V> struct TIsOptional<std::optional<V>> : std::true_type { using value_t = V; };

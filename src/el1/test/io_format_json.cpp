@@ -294,7 +294,7 @@ namespace
 		}
 
 		{
-			TSortedMap<TString, TJsonValue> map;
+			TJsonMap map;
 			map.Add(U"test", true);
 			TJsonValue value = std::move(map);
 			EXPECT_EQ(value.Type(), EType::MAP);
@@ -366,7 +366,7 @@ namespace
 		}
 
 		{
-			TSortedMap<TString, TJsonValue> map;
+			TJsonMap map;
 			map.Add(U"test", true);
 
 			TJsonValue v1 = map;
@@ -436,13 +436,116 @@ namespace
 		}
 
 		{
-			TJsonValue value = TSortedMap<TString, TJsonValue>();
+			TJsonValue value = TJsonMap();
 			EXPECT_THROW(value.Boolean() = true, TException);
 			EXPECT_THROW((void)value.Number(), TException);
 			EXPECT_THROW((void)value.ToInteger<s32_t>(), TException);
 			EXPECT_THROW(value.String() = U"test", TException);
 			EXPECT_THROW(value.Array().Clear(), TException);
 		}
+	}
+
+	TEST(io_format_json, TJsonValue_convenience_api)
+	{
+		TJsonValue json = TJsonValue::Object({
+			{U"metadata", TJsonValue::Object({
+				{U"name", U"test-pod"},
+				{U"enabled", true}
+			})},
+			{U"spec", TJsonValue::Object({
+				{U"containers", TJsonValue::Array({
+					TJsonValue::Object({
+						{U"name", U"app"},
+						{U"uid", 1000}
+					})
+				})}
+			})}
+		});
+
+		EXPECT_TRUE(json.Contains(U"metadata"));
+		EXPECT_FALSE(json.Contains(U"missing"));
+		const TStringView metadata_key = U"metadata";
+		EXPECT_NE(json.Object().Get(metadata_key), nullptr);
+		EXPECT_EQ(json(U"metadata")(U"name").String(), U"test-pod");
+		EXPECT_TRUE(json(U"metadata")(U"enabled").TryBoolean().value());
+		EXPECT_TRUE(json(U"metadata")(U"missing").IsNull());
+		EXPECT_TRUE(json(U"missing")(U"nested").IsNull());
+
+		const TJsonValue& containers = json(U"spec")(U"containers");
+		ASSERT_EQ(containers.Array().Count(), 1U);
+		EXPECT_EQ(containers[0](U"name").TryString().value(), U"app");
+		EXPECT_EQ(containers[0](U"uid").TryInteger<s32_t>().value(), 1000);
+
+		TJsonValue generated;
+		auto missing_path = generated(U"abc")(U"does_not_exist")(U"foobar");
+		EXPECT_TRUE(missing_path.IsNull());
+		EXPECT_TRUE(generated.IsNull());
+
+		TJsonValue read_only_check = TJsonValue::Object({
+			{U"abc", TJsonValue::Object({})}
+		});
+		auto missing_read = read_only_check(U"abc")(U"does_not_exist")(U"foobar");
+		EXPECT_TRUE(missing_read.IsNull());
+		EXPECT_FALSE(read_only_check(U"abc").Contains(U"does_not_exist"));
+
+		TJsonValue stable_proxy_source = TJsonValue::Object({
+			{U"root", TJsonValue::Object({
+				{U"target", 1}
+			})}
+		});
+		auto stable_proxy = stable_proxy_source(U"root")(U"target");
+		for(s32_t i = 0; i < 32; i++)
+			stable_proxy_source[U"root"].Set(TString::Format(U"sibling-%d", i), i);
+		EXPECT_EQ(stable_proxy.ToInteger<s32_t>(), 1);
+		stable_proxy = 2;
+		EXPECT_EQ(stable_proxy_source[U"root"][U"target"].ToInteger<s32_t>(), 2);
+
+		generated(U"metadata")(U"labels")(U"app") = U"kerberos-mutator";
+		generated(U"spec")(U"securityContext")(U"runAsUser") = 1000;
+		generated(U"spec")(U"securityContext")(U"runAsNonRoot") = true;
+		generated(U"spec")(U"volumes").Append(TJsonValue::Object({
+			{U"name", U"kerberos-keytab"}
+		}));
+		EXPECT_TRUE(generated.IsObject());
+		EXPECT_EQ(generated(U"metadata")(U"labels")(U"app").String(), U"kerberos-mutator");
+		EXPECT_EQ(generated(U"spec")(U"securityContext")(U"runAsUser").ToInteger<s32_t>(), 1000);
+		EXPECT_TRUE(generated(U"spec")(U"securityContext")(U"runAsNonRoot").Boolean());
+		ASSERT_EQ(generated(U"spec")(U"volumes").Array().Count(), 1U);
+		EXPECT_EQ(generated(U"spec")(U"volumes").Array()[0](U"name").String(), U"kerberos-keytab");
+
+		TJsonValue object = TJsonValue::Object({});
+		object.Add(U"one", 1);
+		object.Set(U"one", 2);
+		object.Set(U"two", U"second");
+		EXPECT_EQ(object[U"one"].ToInteger<s32_t>(), 2);
+		EXPECT_EQ(object[U"two"].String(), U"second");
+		EXPECT_TRUE(object.Remove(U"one"));
+		EXPECT_FALSE(object.Remove(U"one"));
+
+		TJsonValue array = TJsonValue::Array({1, 3});
+		array.Insert(1, 2);
+		array.Append(4);
+		array.Remove(0);
+		ASSERT_EQ(array.Array().Count(), 3U);
+		EXPECT_EQ(array[0].ToInteger<s32_t>(), 2);
+		EXPECT_EQ(array[1].ToInteger<s32_t>(), 3);
+		EXPECT_EQ(array[2].ToInteger<s32_t>(), 4);
+
+		EXPECT_EQ(TJsonValue(true).TryBoolean(), true);
+		EXPECT_EQ(TJsonValue(1.5).TryNumber(), 1.5);
+		EXPECT_EQ(TJsonValue(42).TryInteger<s16_t>(), 42);
+		EXPECT_FALSE(TJsonValue(1.5).TryInteger<s16_t>().has_value());
+		EXPECT_FALSE(TJsonValue(-1).TryInteger<u16_t>().has_value());
+		EXPECT_FALSE(TJsonValue(U"42").TryInteger<s32_t>().has_value());
+		EXPECT_EQ(TJsonValue(U"text").TryString().value(), U"text");
+
+		TJsonValue strict = TJsonValue::Object({});
+		EXPECT_THROW((void)strict[U"missing"], TGenericKeyNotFoundException);
+		EXPECT_FALSE(strict.Contains(U"missing"));
+
+		TJsonValue invalid = 42;
+		EXPECT_THROW((void)invalid[U"member"], TException);
+		EXPECT_THROW(invalid(U"member") = 1, TException);
 	}
 
 	TEST(io_format_json, TJsonValue_Pipe)

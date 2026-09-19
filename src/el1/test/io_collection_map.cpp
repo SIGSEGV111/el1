@@ -13,10 +13,16 @@ namespace
 	static const int arr_insert[] = { 29358, 8468, 21699, 6478, 18692, 12198, 20946, 17416, 23548, 28055, 15714, 23292, 26880, 17284, 15383, 471, 27252, 24871, 18965, 28021, 358, 19925, 4609, 25571, 23733, 20982, 20018, 26595, 22809, 7596, 7167, 14808, 27976, 8135, 31114, 17612, 3202, 15016, 15799, 6356, 16359,4113, 16695, 17010, 27248, 26901, 22352, 553, 11058, 15503, 18191, 20813, 24677, 19397, 561, 14086, 11420, 15099, 10971, 25039, 18573, 6307, 24247, 13210, 14875, 3408, 12362, 26820, 12893, 28567, 5089, 18509, 21504, 25827, 5219, 23809, 18941, 16561, 30874, 10991, 16144, 17678, 15234, 27599, 16005, 6089, 15035, 22075, 15007, 11967, 19653, 15690, 5316, 10759, 15303, 15467, 31660, 13682, 1315, 21682 };
 	static const unsigned n_insert = sizeof(arr_insert) / sizeof(arr_insert[0]);
 
+	static int ReverseIntSorter(const int& a, const int& b)
+	{
+		return StdSorter(b, a);
+	}
+
 	TEST(io_collection_map, TSortedMap_Construct)
 	{
 		TSortedMap<int, int> int_map;
 		EXPECT_EQ(int_map.Items().Count(), 0U);
+		EXPECT_EQ(sizeof(int_map), sizeof(TList<TSortedMap<int, int>::kv_pair_t>));
 
 		TSortedMap<TString, TString> string_map;
 		EXPECT_EQ(string_map.Items().Count(), 0U);
@@ -72,13 +78,12 @@ namespace
 		EXPECT_EQ(initialized[2], U"two");
 		EXPECT_EQ(initialized[3], U"three");
 
-		auto reverse = [](const int& a, const int& b) -> int { return StdSorter(b, a); };
 		TList<pair_t> reverse_items = {
 			{1, U"one"},
 			{3, U"three"},
 			{2, U"two"}
 		};
-		map_t reverse_sorted(std::move(reverse_items), EInputOrder::UNSORTED, reverse);
+		TSortedMap<int, TString, &ReverseIntSorter> reverse_sorted(std::move(reverse_items));
 		EXPECT_EQ(reverse_sorted.Items()[0].key, 3);
 		EXPECT_EQ(reverse_sorted.Items()[1].key, 2);
 		EXPECT_EQ(reverse_sorted.Items()[2].key, 1);

@@ -4,6 +4,7 @@
 #include "io_types.hpp"
 #include "io_collection_list.hpp"
 #include "io_text_string.hpp"
+#include <type_traits>
 
 namespace el1::io::collection::map
 {
@@ -19,7 +20,16 @@ namespace el1::io::collection::map
 		ASSUME_SORTED
 	};
 
-	template<typename TKey, typename TValue>
+	template<typename TKey>
+	struct TDefaultSorter
+	{
+		int operator()(const TKey& a, const TKey& b) const EL_GETTER
+		{
+			return StdSorter(a, b);
+		}
+	};
+
+	template<typename TKey, typename TValue, auto SORTER = TDefaultSorter<TKey>{}>
 	class TSortedMap;
 
 	template<typename TKey, typename TValue>
@@ -62,34 +72,33 @@ namespace el1::io::collection::map
 
 	/*****************************************************************************/
 
-	template<typename TKey, typename TValue>
-	class TSortedMap<TKey, const TValue>
+	template<typename TKey, typename TValue, auto SORTER>
+	class TSortedMap<TKey, const TValue, SORTER>
 	{
 		public:
 			using kv_pair_t = kv_pair_tt<TKey, TValue>;
-			typedef int (*sorter_function_t)(const TKey&, const TKey&);
-
 		protected:
 			TList<kv_pair_t> items;
-			sorter_function_t sorter;
 
 		public:
 			void Clear() { items.Clear(); }
 
 			const TList<kv_pair_t>& Items() const { return items; }
 			array_t<kv_pair_t>& Items() { return items; }
-			sorter_function_t Sorter() const { return sorter; }
+			static constexpr auto Sorter() noexcept { return SORTER; }
 
 			// retrieves the value associated with a key; throws if the key does not exist
 			const TValue& operator[](const TKey& key) const;
 
 			// receives the value associated with the specified key; return nullptr if the key does not exist
-			const TValue* Get(const TKey& key) const EL_GETTER;
+			template<typename TLookupKey>
+			const TValue* Get(const TLookupKey& key) const EL_GETTER;
 
 			// receives the value associated with the specified key; otherwise a default-value is returned, which is NOT inserted
 			const TValue& GetWithDefault(const TKey& key, const TValue& _default) const EL_GETTER;
 
-			bool Contains(const TKey& key) const EL_GETTER;
+			template<typename TLookupKey>
+			bool Contains(const TLookupKey& key) const EL_GETTER;
 
 			// adds a new key/value pair to the map; if the key already exists it will throw an exception
 			TValue& Add(TKey key, const TValue& value);
@@ -107,26 +116,26 @@ namespace el1::io::collection::map
 
 			TSortedMap(TSortedMap&& other) = default;
 			TSortedMap(const TSortedMap& other) = default;
-			TSortedMap(sorter_function_t sorter = &StdSorter<TKey>);
-			TSortedMap(TList<kv_pair_t>&& items, EInputOrder input_order = EInputOrder::UNSORTED, sorter_function_t sorter = &StdSorter<TKey>);
-			TSortedMap(const TList<kv_pair_t>& items, sorter_function_t sorter = &StdSorter<TKey>);
-			TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter = &StdSorter<TKey>);
+			TSortedMap() = default;
+			TSortedMap(TList<kv_pair_t>&& items, EInputOrder input_order = EInputOrder::UNSORTED);
+			TSortedMap(const TList<kv_pair_t>& items);
+			TSortedMap(std::initializer_list<kv_pair_t> list);
 	};
 
-	template<typename TKey, typename TValue>
-	class TSortedMap : public TSortedMap<TKey, const TValue>
+	template<typename TKey, typename TValue, auto SORTER>
+	class TSortedMap : public TSortedMap<TKey, const TValue, SORTER>
 	{
 		public:
-			using typename TSortedMap<TKey, const TValue>::kv_pair_t;
-			using typename TSortedMap<TKey, const TValue>::sorter_function_t;
+			using typename TSortedMap<TKey, const TValue, SORTER>::kv_pair_t;
 
-			using TSortedMap<TKey, const TValue>::Items;
+			using TSortedMap<TKey, const TValue, SORTER>::Items;
 
 			// retrieves the value associated with a key; throws if the key does not exist
 			TValue& operator[](const TKey& key) const;
 
 			// retrieves the value associated with the specified key; return nullptr if the key does not exist
-			TValue* Get(const TKey& key) const EL_GETTER;
+			template<typename TLookupKey>
+			TValue* Get(const TLookupKey& key) const EL_GETTER;
 
 			// updates the value asociated with a key; calls Add() if the key does not exist yet
 			TValue& Set(const TKey& key, const TValue& value);
@@ -134,7 +143,8 @@ namespace el1::io::collection::map
 			TValue& Set(kv_pair_t&& pair);
 
 			// removes the specified key (along with its value) from the map; return false if the key did not exist; true otherwise
-			bool Remove(const TKey& key);
+			template<typename TLookupKey>
+			bool Remove(const TLookupKey& key);
 
 			// adds a default value if the key does not exist yet, otherwise the existing value is returned
 			TValue& GetOrInsertDefault(const TKey& key, const TValue& _default);
@@ -144,11 +154,11 @@ namespace el1::io::collection::map
 
 			TSortedMap(TSortedMap&& other) = default;
 			TSortedMap(const TSortedMap& other) = default;
-			TSortedMap(const TSortedMap<TKey, const TValue>& other);
-			TSortedMap(sorter_function_t sorter = &StdSorter<TKey>);
-			TSortedMap(TList<kv_pair_t>&& items, EInputOrder input_order = EInputOrder::UNSORTED, sorter_function_t sorter = &StdSorter<TKey>);
-			TSortedMap(const TList<kv_pair_t>& items, sorter_function_t sorter = &StdSorter<TKey>);
-			TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter = &StdSorter<TKey>);
+			TSortedMap(const TSortedMap<TKey, const TValue, SORTER>& other);
+			TSortedMap() = default;
+			TSortedMap(TList<kv_pair_t>&& items, EInputOrder input_order = EInputOrder::UNSORTED);
+			TSortedMap(const TList<kv_pair_t>& items);
+			TSortedMap(std::initializer_list<kv_pair_t> list);
 	};
 
 	/*****************************************************************************/
@@ -192,79 +202,85 @@ namespace el1::io::collection::map
 
 	/*****************************************************************************/
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, const TValue>::TSortedMap(TList<kv_pair_t>&& items, const EInputOrder input_order, sorter_function_t sorter) : items(std::move(items)), sorter(sorter)
+	template<typename TKey, typename TValue, auto SORTER>
+	TSortedMap<TKey, const TValue, SORTER>::TSortedMap(TList<kv_pair_t>&& items, const EInputOrder input_order) : items(std::move(items))
 	{
 		if(input_order == EInputOrder::UNSORTED)
-			this->items.Sort(ESortOrder::ASCENDING, [this](const kv_pair_t& a, const kv_pair_t& b) { return this->sorter(a.key, b.key); });
+			this->items.Sort(ESortOrder::ASCENDING, [](const kv_pair_t& a, const kv_pair_t& b) { return SORTER(a.key, b.key); });
 
 		for(usys_t i = 1; i < this->items.Count(); i++)
-			EL_ERROR(this->sorter(this->items[i - 1].key, this->items[i].key) == 0, TKeyAlreadyExistsException<TKey>, this->items[i].key);
+			EL_ERROR(SORTER(this->items[i - 1].key, this->items[i].key) == 0, TKeyAlreadyExistsException<TKey>, this->items[i].key);
 	}
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, const TValue>::TSortedMap(const TList<kv_pair_t>& items, sorter_function_t sorter) : TSortedMap(TList<kv_pair_t>(items), EInputOrder::UNSORTED, sorter)
+	template<typename TKey, typename TValue, auto SORTER>
+	TSortedMap<TKey, const TValue, SORTER>::TSortedMap(const TList<kv_pair_t>& items) : TSortedMap(TList<kv_pair_t>(items), EInputOrder::UNSORTED)
 	{
 	}
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, const TValue>::TSortedMap(sorter_function_t sorter) : sorter(sorter)
+
+	template<typename TKey, typename TValue, auto SORTER>
+	TSortedMap<TKey, const TValue, SORTER>::TSortedMap(std::initializer_list<kv_pair_t> list) : TSortedMap(TList<kv_pair_t>(list), EInputOrder::UNSORTED)
 	{
 	}
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, const TValue>::TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter) : TSortedMap(TList<kv_pair_t>(list), EInputOrder::UNSORTED, sorter)
-	{
-	}
-
-	template<typename TKey, typename TValue>
-	const TValue& TSortedMap<TKey, const TValue>::operator[](const TKey& key) const
+	template<typename TKey, typename TValue, auto SORTER>
+	const TValue& TSortedMap<TKey, const TValue, SORTER>::operator[](const TKey& key) const
 	{
 		const TValue* const value = this->Get(key);
 		EL_ERROR(value == nullptr, TKeyNotFoundException<TKey>, key);
 		return *value;
 	}
 
-	template<typename TKey, typename TValue>
-	const TValue* TSortedMap<TKey, const TValue>::Get(const TKey& key) const
+	template<typename TKey, typename TValue, auto SORTER>
+	template<typename TLookupKey>
+	const TValue* TSortedMap<TKey, const TValue, SORTER>::Get(const TLookupKey& key) const
 	{
-		const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
-			return this->sorter(item.key, key);
-		}, false);
-
-		if(index == NEG1)
-			return nullptr;
+		if constexpr(std::is_same_v<decltype(SORTER), TDefaultSorter<TKey>> && !std::is_same_v<std::remove_cvref_t<TLookupKey>, TKey>)
+		{
+			const TKey normalized_key(key);
+			return Get(normalized_key);
+		}
 		else
-			return &this->items[index].value;
+		{
+			const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
+				return SORTER(item.key, key);
+			}, false);
+
+			if(index == NEG1)
+				return nullptr;
+			else
+				return &this->items[index].value;
+		}
 	}
 
-	template<typename TKey, typename TValue>
-	const TValue& TSortedMap<TKey, const TValue>::GetWithDefault(const TKey& key, const TValue& _default) const
+	template<typename TKey, typename TValue, auto SORTER>
+	const TValue& TSortedMap<TKey, const TValue, SORTER>::GetWithDefault(const TKey& key, const TValue& _default) const
 	{
 		const TValue* const value = Get(key);
 		return value == nullptr ? _default : *value;
 	}
 
-	template<typename TKey, typename TValue>
-	bool TSortedMap<TKey, const TValue>::Contains(const TKey& key) const
+	template<typename TKey, typename TValue, auto SORTER>
+	template<typename TLookupKey>
+	bool TSortedMap<TKey, const TValue, SORTER>::Contains(const TLookupKey& key) const
 	{
 		return this->Get(key) != nullptr;
 	}
 
-	template<typename TKey, typename TValue>
-	TValue& TSortedMap<TKey, const TValue>::Add(TKey key, const TValue& value)
+	template<typename TKey, typename TValue, auto SORTER>
+	TValue& TSortedMap<TKey, const TValue, SORTER>::Add(TKey key, const TValue& value)
 	{
 		const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
-			return this->sorter(item.key, key);
+			return SORTER(item.key, key);
 		}, true);
 
-		EL_ERROR(index != NEG1 && this->items[index].key == key, TKeyAlreadyExistsException<TKey>, key);
+		EL_ERROR(index != NEG1 && SORTER(this->items[index].key, key) == 0, TKeyAlreadyExistsException<TKey>, key);
 
 		if(index == NEG1)
 		{
 			return this->items.Append({ key, value }).value;
 		}
-		else if(this->sorter(this->items[index].key, key) > 0)
+		else if(SORTER(this->items[index].key, key) > 0)
 		{
 			return this->items.Insert(index, { key, value }).value;
 		}
@@ -274,20 +290,20 @@ namespace el1::io::collection::map
 		}
 	}
 
-	template<typename TKey, typename TValue>
-	TValue& TSortedMap<TKey, const TValue>::Add(TKey key, TValue&& value)
+	template<typename TKey, typename TValue, auto SORTER>
+	TValue& TSortedMap<TKey, const TValue, SORTER>::Add(TKey key, TValue&& value)
 	{
 		const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
-			return this->sorter(item.key, key);
+			return SORTER(item.key, key);
 		}, true);
 
-		EL_ERROR(index != NEG1 && this->items[index].key == key, TKeyAlreadyExistsException<TKey>, key);
+		EL_ERROR(index != NEG1 && SORTER(this->items[index].key, key) == 0, TKeyAlreadyExistsException<TKey>, key);
 
 		if(index == NEG1)
 		{
 			return this->items.MoveAppend({ key, std::move(value) }).value;
 		}
-		else if(this->sorter(this->items[index].key, key) > 0)
+		else if(SORTER(this->items[index].key, key) > 0)
 		{
 			return this->items.MoveInsert(index, { key, std::move(value) }).value;
 		}
@@ -297,8 +313,8 @@ namespace el1::io::collection::map
 		}
 	}
 
-	template<typename TKey, typename TValue>
-	const TValue& TSortedMap<TKey, const TValue>::GetOrInsertDefault(const TKey& key, const TValue& _default)
+	template<typename TKey, typename TValue, auto SORTER>
+	const TValue& TSortedMap<TKey, const TValue, SORTER>::GetOrInsertDefault(const TKey& key, const TValue& _default)
 	{
 		const TValue* value = this->Get(key);
 		if(value == nullptr)
@@ -306,8 +322,8 @@ namespace el1::io::collection::map
 		return *value;
 	}
 
-	template<typename TKey, typename TValue>
-	const TValue& TSortedMap<TKey, const TValue>::GetWithDefault(const TKey& key, const TValue& _default)
+	template<typename TKey, typename TValue, auto SORTER>
+	const TValue& TSortedMap<TKey, const TValue, SORTER>::GetWithDefault(const TKey& key, const TValue& _default)
 	{
 		const TValue* value = this->Get(key);
 		return value == nullptr ? _default : *value;
@@ -315,59 +331,56 @@ namespace el1::io::collection::map
 
 	/*****************************************************************************/
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, TValue>::TSortedMap(const TSortedMap<TKey, const TValue>& other) : TSortedMap<TKey, const TValue>(TList<kv_pair_t>(other.Items()), EInputOrder::ASSUME_SORTED, other.Sorter())
+	template<typename TKey, typename TValue, auto SORTER>
+	TSortedMap<TKey, TValue, SORTER>::TSortedMap(const TSortedMap<TKey, const TValue, SORTER>& other) : TSortedMap<TKey, const TValue, SORTER>(TList<kv_pair_t>(other.Items()), EInputOrder::ASSUME_SORTED)
 	{
 	}
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, TValue>::TSortedMap(sorter_function_t sorter) : TSortedMap<TKey, const TValue>(sorter)
+
+	template<typename TKey, typename TValue, auto SORTER>
+	TSortedMap<TKey, TValue, SORTER>::TSortedMap(TList<kv_pair_t>&& items, const EInputOrder input_order) : TSortedMap<TKey, const TValue, SORTER>(std::move(items), input_order)
 	{
 	}
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, TValue>::TSortedMap(TList<kv_pair_t>&& items, const EInputOrder input_order, sorter_function_t sorter) : TSortedMap<TKey, const TValue>(std::move(items), input_order, sorter)
+	template<typename TKey, typename TValue, auto SORTER>
+	TSortedMap<TKey, TValue, SORTER>::TSortedMap(const TList<kv_pair_t>& items) : TSortedMap<TKey, const TValue, SORTER>(items)
 	{
 	}
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, TValue>::TSortedMap(const TList<kv_pair_t>& items, sorter_function_t sorter) : TSortedMap<TKey, const TValue>(items, sorter)
+	template<typename TKey, typename TValue, auto SORTER>
+	TSortedMap<TKey, TValue, SORTER>::TSortedMap(std::initializer_list<kv_pair_t> list) : TSortedMap<TKey, const TValue, SORTER>(list)
 	{
 	}
 
-	template<typename TKey, typename TValue>
-	TSortedMap<TKey, TValue>::TSortedMap(std::initializer_list<kv_pair_t> list, sorter_function_t sorter) : TSortedMap<TKey, const TValue>(list, sorter)
+	template<typename TKey, typename TValue, auto SORTER>
+	TValue& TSortedMap<TKey, TValue, SORTER>::operator[](const TKey& key) const
 	{
+		return const_cast<TValue&>(static_cast<const TSortedMap<TKey, const TValue, SORTER>*>(this)->operator[](key));
 	}
 
-	template<typename TKey, typename TValue>
-	TValue& TSortedMap<TKey, TValue>::operator[](const TKey& key) const
+	template<typename TKey, typename TValue, auto SORTER>
+	template<typename TLookupKey>
+	TValue* TSortedMap<TKey, TValue, SORTER>::Get(const TLookupKey& key) const
 	{
-		return const_cast<TValue&>(static_cast<const TSortedMap<TKey, const TValue>*>(this)->operator[](key));
+		return const_cast<TValue*>(static_cast<const TSortedMap<TKey, const TValue, SORTER>*>(this)->Get(key));
 	}
 
-	template<typename TKey, typename TValue>
-	TValue* TSortedMap<TKey, TValue>::Get(const TKey& key) const
-	{
-		return const_cast<TValue*>(static_cast<const TSortedMap<TKey, const TValue>*>(this)->Get(key));
-	}
-
-	template<typename TKey, typename TValue>
-	TValue& TSortedMap<TKey, TValue>::Set(const TKey& key, const TValue& value)
+	template<typename TKey, typename TValue, auto SORTER>
+	TValue& TSortedMap<TKey, TValue, SORTER>::Set(const TKey& key, const TValue& value)
 	{
 		const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
-			return this->sorter(item.key, key);
+			return SORTER(item.key, key);
 		}, true);
 
 		if(index == NEG1)
 		{
 			return this->items.Append({ key, value }).value;
 		}
-		else if(this->sorter(this->items[index].key, key) == 0)
+		else if(SORTER(this->items[index].key, key) == 0)
 		{
 			return this->items[index].value = value;
 		}
-		else if(this->sorter(this->items[index].key, key) > 0)
+		else if(SORTER(this->items[index].key, key) > 0)
 		{
 			return this->items.Insert(index, { key, value }).value;
 		}
@@ -377,22 +390,22 @@ namespace el1::io::collection::map
 		}
 	}
 
-	template<typename TKey, typename TValue>
-	TValue& TSortedMap<TKey, TValue>::Set(const TKey& key, TValue&& value)
+	template<typename TKey, typename TValue, auto SORTER>
+	TValue& TSortedMap<TKey, TValue, SORTER>::Set(const TKey& key, TValue&& value)
 	{
 		const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
-			return this->sorter(item.key, key);
+			return SORTER(item.key, key);
 		}, true);
 
 		if(index == NEG1)
 		{
 			return this->items.MoveAppend({ key, std::move(value) }).value;
 		}
-		else if(this->sorter(this->items[index].key, key) == 0)
+		else if(SORTER(this->items[index].key, key) == 0)
 		{
 			return this->items[index].value = std::move(value);
 		}
-		else if(this->sorter(this->items[index].key, key) > 0)
+		else if(SORTER(this->items[index].key, key) > 0)
 		{
 			return this->items.MoveInsert(index, { key, std::move(value) }).value;
 		}
@@ -402,22 +415,31 @@ namespace el1::io::collection::map
 		}
 	}
 
-	template<typename TKey, typename TValue>
-	bool TSortedMap<TKey, TValue>::Remove(const TKey& key)
+	template<typename TKey, typename TValue, auto SORTER>
+	template<typename TLookupKey>
+	bool TSortedMap<TKey, TValue, SORTER>::Remove(const TLookupKey& key)
 	{
-		const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
-			return this->sorter(item.key, key);
-		}, false);
+		if constexpr(std::is_same_v<decltype(SORTER), TDefaultSorter<TKey>> && !std::is_same_v<std::remove_cvref_t<TLookupKey>, TKey>)
+		{
+			const TKey normalized_key(key);
+			return Remove(normalized_key);
+		}
+		else
+		{
+			const usys_t index = this->items.BinarySearch([&](const kv_pair_t& item) {
+				return SORTER(item.key, key);
+			}, false);
 
-		if(index == NEG1)
-			return false;
+			if(index == NEG1)
+				return false;
 
-		this->items.Remove(index, 1);
-		return true;
+			this->items.Remove(index, 1);
+			return true;
+		}
 	}
 
-	template<typename TKey, typename TValue>
-	TValue& TSortedMap<TKey, TValue>::GetOrInsertDefault(const TKey& key, const TValue& _default)
+	template<typename TKey, typename TValue, auto SORTER>
+	TValue& TSortedMap<TKey, TValue, SORTER>::GetOrInsertDefault(const TKey& key, const TValue& _default)
 	{
 		TValue* value = this->Get(key);
 		if(value == nullptr)

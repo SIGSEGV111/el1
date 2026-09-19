@@ -9,6 +9,7 @@
 #include <concepts>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <type_traits>
 #include <utility>
 
@@ -26,8 +27,22 @@ namespace el1::io::format::json
 	using namespace io::collection::map;
 
 	class TJsonValue;
-	using TJsonMap = TSortedMap<TString, TJsonValue>;
-	using TConstJsonMap = TSortedMap<TString, const TJsonValue>;
+	class TJsonValueProxy;
+
+	struct TJsonKeySorter
+	{
+		int operator()(const TStringView a, const TStringView b) const EL_GETTER
+		{
+			if(a == b)
+				return 0;
+			return a > b ? 1 : -1;
+		}
+	};
+
+	using TJsonObject = TSortedMap<TString, TJsonValue, TJsonKeySorter{}>;
+	using TJsonMap = TJsonObject;
+	using TConstJsonMap = TJsonObject;
+	using TConstJsonObject = TJsonObject;
 	using TJsonArray = TList<TJsonValue>;
 	using TConstJsonArray = const array_t<const TJsonValue>;
 
@@ -44,14 +59,15 @@ namespace el1::io::format::json
 		TInvalidJsonException(const iosize_t pos, const iosize_t line, const char32_t chr) : pos(pos), line(line), chr(chr) {}
 	};
 
-	enum class EType : usys_t // usys_t required for alignment of TJsonValue::__placeholder
+	enum class EType : usys_t
 	{
 		NULLVALUE = 0,	// => IsNull() / SetNull()
 		BOOLEAN = 1,	// => bool
 		NUMBER = 2,		// => double
 		STRING = 3,		// => TString
 		ARRAY = 4,		// => TJsonArray
-		MAP = 5			// => TJsonMap
+		OBJECT = 5,		// => TJsonObject
+		MAP = OBJECT		// backwards-compatible alias
 	};
 
 	const char* JsonTypeToString(const EType type);
@@ -62,6 +78,7 @@ namespace el1::io::format::json
 
 	class TJsonValue
 	{
+		friend class TJsonValueProxy;
 		protected:
 			enum class ENumberRepresentation : u8_t
 			{
@@ -99,7 +116,7 @@ namespace el1::io::format::json
 
 				struct
 				{
-					byte_t __placeholder[util::Max(sizeof(TString), sizeof(TList<void*>), sizeof(TSortedMap<void*,void*>))];
+					byte_t __placeholder[util::Max(sizeof(TString), sizeof(TList<void*>))];
 				};
 			};
 
@@ -125,14 +142,29 @@ namespace el1::io::format::json
 			bool operator==(const TJsonValue& rhs) const EL_GETTER;
 			bool operator!=(const TJsonValue& rhs) const EL_GETTER;
 
-			TJsonValue& operator[](const TStringView key) EL_GETTER  { return Map()[key]; }
-			const TJsonValue& operator[](const TStringView key) const EL_GETTER { return Map()[key]; }
-			TJsonValue& operator[](const char* const key) EL_GETTER  { return Map()[key]; }
-			const TJsonValue& operator[](const char* const key) const EL_GETTER { return Map()[key]; }
+			bool Contains(const TStringView key) const EL_GETTER;
+
+			TJsonValue& Add(const TStringView key, TJsonValue value);
+			TJsonValue& Set(const TStringView key, TJsonValue value);
+			bool Remove(const TStringView key);
+
+			TJsonValue& Append(TJsonValue value);
+			TJsonValue& Insert(const ssys_t index, TJsonValue value);
+			void Remove(const ssys_t index);
+
+			// Strict object access. Missing members throw and reads never modify the tree.
+			TJsonValue& operator[](const TStringView key);
+			const TJsonValue& operator[](const TStringView key) const EL_GETTER;
+			TJsonValue& operator[](const char* const key);
+			const TJsonValue& operator[](const char* const key) const EL_GETTER;
 
 			TJsonValue& operator[](const ssys_t index) EL_LIFETIME_BOUND { return Array()[index]; }
 			const TJsonValue& operator[](const ssys_t index) const EL_LIFETIME_BOUND EL_GETTER { return const_cast<TJsonValue*>(this)->Array()[index]; }
 
+			// Tolerant path access. On mutable values this returns a lazy value proxy:
+			// reads do not modify the JSON tree, while assignment/mutation materializes
+			// missing object members on demand.
+			TJsonValueProxy operator()(const TStringView key);
 			const TJsonValue& operator()(const TStringView key) const EL_GETTER;
 
 			#if (__SIZEOF_SIZE_T__ != __SIZEOF_INT__)	// ssys_t vs. int
@@ -144,6 +176,7 @@ namespace el1::io::format::json
 			void SetNull() EL_SETTER;
 
 			bool IsBoolean() const { return Type() == EType::BOOLEAN; }
+			std::optional<bool> TryBoolean() const noexcept EL_GETTER;
 			bool& Boolean() EL_GETTER;
 			const bool& Boolean() const EL_GETTER;
 			const bool& Boolean(const bool& _default) const EL_GETTER;
@@ -152,10 +185,53 @@ namespace el1::io::format::json
 
 			bool IsNumber() const { return Type() == EType::NUMBER; }
 			bool IsNumeric() const { return IsNumber(); }
+			std::optional<double> TryNumber() const noexcept EL_GETTER;
 			double ToDouble() const EL_GETTER;
 			double Number() const EL_GETTER;
 			double Number(const double _default) const EL_GETTER;
 			explicit operator double() const { return Number(); }
+
+			template<std::integral T>
+			requires (!std::same_as<std::remove_cv_t<T>, bool>)
+			EL_GETTER std::optional<T> TryInteger() const noexcept
+			{
+				using value_t = std::remove_cv_t<T>;
+				if(Type() != EType::NUMBER)
+					return std::nullopt;
+
+				switch(NumberRepresentation())
+				{
+					case ENumberRepresentation::SIGNED_INTEGER:
+						if(!std::in_range<value_t>(number.signed_integer))
+							return std::nullopt;
+						return static_cast<value_t>(number.signed_integer);
+
+					case ENumberRepresentation::UNSIGNED_INTEGER:
+						if(!std::in_range<value_t>(number.unsigned_integer))
+							return std::nullopt;
+						return static_cast<value_t>(number.unsigned_integer);
+
+					case ENumberRepresentation::FLOATING:
+						break;
+				}
+
+				const double value = number.floating;
+				if(!std::isfinite(value) || std::trunc(value) != value)
+					return std::nullopt;
+
+				const double upper_bound = std::ldexp(1.0, std::numeric_limits<value_t>::digits);
+				if constexpr(std::is_signed_v<value_t>)
+				{
+					if(value < -upper_bound || value >= upper_bound)
+						return std::nullopt;
+				}
+				else if(value < 0.0 || value >= upper_bound)
+				{
+					return std::nullopt;
+				}
+
+				return static_cast<value_t>(value);
+			}
 
 			template<std::integral T>
 			requires (!std::same_as<std::remove_cv_t<T>, bool>)
@@ -198,6 +274,7 @@ namespace el1::io::format::json
 			}
 
 			bool IsString() const { return Type() == EType::STRING; }
+			std::optional<TStringView> TryString() const noexcept EL_GETTER;
 			TString& String();
 			const TString& String() const;
 			const TString& String(const TString& _default) const;
@@ -211,7 +288,11 @@ namespace el1::io::format::json
 			explicit operator TJsonArray&() { return Array(); }
 			explicit operator array_t<const TJsonValue>() const { return Array(); }
 
-			bool IsMap() const { return Type() == EType::MAP; }
+			bool IsObject() const { return Type() == EType::OBJECT; }
+			TJsonObject& Object() EL_GETTER { return Map(); }
+			const TConstJsonObject& Object() const EL_GETTER { return Map(); }
+
+			bool IsMap() const { return IsObject(); }
 			TJsonMap& Map() EL_GETTER;
 			const TConstJsonMap& Map() const EL_GETTER;
 			const TConstJsonMap& Map(const TConstJsonMap& _default) const EL_GETTER;
@@ -243,8 +324,10 @@ namespace el1::io::format::json
 
 			TJsonValue(const TString& string);
 			TJsonValue(TString&& string);
+			TJsonValue(const TStringView string);
 
 			TJsonValue(const char* const string);
+			TJsonValue(const char32_t* const string);
 
 			TJsonValue(const array_t<const TJsonValue> array);
 			TJsonValue(const TJsonArray& array);
@@ -271,9 +354,119 @@ namespace el1::io::format::json
 			static const TJsonValue EMPTY_ARRAY;
 			static const TJsonValue EMPTY_MAP;
 
+			static TJsonValue Object(TJsonMap members);
+			static TJsonValue Array(TJsonArray values);
+
 			static TJsonValue Parse(const TStringView str, const bool tolerant = false);
 			static TJsonValue Parse(ITextReader& reader, const bool tolerant = false);
 			static TJsonValue Parse(const file::TFile& file, const bool tolerant = false);
+	};
+
+
+
+	// JSON object ordering is fixed at compile time, so TJsonObject has the same
+	// footprint as its TList storage and does not carry a per-instance sorter.
+	static_assert(sizeof(TJsonObject) == sizeof(TJsonArray));
+	static_assert(sizeof(TJsonObject) <= util::Max(sizeof(TString), sizeof(TList<void*>)));
+	static_assert(alignof(TJsonObject) <= alignof(TJsonValue));
+
+	class TJsonValueProxy
+	{
+		protected:
+			TJsonValue* root;
+			TList<TString> path;
+
+			TJsonValueProxy(TJsonValue& base, const TStringView key);
+			TJsonValue& Materialize();
+			TJsonValue& MaterializeAs(const EType type);
+			const TJsonValue& Resolve() const EL_GETTER;
+
+		public:
+			TJsonValueProxy(const TJsonValueProxy&) = default;
+			TJsonValueProxy(TJsonValueProxy&&) noexcept = default;
+			TJsonValueProxy& operator=(const TJsonValueProxy&) = delete;
+			TJsonValueProxy& operator=(TJsonValueProxy&&) = delete;
+
+			TJsonValueProxy operator()(const TStringView key) const &;
+			TJsonValueProxy operator()(const TStringView key) &&;
+
+			TJsonValueProxy& operator=(TJsonValue value);
+
+			operator const TJsonValue&() const EL_GETTER { return Resolve(); }
+			const TJsonValue* operator->() const EL_GETTER { return &Resolve(); }
+
+			EType Type() const EL_GETTER { return Resolve().Type(); }
+			bool operator==(const TJsonValue& rhs) const EL_GETTER { return Resolve() == rhs; }
+			bool operator!=(const TJsonValue& rhs) const EL_GETTER { return Resolve() != rhs; }
+			bool Contains(const TStringView key) const EL_GETTER { return Resolve().Contains(key); }
+
+			const TJsonValue& operator[](const TStringView key) const EL_GETTER { return Resolve()[key]; }
+			const TJsonValue& operator[](const char* const key) const EL_GETTER { return Resolve()[key]; }
+			const TJsonValue& operator[](const ssys_t index) const EL_LIFETIME_BOUND EL_GETTER { return Resolve()[index]; }
+			#if (__SIZEOF_SIZE_T__ != __SIZEOF_INT__)
+				const TJsonValue& operator[](const int index) const EL_LIFETIME_BOUND EL_GETTER { return Resolve()[index]; }
+			#endif
+
+			bool IsNull() const EL_GETTER { return Resolve().IsNull(); }
+			bool IsBoolean() const EL_GETTER { return Resolve().IsBoolean(); }
+			std::optional<bool> TryBoolean() const noexcept EL_GETTER { return Resolve().TryBoolean(); }
+			const bool& Boolean() const EL_GETTER { return Resolve().Boolean(); }
+			const bool& Boolean(const bool& _default) const EL_GETTER { return Resolve().Boolean(_default); }
+
+			bool IsNumber() const EL_GETTER { return Resolve().IsNumber(); }
+			bool IsNumeric() const EL_GETTER { return Resolve().IsNumeric(); }
+			std::optional<double> TryNumber() const noexcept EL_GETTER { return Resolve().TryNumber(); }
+			double ToDouble() const EL_GETTER { return Resolve().ToDouble(); }
+			double Number() const EL_GETTER { return Resolve().Number(); }
+			double Number(const double _default) const EL_GETTER { return Resolve().Number(_default); }
+
+			template<std::integral T>
+			requires (!std::same_as<std::remove_cv_t<T>, bool>)
+			EL_GETTER std::optional<T> TryInteger() const noexcept
+			{
+				return Resolve().TryInteger<T>();
+			}
+
+			template<std::integral T>
+			requires (!std::same_as<std::remove_cv_t<T>, bool>)
+			EL_GETTER T ToInteger() const
+			{
+				return Resolve().ToInteger<T>();
+			}
+
+			template<std::integral T>
+			requires (!std::same_as<std::remove_cv_t<T>, bool>)
+			EL_GETTER T ToInteger(const T _default) const
+			{
+				return Resolve().ToInteger<T>(_default);
+			}
+
+			bool IsString() const EL_GETTER { return Resolve().IsString(); }
+			std::optional<TStringView> TryString() const noexcept EL_GETTER { return Resolve().TryString(); }
+			const TString& String() const EL_GETTER { return Resolve().String(); }
+			const TString& String(const TString& _default) const EL_GETTER { return Resolve().String(_default); }
+
+			bool IsArray() const EL_GETTER { return Resolve().IsArray(); }
+			array_t<const TJsonValue> Array() const EL_LIFETIME_BOUND EL_GETTER { return Resolve().Array(); }
+			array_t<const TJsonValue> Array(const array_t<const TJsonValue>& _default) const EL_GETTER { return Resolve().Array(_default); }
+
+			bool IsObject() const EL_GETTER { return Resolve().IsObject(); }
+			bool IsMap() const EL_GETTER { return Resolve().IsMap(); }
+			const TConstJsonObject& Object() const EL_GETTER { return Resolve().Object(); }
+			const TConstJsonMap& Map() const EL_GETTER { return Resolve().Map(); }
+			const TConstJsonMap& Map(const TConstJsonMap& _default) const EL_GETTER { return Resolve().Map(_default); }
+
+			TString ToString() const { return Resolve().ToString(); }
+
+			TJsonValue& Add(const TStringView key, TJsonValue value);
+			TJsonValue& Set(const TStringView key, TJsonValue value);
+			bool Remove(const TStringView key);
+
+			TJsonValue& Append(TJsonValue value);
+			TJsonValue& Insert(const ssys_t index, TJsonValue value);
+			void Remove(const ssys_t index);
+
+		friend class TJsonValue;
 	};
 
 	class TJsonParser

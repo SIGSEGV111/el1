@@ -42,11 +42,14 @@ namespace el1::io::format::json
 				return "array";
 
 			case EType::MAP:
-				return "map";
+				return "object";
 		}
 
 		EL_THROW(TLogicException);
 	}
+
+	////////////////////////////////////////////////////////////////////
+
 
 	////////////////////////////////////////////////////////////////////
 
@@ -69,7 +72,7 @@ namespace el1::io::format::json
 				break;
 
 			case EType::MAP:
-				Map().~TSortedMap();
+				Map().~TJsonObject();
 				break;
 		}
 
@@ -174,6 +177,69 @@ namespace el1::io::format::json
 
 	////////////////////////////////////////////////////////////////////
 
+	bool TJsonValue::Contains(const TStringView key) const
+	{
+		return IsObject() && Object().Contains(key);
+	}
+
+	TJsonValue& TJsonValue::operator[](const TStringView key)
+	{
+		TJsonValue* const value = Object().Get(key);
+		EL_ERROR(value == nullptr, TKeyNotFoundException<TString>, TString(key));
+		return *value;
+	}
+
+	const TJsonValue& TJsonValue::operator[](const TStringView key) const
+	{
+		const TJsonValue* const value = Object().Get(key);
+		EL_ERROR(value == nullptr, TKeyNotFoundException<TString>, TString(key));
+		return *value;
+	}
+
+	TJsonValue& TJsonValue::operator[](const char* const key)
+	{
+		const TString owned_key(key);
+		return Object()[owned_key.View()];
+	}
+
+	const TJsonValue& TJsonValue::operator[](const char* const key) const
+	{
+		const TString owned_key(key);
+		return Object()[owned_key.View()];
+	}
+
+	TJsonValue& TJsonValue::Add(const TStringView key, TJsonValue value)
+	{
+		return Object().Add(TString(key), std::move(value));
+	}
+
+	TJsonValue& TJsonValue::Set(const TStringView key, TJsonValue value)
+	{
+		return Object().Set(TString(key), std::move(value));
+	}
+
+	bool TJsonValue::Remove(const TStringView key)
+	{
+		return Object().Remove(key);
+	}
+
+	TJsonValue& TJsonValue::Append(TJsonValue value)
+	{
+		return Array().MoveAppend(std::move(value));
+	}
+
+	TJsonValue& TJsonValue::Insert(const ssys_t index, TJsonValue value)
+	{
+		return Array().MoveInsert(index, std::move(value));
+	}
+
+	void TJsonValue::Remove(const ssys_t index)
+	{
+		Array().Remove(index);
+	}
+
+	////////////////////////////////////////////////////////////////////
+
 	bool TJsonValue::IsNull() const
 	{
 		return type == EStorageType::NULLVALUE;
@@ -185,6 +251,11 @@ namespace el1::io::format::json
 	}
 
 	////////////////////////////////////////////////////////////////////
+
+	std::optional<bool> TJsonValue::TryBoolean() const noexcept
+	{
+		return IsBoolean() ? std::optional<bool>(boolean) : std::nullopt;
+	}
 
 	bool& TJsonValue::Boolean()
 	{
@@ -203,6 +274,26 @@ namespace el1::io::format::json
 	}
 
 	////////////////////////////////////////////////////////////////////
+
+	std::optional<double> TJsonValue::TryNumber() const noexcept
+	{
+		if(!IsNumber())
+			return std::nullopt;
+
+		switch(NumberRepresentation())
+		{
+			case ENumberRepresentation::SIGNED_INTEGER:
+				return static_cast<double>(number.signed_integer);
+
+			case ENumberRepresentation::UNSIGNED_INTEGER:
+				return static_cast<double>(number.unsigned_integer);
+
+			case ENumberRepresentation::FLOATING:
+				return number.floating;
+		}
+
+		return std::nullopt;
+	}
 
 	double TJsonValue::ToDouble() const
 	{
@@ -234,6 +325,13 @@ namespace el1::io::format::json
 	}
 
 	////////////////////////////////////////////////////////////////////
+
+	std::optional<TStringView> TJsonValue::TryString() const noexcept
+	{
+		if(!IsString())
+			return std::nullopt;
+		return TStringView(*reinterpret_cast<const TString*>(__placeholder));
+	}
 
 	TString& TJsonValue::String()
 	{
@@ -389,7 +487,21 @@ namespace el1::io::format::json
 		type = EStorageType::STRING;
 	}
 
+	TJsonValue::TJsonValue(const TStringView string)
+	{
+		type = EStorageType::NULLVALUE;
+		new (__placeholder) TString(string);
+		type = EStorageType::STRING;
+	}
+
 	TJsonValue::TJsonValue(const char* const string)
+	{
+		type = EStorageType::NULLVALUE;
+		new (__placeholder) TString(string);
+		type = EStorageType::STRING;
+	}
+
+	TJsonValue::TJsonValue(const char32_t* const string)
 	{
 		type = EStorageType::NULLVALUE;
 		new (__placeholder) TString(string);
@@ -599,9 +711,143 @@ namespace el1::io::format::json
 		);
 	}
 
+	TJsonValueProxy TJsonValue::operator()(const TStringView key)
+	{
+		return TJsonValueProxy(*this, key);
+	}
+
 	const TJsonValue& TJsonValue::operator()(const TStringView key) const
 	{
-		return (IsMap() && Map().Contains(key)) ? Map()[key] : NULLVALUE;
+		if(!IsObject())
+			return NULLVALUE;
+
+		const TJsonValue* const value = Object().Get(key);
+		return value != nullptr ? *value : NULLVALUE;
+	}
+
+	////////////////////////////////////////////////////////////////////
+
+	TJsonValueProxy::TJsonValueProxy(TJsonValue& base, const TStringView key) : root(&base)
+	{
+		path.Append(TString(key));
+	}
+
+	const TJsonValue& TJsonValueProxy::Resolve() const
+	{
+		const TJsonValue* current = root;
+		for(const TString& key : path)
+		{
+			if(current == nullptr || !current->IsObject())
+				return TJsonValue::NULLVALUE;
+
+			current = current->Object().Get(key.View());
+			if(current == nullptr)
+				return TJsonValue::NULLVALUE;
+		}
+
+		return current != nullptr ? *current : TJsonValue::NULLVALUE;
+	}
+
+	TJsonValue& TJsonValueProxy::Materialize()
+	{
+		EL_ERROR(root == nullptr, TLogicException);
+		TJsonValue* current = root;
+
+		for(const TString& key : path)
+		{
+			if(current->IsNull())
+				*current = TJsonObject();
+
+			EL_ERROR(!current->IsObject(), TException, TString::Format(U"cannot create JSON member %q below %s", key, JsonTypeToString(current->Type())));
+
+			TJsonValue* child = current->Object().Get(key.View());
+			if(child == nullptr)
+				child = &current->Object().Add(TString(key), TJsonValue());
+
+			current = child;
+		}
+
+		return *current;
+	}
+
+	TJsonValue& TJsonValueProxy::MaterializeAs(const EType type)
+	{
+		TJsonValue& value = Materialize();
+		if(value.IsNull())
+		{
+			switch(type)
+			{
+				case EType::ARRAY:
+					value = TJsonArray();
+					break;
+
+				case EType::OBJECT:
+					value = TJsonObject();
+					break;
+
+				default:
+					EL_THROW(TLogicException);
+			}
+		}
+
+		EL_ERROR(value.Type() != type, TException, TString::Format(U"requested %s mutation, but JSON path contains %s", JsonTypeToString(type), JsonTypeToString(value.Type())));
+		return value;
+	}
+
+	TJsonValueProxy TJsonValueProxy::operator()(const TStringView key) const &
+	{
+		TJsonValueProxy result(*this);
+		result.path.Append(TString(key));
+		return result;
+	}
+
+	TJsonValueProxy TJsonValueProxy::operator()(const TStringView key) &&
+	{
+		path.Append(TString(key));
+		return std::move(*this);
+	}
+
+	TJsonValueProxy& TJsonValueProxy::operator=(TJsonValue value)
+	{
+		Materialize() = std::move(value);
+		return *this;
+	}
+
+	TJsonValue& TJsonValueProxy::Add(const TStringView key, TJsonValue value)
+	{
+		return MaterializeAs(EType::OBJECT).Add(key, std::move(value));
+	}
+
+	TJsonValue& TJsonValueProxy::Set(const TStringView key, TJsonValue value)
+	{
+		return MaterializeAs(EType::OBJECT).Set(key, std::move(value));
+	}
+
+	bool TJsonValueProxy::Remove(const TStringView key)
+	{
+		const TJsonValue& value = Resolve();
+		if(value.IsNull())
+			return false;
+		EL_ERROR(!value.IsObject(), TException, TString::Format(U"requested object mutation, but JSON path contains %s", JsonTypeToString(value.Type())));
+		return const_cast<TJsonValue&>(value).Remove(key);
+	}
+
+	TJsonValue& TJsonValueProxy::Append(TJsonValue value)
+	{
+		return MaterializeAs(EType::ARRAY).Append(std::move(value));
+	}
+
+	TJsonValue& TJsonValueProxy::Insert(const ssys_t index, TJsonValue value)
+	{
+		return MaterializeAs(EType::ARRAY).Insert(index, std::move(value));
+	}
+
+	void TJsonValueProxy::Remove(const ssys_t index)
+	{
+		const TJsonValue& value = Resolve();
+		EL_ERROR(value.IsNull(), TException, U"cannot remove an array element from a missing JSON path");
+		EL_ERROR(!value.IsArray(), TException, TString::Format(U"requested array mutation, but JSON path contains %s", JsonTypeToString(value.Type())));
+		const_cast<TJsonValue&>(value).Remove(index);
 	}
 
 	////////////////////////////////////////////////////////////////////
@@ -695,4 +941,14 @@ namespace el1::io::format::json
 	const TJsonValue TJsonValue::EMPTY_STRING = TJsonValue(TString());
 	const TJsonValue TJsonValue::EMPTY_ARRAY = TJsonValue(TJsonArray());
 	const TJsonValue TJsonValue::EMPTY_MAP = TJsonValue(TJsonMap());
+
+	TJsonValue TJsonValue::Object(TJsonMap members)
+	{
+		return TJsonValue(std::move(members));
+	}
+
+	TJsonValue TJsonValue::Array(TJsonArray values)
+	{
+		return TJsonValue(std::move(values));
+	}
 }
